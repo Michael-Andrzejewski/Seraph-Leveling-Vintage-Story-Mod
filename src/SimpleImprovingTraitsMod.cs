@@ -39,8 +39,11 @@ namespace SimpleImprovingTraits
         // Every (BaseBlocksPerLevel * level) blocks = +1% mining speed
         // Level 1: 100 blocks, Level 2: 300 total (100+200), Level 3: 600 total (100+200+300), etc.
         public static int BaseBlocksPerLevel = 100;
-        public const float MAX_MINING_SPEED_BONUS = 0.50f; // 50% bonus = 150% total mining speed
+        public static int MaxMiningSpeedPercent = 50; // 50% bonus = 150% total mining speed
         private const string CONFIG_SAVE_KEY = "sitConfig";
+
+        // Vanilla Hardy trait mining speed bonus (used for cap calculations)
+        public const int VANILLA_HARDY_MINING_BONUS = 10;
 
         // Storage for mining progress - keyed by player UID
         public static ConcurrentDictionary<string, long> MiningProgress = new ConcurrentDictionary<string, long>();
@@ -76,6 +79,19 @@ namespace SimpleImprovingTraits
                     .WithArgs(api.ChatCommands.Parsers.OptionalInt("blocks"))
                     .RequiresPrivilege(Privilege.controlserver)
                     .HandleWith(OnTraitMiningBaseCommand)
+                .EndSubCommand()
+                .BeginSubCommand("mininglevel")
+                    .WithDescription("Set your mining level (admin only)")
+                    .WithArgs(api.ChatCommands.Parsers.Int("level"))
+                    .RequiresPrivilege(Privilege.controlserver)
+                    .RequiresPlayer()
+                    .HandleWith(OnTraitMiningLevelCommand)
+                .EndSubCommand()
+                .BeginSubCommand("miningmax")
+                    .WithDescription("Get or set the max mining speed bonus percent (admin only)")
+                    .WithArgs(api.ChatCommands.Parsers.OptionalInt("percent"))
+                    .RequiresPrivilege(Privilege.controlserver)
+                    .HandleWith(OnTraitMiningMaxCommand)
                 .EndSubCommand();
 
             // Hook into block breaking for mining progression
@@ -102,7 +118,9 @@ namespace SimpleImprovingTraits
             return TextCommandResult.Success(
                 "Usage:\n" +
                 "  /trait mining - View your mining progression stats\n" +
-                "  /trait miningbase [value] - Get or set base blocks per level (admin)");
+                "  /trait miningbase [value] - Get or set base blocks per level (admin)\n" +
+                "  /trait mininglevel <level> - Set your mining level (admin)\n" +
+                "  /trait miningmax [percent] - Get or set max mining speed bonus (admin)");
         }
 
         /// <summary>
@@ -171,6 +189,82 @@ namespace SimpleImprovingTraits
         }
 
         /// <summary>
+        /// Handler for /trait mininglevel command.
+        /// Sets the player's mining level directly.
+        /// </summary>
+        private TextCommandResult OnTraitMiningLevelCommand(TextCommandCallingArgs args)
+        {
+            var player = args.Caller.Player as IServerPlayer;
+            if (player?.Entity == null)
+            {
+                return TextCommandResult.Error("Could not find player entity");
+            }
+
+            int newLevel = (int)args[0];
+
+            if (newLevel < 0)
+            {
+                return TextCommandResult.Error("Level cannot be negative");
+            }
+
+            int maxLevel = CalculateMaxLevel();
+            if (newLevel > maxLevel)
+            {
+                return TextCommandResult.Error($"Level cannot exceed max level ({maxLevel})");
+            }
+
+            // Calculate the blocks needed to reach this level
+            long blocksForLevel = CalculateBlocksForLevel(newLevel);
+
+            // Set the player's progress
+            string playerUid = player.PlayerUID;
+            MiningProgress[playerUid] = blocksForLevel;
+            pendingMiningProgressSave = true;
+
+            // Apply the bonus
+            ApplyMiningBonus(player, newLevel);
+
+            float bonus = CalculateMiningBonus(newLevel);
+            return TextCommandResult.Success($"Mining level set to {newLevel} (+{(int)(bonus * 100)}% mining speed)");
+        }
+
+        /// <summary>
+        /// Handler for /trait miningmax command.
+        /// Gets or sets the maximum mining speed bonus percent.
+        /// </summary>
+        private TextCommandResult OnTraitMiningMaxCommand(TextCommandCallingArgs args)
+        {
+            int? newValue = (int?)args[0];
+
+            if (newValue.HasValue)
+            {
+                if (newValue.Value < 1)
+                {
+                    return TextCommandResult.Error("Max mining speed percent must be at least 1");
+                }
+
+                MaxMiningSpeedPercent = newValue.Value;
+                pendingConfigSave = true;
+
+                // Recalculate and reapply bonuses for all online players
+                foreach (IServerPlayer player in ServerApi.World.AllOnlinePlayers)
+                {
+                    if (player?.Entity == null) continue;
+                    string playerUid = player.PlayerUID;
+                    long blocksMined = MiningProgress.GetValueOrDefault(playerUid, 0);
+                    int level = CalculateMiningLevel(blocksMined);
+                    ApplyMiningBonus(player, level);
+                }
+
+                return TextCommandResult.Success($"Max mining speed bonus set to +{MaxMiningSpeedPercent}%. All player bonuses recalculated.");
+            }
+            else
+            {
+                return TextCommandResult.Success($"Current max mining speed bonus: +{MaxMiningSpeedPercent}%");
+            }
+        }
+
+        /// <summary>
         /// Called when a player breaks a block. Increments their mining progress.
         /// </summary>
         private void OnBlockBroken(IServerPlayer byPlayer, int oldblockId, BlockSelection blockSel)
@@ -194,12 +288,11 @@ namespace SimpleImprovingTraits
             // If level increased, update the stat and notify player
             if (newLevel > oldLevel)
             {
-                ApplyMiningBonus(byPlayer, newLevel);
+                int actualBonusPercent = ApplyMiningBonus(byPlayer, newLevel);
 
-                // Notify player of level up
-                float newBonus = CalculateMiningBonus(newLevel);
+                // Notify player of level up with actual applied bonus (respects caps)
                 byPlayer.SendMessage(GlobalConstants.GeneralChatGroup,
-                    Lang.Get("simpleimprovingtraits:message-mining-level-up", newLevel, (int)(newBonus * 100)),
+                    Lang.Get("simpleimprovingtraits:message-mining-level-up", newLevel, actualBonusPercent),
                     EnumChatType.Notification);
             }
         }
@@ -228,24 +321,64 @@ namespace SimpleImprovingTraits
         /// Apply the mining speed bonus to a player based on their level.
         /// Also syncs the level and bonus to WatchedAttributes for client display,
         /// and adds/removes the mining mastery trait from extraTraits.
+        /// Returns the actual applied bonus percentage (0-100 scale).
         /// </summary>
-        private void ApplyMiningBonus(IServerPlayer player, int level)
+        private int ApplyMiningBonus(IServerPlayer player, int level)
         {
-            if (player?.Entity == null) return;
+            if (player?.Entity == null) return 0;
 
-            float bonus = CalculateMiningBonus(level);
+            // Check if player has vanilla Hardy (affects bonus cap)
+            bool hasVanillaHardy = PlayerHasVanillaHardy(player.Entity);
+            int vanillaHardyBonus = hasVanillaHardy ? VANILLA_HARDY_MINING_BONUS : 0;
+
+            // Calculate raw bonus from level (1% per level)
+            float rawBonus = level * 0.01f;
+
+            // Cap earned bonus so total (vanilla + earned) doesn't exceed MaxMiningSpeedPercent
+            float maxEarnableBonus = (MaxMiningSpeedPercent - vanillaHardyBonus) / 100f;
+            float bonus = Math.Min(rawBonus, Math.Max(0, maxEarnableBonus));
 
             // Set the mining speed stat (persistent = false since we reapply on join)
             player.Entity.Stats.Set("miningSpeedMul", MINING_STAT_CODE, 1f + bonus, false);
 
+            int bonusPercent = (int)(bonus * 100);
+
             // Sync level and bonus to WatchedAttributes for client-side display
             player.Entity.WatchedAttributes.SetInt(WATCHED_MINING_LEVEL, level);
-            player.Entity.WatchedAttributes.SetInt(WATCHED_MINING_BONUS, (int)(bonus * 100));
+            player.Entity.WatchedAttributes.SetInt(WATCHED_MINING_BONUS, bonusPercent);
+            player.Entity.WatchedAttributes.SetBool("sitHasVanillaHardy", hasVanillaHardy);
 
-            // Add or remove the mining mastery trait from extraTraits
-            UpdateExtraTrait(player.Entity, MINING_TRAIT_CODE, level > 0);
+            // Add our trait to extraTraits only if player doesn't already have Hardy
+            // (if they have Hardy, we update the existing trait display instead of adding duplicate)
+            UpdateExtraTrait(player.Entity, MINING_TRAIT_CODE, level > 0 && !hasVanillaHardy);
 
             player.Entity.WatchedAttributes.MarkPathDirty(WATCHED_MINING_LEVEL);
+
+            return bonusPercent;
+        }
+
+        /// <summary>
+        /// Checks if the player's class has the vanilla Hardy trait.
+        /// </summary>
+        private bool PlayerHasVanillaHardy(EntityPlayer entity)
+        {
+            // Get the player's class traits (not extraTraits which we manage)
+            string[] classTraits = entity.WatchedAttributes.GetStringArray("characterTraits", null);
+
+            if (classTraits != null)
+            {
+                foreach (string trait in classTraits)
+                {
+                    if (trait.Equals("hardy", StringComparison.OrdinalIgnoreCase))
+                    {
+                        return true;
+                    }
+                }
+            }
+
+            // Fallback: check known classes that have Hardy
+            string characterClass = entity.WatchedAttributes.GetString("characterClass", "");
+            return characterClass.Equals("blackguard", StringComparison.OrdinalIgnoreCase);
         }
 
         /// <summary>
@@ -303,12 +436,12 @@ namespace SimpleImprovingTraits
 
         /// <summary>
         /// Calculate the mining speed bonus for a given level.
-        /// Each level gives 1% (0.01) bonus, capped at MAX_MINING_SPEED_BONUS.
+        /// Each level gives 1% (0.01) bonus, capped at MaxMiningSpeedPercent.
         /// </summary>
         public static float CalculateMiningBonus(int level)
         {
             float bonus = level * 0.01f;
-            return Math.Min(bonus, MAX_MINING_SPEED_BONUS);
+            return Math.Min(bonus, MaxMiningSpeedPercent / 100f);
         }
 
         /// <summary>
@@ -316,7 +449,7 @@ namespace SimpleImprovingTraits
         /// </summary>
         public static int CalculateMaxLevel()
         {
-            return (int)(MAX_MINING_SPEED_BONUS * 100);
+            return MaxMiningSpeedPercent;
         }
 
         public override void Dispose()
@@ -479,14 +612,15 @@ namespace SimpleImprovingTraits
                 {
                     using (var writer = new BinaryWriter(ms))
                     {
-                        writer.Write((byte)1); // Version
+                        writer.Write((byte)2); // Version 2: added MaxMiningSpeedPercent
                         writer.Write(BaseBlocksPerLevel);
+                        writer.Write(MaxMiningSpeedPercent);
                     }
                     data = ms.ToArray();
                 }
 
                 ServerApi.WorldManager.SaveGame.StoreData(CONFIG_SAVE_KEY, data);
-                ServerApi.Logger.Debug($"[SimpleImprovingTraits] Config saved (BaseBlocksPerLevel={BaseBlocksPerLevel})");
+                ServerApi.Logger.Debug($"[SimpleImprovingTraits] Config saved (BaseBlocksPerLevel={BaseBlocksPerLevel}, MaxMiningSpeedPercent={MaxMiningSpeedPercent})");
             }
             catch (Exception ex)
             {
@@ -516,10 +650,16 @@ namespace SimpleImprovingTraits
                     {
                         byte version = reader.ReadByte();
                         BaseBlocksPerLevel = reader.ReadInt32();
+
+                        // Version 2 added MaxMiningSpeedPercent
+                        if (version >= 2)
+                        {
+                            MaxMiningSpeedPercent = reader.ReadInt32();
+                        }
                     }
                 }
 
-                ServerApi.Logger.Notification($"[SimpleImprovingTraits] Config loaded (BaseBlocksPerLevel={BaseBlocksPerLevel})");
+                ServerApi.Logger.Notification($"[SimpleImprovingTraits] Config loaded (BaseBlocksPerLevel={BaseBlocksPerLevel}, MaxMiningSpeedPercent={MaxMiningSpeedPercent})");
             }
             catch (Exception ex)
             {
@@ -635,35 +775,63 @@ namespace SimpleImprovingTraits
 
             int level = eplr.WatchedAttributes.GetInt(SimpleImprovingTraitsModSystem.WATCHED_MINING_LEVEL, 0);
             int bonusPercent = eplr.WatchedAttributes.GetInt(SimpleImprovingTraitsModSystem.WATCHED_MINING_BONUS, 0);
+            bool hasVanillaHardy = eplr.WatchedAttributes.GetBool("sitHasVanillaHardy", false);
 
-            ClientApi.Logger.Debug($"[SimpleImprovingTraits] getClassTraitText postfix called. Level={level}, Bonus={bonusPercent}, Result={__result}");
+            ClientApi.Logger.Debug($"[SimpleImprovingTraits] getClassTraitText postfix called. Level={level}, Bonus={bonusPercent}, HasVanillaHardy={hasVanillaHardy}, Result={__result}");
 
             if (level <= 0) return;
 
-            // Build the trait text in vanilla format: "Hardy (+X% mining speed)"
-            string miningTraitText = Lang.Get("simpleimprovingtraits:trait-hardy-dynamic", bonusPercent);
-
-            // Check for the "no traits" message and replace it entirely
+            // Get the "no traits" message
             string noTraitsMsg = Lang.Get("charactersheet-notraits");
 
-            // Also check for the plain trait name from our trait definition
+            // Check if we have NO real traits (only "no traits" message or empty)
+            bool hasNoTraits = string.IsNullOrEmpty(__result) ||
+                               __result.Trim() == noTraitsMsg.Trim() ||
+                               __result == noTraitsMsg;
+
+            // Our plain trait name from sitminingmastery (just "Hardy" with no stats)
             string plainTraitName = Lang.Get("simpleimprovingtraits:trait-sitminingmastery");
 
-            if (__result != null && __result.Contains(plainTraitName))
+            if (hasVanillaHardy)
             {
-                // Replace the plain trait name with the full dynamic version
-                __result = __result.Replace(plainTraitName, miningTraitText);
+                // Class already has Hardy (e.g., Blackguard) - update the existing Hardy's mining speed
+                // bonusPercent is already capped by server, so combined = vanilla + earned
+                int combinedBonus = SimpleImprovingTraitsModSystem.VANILLA_HARDY_MINING_BONUS + bonusPercent;
+                __result = __result.Replace(
+                    $"+{SimpleImprovingTraitsModSystem.VANILLA_HARDY_MINING_BONUS}% mining speed",
+                    $"+{combinedBonus}% mining speed");
+
+                // Remove our separate sitminingmastery entry if somehow present
+                if (__result.Contains(plainTraitName))
+                {
+                    __result = __result.Replace("\n" + plainTraitName, "");
+                    __result = __result.Replace(plainTraitName + "\n", "");
+                    __result = __result.Replace(plainTraitName, "");
+                }
             }
-            else if (string.IsNullOrEmpty(__result) || __result.Contains(noTraitsMsg) || __result.Trim() == noTraitsMsg.Trim())
+            else if (hasNoTraits)
             {
-                // No traits or only "no traits" message - replace with our trait
-                __result = miningTraitText;
+                // Commoner or other class with no traits - replace entirely with our dynamic Hardy
+                __result = Lang.Get("simpleimprovingtraits:trait-hardy-dynamic", bonusPercent);
             }
-            else if (!__result.Contains("Mining Mastery"))
+            else if (__result.Contains(plainTraitName))
             {
-                // Has other traits but not ours - append
-                __result = __result + "\n" + miningTraitText;
+                // We have our trait but no vanilla Hardy - replace plain name with dynamic version
+                __result = __result.Replace(plainTraitName,
+                    Lang.Get("simpleimprovingtraits:trait-hardy-dynamic", bonusPercent));
             }
+            else
+            {
+                // Has other traits but no Hardy at all - append our dynamic Hardy
+                __result = __result + "\n" + Lang.Get("simpleimprovingtraits:trait-hardy-dynamic", bonusPercent);
+            }
+
+            // Clean up any double newlines that might have been introduced
+            while (__result.Contains("\n\n"))
+            {
+                __result = __result.Replace("\n\n", "\n");
+            }
+            __result = __result.Trim();
 
             ClientApi.Logger.Debug($"[SimpleImprovingTraits] Modified result: {__result}");
         }

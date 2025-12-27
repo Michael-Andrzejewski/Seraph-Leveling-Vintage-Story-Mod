@@ -1,0 +1,5 @@
+{
+  "message-mining-progress": "Mining Progress: {0} blocks mined. Level {1} (+{2}% mining speed). {3} more blocks until next level.",
+  "message-mining-progress-max": "Mining Progress: {0} blocks mined. Level {1} (+{2}% mining speed). Maximum level reached!",
+  "message-mining-level-up": "Mining level up! You are now level {0} with +{1}% mining speed."
+}

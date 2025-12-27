@@ -1,0 +1,14 @@
+{
+  "type": "code",
+  "modid": "simpleimprovingtraits",
+  "name": "Simple Improving Traits",
+  "authors": ["Soareverix"],
+  "description": "A progression system that improves player traits through gameplay. Mine blocks to increase your mining speed, and more trait improvements to come!",
+  "version": "1.0.0",
+  "side": "Universal",
+  "website": "https://github.com/Soareverix/Simple-Improving-Traits-Vintage-Story-Mod",
+  "dependencies": {
+    "game": "1.21.0",
+    "survival": "1.21.0"
+  }
+}

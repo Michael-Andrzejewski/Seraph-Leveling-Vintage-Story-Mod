@@ -471,6 +471,18 @@ namespace SimpleImprovingTraits
                     .RequiresPrivilege(Privilege.controlserver)
                     .HandleWith(OnTraitRangedMaxCommand)
                 .EndSubCommand()
+                .BeginSubCommand("rangedmaxacc")
+                    .WithDescription("Get or set the max ranged accuracy bonus percent (admin only)")
+                    .WithArgs(api.ChatCommands.Parsers.OptionalInt("percent"))
+                    .RequiresPrivilege(Privilege.controlserver)
+                    .HandleWith(OnTraitRangedMaxAccuracyCommand)
+                .EndSubCommand()
+                .BeginSubCommand("rangedmaxdist")
+                    .WithDescription("Get or set the max ranged distance bonus percent (admin only)")
+                    .WithArgs(api.ChatCommands.Parsers.OptionalInt("percent"))
+                    .RequiresPrivilege(Privilege.controlserver)
+                    .HandleWith(OnTraitRangedMaxDistanceCommand)
+                .EndSubCommand()
                 .BeginSubCommand("rangedincrement")
                     .WithDescription("Get or set the ranged increment step per credit (admin only)")
                     .WithArgs(api.ChatCommands.Parsers.OptionalInt("step"))
@@ -520,7 +532,9 @@ namespace SimpleImprovingTraits
                 "  /trait rangedbase [value] - Get or set base damage for first credit (admin)\n" +
                 "  /trait rangedincrement [value] - Get or set ranged increment step per credit (admin)\n" +
                 "  /trait rangedlevel [level] - Set your ranged level (admin)\n" +
-                "  /trait rangedmax [percent] - Get or set max ranged damage bonus (admin)");
+                "  /trait rangedmax [percent] - Get or set max ranged damage bonus (admin)\n" +
+                "  /trait rangedmaxacc [percent] - Get or set max ranged accuracy bonus (admin)\n" +
+                "  /trait rangedmaxdist [percent] - Get or set max ranged distance bonus (admin)");
         }
 
         /// <summary>
@@ -1104,6 +1118,76 @@ namespace SimpleImprovingTraits
         }
 
         /// <summary>
+        /// Handler for /trait rangedmaxacc command.
+        /// Gets or sets the maximum ranged accuracy bonus percent.
+        /// </summary>
+        private TextCommandResult OnTraitRangedMaxAccuracyCommand(TextCommandCallingArgs args)
+        {
+            int? newValue = (int?)args[0];
+
+            if (newValue.HasValue)
+            {
+                if (newValue.Value < 1)
+                {
+                    return TextCommandResult.Error("Max ranged accuracy percent must be at least 1");
+                }
+
+                MaxRangedAccuracyPercent = newValue.Value;
+                pendingConfigSave = true;
+
+                // Recalculate and reapply bonuses for all online players
+                foreach (IServerPlayer player in ServerApi.World.AllOnlinePlayers)
+                {
+                    if (player?.Entity == null) continue;
+                    string playerUid = player.PlayerUID;
+                    var progress = RangedProgress.GetOrAdd(playerUid, _ => new RangedProgressData());
+                    ApplyRangedBonusStatic(player, progress.TotalCredits);
+                }
+
+                return TextCommandResult.Success($"Max ranged accuracy bonus set to +{MaxRangedAccuracyPercent}%. All player bonuses recalculated.");
+            }
+            else
+            {
+                return TextCommandResult.Success($"Current max ranged accuracy bonus: +{MaxRangedAccuracyPercent}%\nMax damage: +{MaxRangedDamagePercent}%\nMax distance: +{MaxRangedDistancePercent}%");
+            }
+        }
+
+        /// <summary>
+        /// Handler for /trait rangedmaxdist command.
+        /// Gets or sets the maximum ranged distance bonus percent.
+        /// </summary>
+        private TextCommandResult OnTraitRangedMaxDistanceCommand(TextCommandCallingArgs args)
+        {
+            int? newValue = (int?)args[0];
+
+            if (newValue.HasValue)
+            {
+                if (newValue.Value < 1)
+                {
+                    return TextCommandResult.Error("Max ranged distance percent must be at least 1");
+                }
+
+                MaxRangedDistancePercent = newValue.Value;
+                pendingConfigSave = true;
+
+                // Recalculate and reapply bonuses for all online players
+                foreach (IServerPlayer player in ServerApi.World.AllOnlinePlayers)
+                {
+                    if (player?.Entity == null) continue;
+                    string playerUid = player.PlayerUID;
+                    var progress = RangedProgress.GetOrAdd(playerUid, _ => new RangedProgressData());
+                    ApplyRangedBonusStatic(player, progress.TotalCredits);
+                }
+
+                return TextCommandResult.Success($"Max ranged distance bonus set to +{MaxRangedDistancePercent}%. All player bonuses recalculated.");
+            }
+            else
+            {
+                return TextCommandResult.Success($"Current max ranged distance bonus: +{MaxRangedDistancePercent}%\nMax damage: +{MaxRangedDamagePercent}%\nMax accuracy: +{MaxRangedAccuracyPercent}%");
+            }
+        }
+
+        /// <summary>
         /// Calculate the melee damage bonus as an integer percentage (0 to 150).
         /// Each credit gives 1% bonus, capped at MaxMeleeDamagePercent.
         /// </summary>
@@ -1645,15 +1729,15 @@ namespace SimpleImprovingTraits
             // Note: All ranged stats are additive (0 = no change, not 1.0)
             // rangedWeaponsDamage - affects projectile damage
             // rangedWeaponsAcc - affects aim accuracy (reticle size)
-            // rangedWeaponsSpeed - affects bow draw speed (NOT projectile distance - there's no vanilla stat for that)
+            // bowDrawingStrength - affects projectile velocity, thus travel distance (this is how vanilla Focused implements +20% ranged distance)
             player.Entity.Stats.Set("rangedWeaponsDamage", RANGED_DAMAGE_STAT_CODE, damageBonus, false);
             player.Entity.Stats.Set("rangedWeaponsAcc", RANGED_ACCURACY_STAT_CODE, accuracyBonus, false);
-            player.Entity.Stats.Set("rangedWeaponsSpeed", RANGED_DISTANCE_STAT_CODE, distanceBonus, false);
+            player.Entity.Stats.Set("bowDrawingStrength", RANGED_DISTANCE_STAT_CODE, distanceBonus, false);
 
             // Debug logging to verify stats are being applied
             if (damageBonus > 0 || accuracyBonus > 0 || distanceBonus > 0)
             {
-                ServerApi?.Logger.Debug($"[SimpleImprovingTraits] Applied ranged stats to {player.PlayerName}: Damage={damageBonus:F2}, Accuracy={accuracyBonus:F2}, Speed={distanceBonus:F2}");
+                ServerApi?.Logger.Debug($"[SimpleImprovingTraits] Applied ranged stats to {player.PlayerName}: Damage={damageBonus:F2}, Accuracy={accuracyBonus:F2}, Distance={distanceBonus:F2}");
             }
 
             int damagePct = (int)(damageBonus * 100);

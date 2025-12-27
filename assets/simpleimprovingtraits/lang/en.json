@@ -4,5 +4,9 @@
   "message-mining-level-up": "Mining level up! You are now level {0} with +{1}% mining speed.",
   "trait-hardy-dynamic": "<font color=\"#84ff84\">Hardy</font> (+{0}% mining speed)",
   "trait-sitminingmastery": "<font color=\"#84ff84\">Hardy</font>",
-  "traitname-sitminingmastery": "Hardy"
+  "traitname-sitminingmastery": "Hardy",
+  "message-melee-level-up": "Melee level up! You are now level {0} with +{1}% melee damage.",
+  "trait-soldier-dynamic": "<font color=\"#84ff84\">Soldier</font> (+{0}% melee damage)",
+  "trait-sitmeleemastery": "<font color=\"#84ff84\">Soldier</font>",
+  "traitname-sitmeleemastery": "Soldier"
 }

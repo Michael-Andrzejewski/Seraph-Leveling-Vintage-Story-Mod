@@ -3,5 +3,10 @@
     "code": "sitminingmastery",
     "type": "positive",
     "attributes": {}
+  },
+  {
+    "code": "sitmeleemastery",
+    "type": "positive",
+    "attributes": {}
   }
 ]

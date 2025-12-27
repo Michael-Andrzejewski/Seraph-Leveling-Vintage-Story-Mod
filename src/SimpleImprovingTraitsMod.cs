@@ -1643,9 +1643,18 @@ namespace SimpleImprovingTraits
 
             // Set the ranged stats (persistent = false since we reapply on join)
             // Note: All ranged stats are additive (0 = no change, not 1.0)
+            // rangedWeaponsDamage - affects projectile damage
+            // rangedWeaponsAcc - affects aim accuracy (reticle size)
+            // rangedWeaponsSpeed - affects bow draw speed (NOT projectile distance - there's no vanilla stat for that)
             player.Entity.Stats.Set("rangedWeaponsDamage", RANGED_DAMAGE_STAT_CODE, damageBonus, false);
             player.Entity.Stats.Set("rangedWeaponsAcc", RANGED_ACCURACY_STAT_CODE, accuracyBonus, false);
             player.Entity.Stats.Set("rangedWeaponsSpeed", RANGED_DISTANCE_STAT_CODE, distanceBonus, false);
+
+            // Debug logging to verify stats are being applied
+            if (damageBonus > 0 || accuracyBonus > 0 || distanceBonus > 0)
+            {
+                ServerApi?.Logger.Debug($"[SimpleImprovingTraits] Applied ranged stats to {player.PlayerName}: Damage={damageBonus:F2}, Accuracy={accuracyBonus:F2}, Speed={distanceBonus:F2}");
+            }
 
             int damagePct = (int)(damageBonus * 100);
             int accuracyPct = (int)(accuracyBonus * 100);

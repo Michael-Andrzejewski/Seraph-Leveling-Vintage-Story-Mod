@@ -15,6 +15,88 @@ using Vintagestory.API.Server;
 namespace SimpleImprovingTraits
 {
     /// <summary>
+    /// Tracks progress for a specific ranged weapon combination (for ranged damage progression).
+    /// Each weapon combination (bow+arrow) has its own increment counter that persists.
+    /// </summary>
+    public class RangedWeaponProgressData
+    {
+        /// <summary>Damage accumulated toward the next credit with this weapon combination.</summary>
+        public float DamageInIncrement { get; set; }
+
+        /// <summary>Damage needed for the next credit with this weapon combination (100, 200, 300, etc.).</summary>
+        public int CurrentIncrementSize { get; set; }
+
+        public RangedWeaponProgressData()
+        {
+            DamageInIncrement = 0;
+            CurrentIncrementSize = 100; // Base increment size
+        }
+
+        public RangedWeaponProgressData Clone()
+        {
+            return new RangedWeaponProgressData
+            {
+                DamageInIncrement = this.DamageInIncrement,
+                CurrentIncrementSize = this.CurrentIncrementSize
+            };
+        }
+    }
+
+    /// <summary>
+    /// Data structure for tracking ranged damage progression with per-weapon progress.
+    /// Each weapon combination remembers its own increment counter, encouraging use of many weapon types.
+    /// </summary>
+    public class RangedProgressData
+    {
+        /// <summary>Total credits earned (each credit = 1% bonus to damage/accuracy/distance). Max 130.</summary>
+        public int TotalCredits { get; set; }
+
+        /// <summary>Per-weapon progress tracking. Key is weapon combination (e.g., "bow-long+arrow-copper").</summary>
+        public Dictionary<string, RangedWeaponProgressData> WeaponProgress { get; set; }
+
+        public RangedProgressData()
+        {
+            TotalCredits = 0;
+            WeaponProgress = new Dictionary<string, RangedWeaponProgressData>();
+        }
+
+        /// <summary>
+        /// Get or create progress data for a specific weapon combination.
+        /// New weapons start with the configured BaseRangedDamagePerIncrement.
+        /// </summary>
+        public RangedWeaponProgressData GetWeaponProgress(string weaponCombo)
+        {
+            if (!WeaponProgress.TryGetValue(weaponCombo, out var progress))
+            {
+                progress = new RangedWeaponProgressData
+                {
+                    DamageInIncrement = 0,
+                    CurrentIncrementSize = SimpleImprovingTraitsModSystem.BaseRangedDamagePerIncrement
+                };
+                WeaponProgress[weaponCombo] = progress;
+            }
+            return progress;
+        }
+
+        /// <summary>
+        /// Create a copy of this data.
+        /// </summary>
+        public RangedProgressData Clone()
+        {
+            var clone = new RangedProgressData
+            {
+                TotalCredits = this.TotalCredits,
+                WeaponProgress = new Dictionary<string, RangedWeaponProgressData>()
+            };
+            foreach (var kvp in this.WeaponProgress)
+            {
+                clone.WeaponProgress[kvp.Key] = kvp.Value.Clone();
+            }
+            return clone;
+        }
+    }
+
+    /// <summary>
     /// Tracks progress for a specific weapon type (for melee damage progression).
     /// Each weapon type has its own increment counter that persists.
     /// </summary>
@@ -237,6 +319,43 @@ namespace SimpleImprovingTraits
         // Flag to indicate pending melee progress save
         private static volatile bool pendingMeleeProgressSave = false;
 
+        // Keys for ranged damage progression system
+        public const string RANGED_DAMAGE_KEY = "sitRangedDamage";
+        public const string RANGED_DAMAGE_STAT_CODE = "sitRangedDamageBonus";
+        public const string RANGED_ACCURACY_STAT_CODE = "sitRangedAccuracyBonus";
+        public const string RANGED_DISTANCE_STAT_CODE = "sitRangedDistanceBonus";
+        private const string RANGED_PROGRESS_SAVE_KEY = "sitRangedProgress";
+
+        // WatchedAttributes keys for client sync (ranged)
+        public const string WATCHED_RANGED_LEVEL = "sitRangedLevel";
+        public const string WATCHED_RANGED_DAMAGE_BONUS = "sitRangedDamageBonusPercent";
+        public const string WATCHED_RANGED_ACCURACY_BONUS = "sitRangedAccuracyBonusPercent";
+        public const string WATCHED_RANGED_DISTANCE_BONUS = "sitRangedDistanceBonusPercent";
+
+        // Trait code for the ranged mastery trait (Focused)
+        public const string RANGED_TRAIT_CODE = "sitrangedmastery";
+
+        // Ranged damage progression configuration
+        // Base damage for first 1%: 100 damage
+        // Each subsequent 1% requires +100 more damage (100, 200, 300, etc.)
+        // Switching weapon combinations resets the increment counter back to base
+        public static int BaseRangedDamagePerIncrement = 100;   // Base damage needed for first credit
+        public static int RangedIncrementStep = 100;             // How much more damage each subsequent credit needs
+        public static int MaxRangedDamagePercent = 130;          // 130% max bonus for damage
+        public static int MaxRangedAccuracyPercent = 50;         // 50% max bonus for accuracy
+        public static int MaxRangedDistancePercent = 50;         // 50% max bonus for distance
+
+        // Vanilla Focused trait bonuses (used for cap calculations)
+        public const int VANILLA_FOCUSED_DAMAGE_BONUS = 20;
+        public const int VANILLA_FOCUSED_ACCURACY_BONUS = 30;
+        public const int VANILLA_FOCUSED_DISTANCE_BONUS = 20;
+
+        // Storage for ranged progress - keyed by player UID
+        public static ConcurrentDictionary<string, RangedProgressData> RangedProgress = new ConcurrentDictionary<string, RangedProgressData>();
+
+        // Flag to indicate pending ranged progress save
+        private static volatile bool pendingRangedProgressSave = false;
+
         private const string CONFIG_SAVE_KEY = "sitConfig";
 
         // Vanilla Hardy trait mining speed bonus (used for cap calculations)
@@ -326,6 +445,37 @@ namespace SimpleImprovingTraits
                     .WithArgs(api.ChatCommands.Parsers.OptionalInt("step"))
                     .RequiresPrivilege(Privilege.controlserver)
                     .HandleWith(OnTraitMeleeIncrementCommand)
+                .EndSubCommand()
+                .BeginSubCommand("ranged")
+                    .WithDescription("View your ranged damage progression stats")
+                    .RequiresPrivilege(Privilege.chat)
+                    .RequiresPlayer()
+                    .HandleWith(OnTraitRangedCommand)
+                .EndSubCommand()
+                .BeginSubCommand("rangedbase")
+                    .WithDescription("Get or set the base damage per level (admin only)")
+                    .WithArgs(api.ChatCommands.Parsers.OptionalInt("damage"))
+                    .RequiresPrivilege(Privilege.controlserver)
+                    .HandleWith(OnTraitRangedBaseCommand)
+                .EndSubCommand()
+                .BeginSubCommand("rangedlevel")
+                    .WithDescription("Set your ranged level (admin only)")
+                    .WithArgs(api.ChatCommands.Parsers.Int("level"))
+                    .RequiresPrivilege(Privilege.controlserver)
+                    .RequiresPlayer()
+                    .HandleWith(OnTraitRangedLevelCommand)
+                .EndSubCommand()
+                .BeginSubCommand("rangedmax")
+                    .WithDescription("Get or set the max ranged damage bonus percent (admin only)")
+                    .WithArgs(api.ChatCommands.Parsers.OptionalInt("percent"))
+                    .RequiresPrivilege(Privilege.controlserver)
+                    .HandleWith(OnTraitRangedMaxCommand)
+                .EndSubCommand()
+                .BeginSubCommand("rangedincrement")
+                    .WithDescription("Get or set the ranged increment step per credit (admin only)")
+                    .WithArgs(api.ChatCommands.Parsers.OptionalInt("step"))
+                    .RequiresPrivilege(Privilege.controlserver)
+                    .HandleWith(OnTraitRangedIncrementCommand)
                 .EndSubCommand();
 
             // Hook into block breaking for mining progression
@@ -344,6 +494,7 @@ namespace SimpleImprovingTraits
             api.Event.SaveGameLoaded += LoadConfig;
             api.Event.SaveGameLoaded += LoadMiningProgress;
             api.Event.SaveGameLoaded += LoadMeleeProgress;
+            api.Event.SaveGameLoaded += LoadRangedProgress;
 
             api.Logger.Notification("[SimpleImprovingTraits] Mod loaded");
         }
@@ -364,7 +515,12 @@ namespace SimpleImprovingTraits
                 "  /trait meleebase [value] - Get or set base damage for first credit (admin)\n" +
                 "  /trait meleeincrement [value] - Get or set melee increment step per credit (admin)\n" +
                 "  /trait meleelevel [level] - Set your melee level (admin)\n" +
-                "  /trait meleemax [percent] - Get or set max melee damage bonus (admin)");
+                "  /trait meleemax [percent] - Get or set max melee damage bonus (admin)\n" +
+                "  /trait ranged - View your ranged damage progression stats\n" +
+                "  /trait rangedbase [value] - Get or set base damage for first credit (admin)\n" +
+                "  /trait rangedincrement [value] - Get or set ranged increment step per credit (admin)\n" +
+                "  /trait rangedlevel [level] - Set your ranged level (admin)\n" +
+                "  /trait rangedmax [percent] - Get or set max ranged damage bonus (admin)");
         }
 
         /// <summary>
@@ -774,12 +930,232 @@ namespace SimpleImprovingTraits
         }
 
         /// <summary>
+        /// Handler for /trait ranged command.
+        /// </summary>
+        private TextCommandResult OnTraitRangedCommand(TextCommandCallingArgs args)
+        {
+            var player = args.Caller.Player;
+            if (player?.Entity == null)
+            {
+                return TextCommandResult.Error("Could not find player entity");
+            }
+
+            string playerUid = player.PlayerUID;
+            var progress = RangedProgress.GetOrAdd(playerUid, _ => new RangedProgressData());
+
+            int currentCredits = progress.TotalCredits;
+            var (damageBonus, accuracyBonus, distanceBonus) = CalculateRangedBonusPercents(currentCredits, player.Entity as EntityPlayer);
+
+            var sb = new StringBuilder();
+            sb.AppendLine($"Ranged progression: {currentCredits} credits / {MaxRangedDamagePercent} max");
+            sb.AppendLine($"Current bonuses: +{damageBonus}% damage, +{accuracyBonus}% accuracy, +{distanceBonus}% distance");
+
+            if (progress.WeaponProgress.Count > 0)
+            {
+                sb.AppendLine("\nPer-weapon progress:");
+                foreach (var kvp in progress.WeaponProgress.OrderBy(p => p.Value.CurrentIncrementSize))
+                {
+                    string weaponName = kvp.Key;
+                    // Simplify the display name (remove "game:" prefix if present)
+                    weaponName = weaponName.Replace("game:", "");
+
+                    var weaponProgress = kvp.Value;
+                    sb.AppendLine($"  {weaponName}: {weaponProgress.DamageInIncrement:F1}/{weaponProgress.CurrentIncrementSize} damage");
+                }
+            }
+            else
+            {
+                sb.AppendLine("\nNo weapon progress yet. Deal ranged damage with bows or slings to start!");
+            }
+
+            if (currentCredits >= MaxRangedDamagePercent)
+            {
+                sb.Insert(0, "=== MAXED OUT ===\n");
+            }
+
+            return TextCommandResult.Success(sb.ToString().TrimEnd());
+        }
+
+        /// <summary>
+        /// Handler for /trait rangedbase command.
+        /// Sets the base damage needed for the first 1% increment.
+        /// </summary>
+        private TextCommandResult OnTraitRangedBaseCommand(TextCommandCallingArgs args)
+        {
+            int? newValue = (int?)args[0];
+
+            if (newValue.HasValue)
+            {
+                if (newValue.Value < 1)
+                {
+                    return TextCommandResult.Error("Base damage per increment must be at least 1");
+                }
+
+                BaseRangedDamagePerIncrement = newValue.Value;
+                pendingConfigSave = true;
+
+                return TextCommandResult.Success($"Base ranged damage per increment set to {BaseRangedDamagePerIncrement}. New weapons will require this much damage for first 1%.");
+            }
+            else
+            {
+                return TextCommandResult.Success($"Current base ranged damage per increment: {BaseRangedDamagePerIncrement}\nIncrement step: +{RangedIncrementStep} per credit");
+            }
+        }
+
+        /// <summary>
+        /// Handler for /trait rangedincrement command.
+        /// Sets how much additional damage is required for each subsequent credit.
+        /// </summary>
+        private TextCommandResult OnTraitRangedIncrementCommand(TextCommandCallingArgs args)
+        {
+            int? newValue = (int?)args[0];
+
+            if (newValue.HasValue)
+            {
+                if (newValue.Value < 0)
+                {
+                    return TextCommandResult.Error("Increment step cannot be negative");
+                }
+
+                RangedIncrementStep = newValue.Value;
+                pendingConfigSave = true;
+
+                return TextCommandResult.Success($"Ranged increment step set to +{RangedIncrementStep} per credit.\nProgression: {BaseRangedDamagePerIncrement}, {BaseRangedDamagePerIncrement + RangedIncrementStep}, {BaseRangedDamagePerIncrement + RangedIncrementStep * 2}...");
+            }
+            else
+            {
+                return TextCommandResult.Success($"Current ranged increment step: +{RangedIncrementStep} per credit\nProgression: {BaseRangedDamagePerIncrement}, {BaseRangedDamagePerIncrement + RangedIncrementStep}, {BaseRangedDamagePerIncrement + RangedIncrementStep * 2}...");
+            }
+        }
+
+        /// <summary>
+        /// Handler for /trait rangedlevel command.
+        /// Sets the player's ranged credits (level) directly.
+        /// Note: This resets all per-weapon progress since we're setting credits directly.
+        /// </summary>
+        private TextCommandResult OnTraitRangedLevelCommand(TextCommandCallingArgs args)
+        {
+            var player = args.Caller.Player as IServerPlayer;
+            if (player?.Entity == null)
+            {
+                return TextCommandResult.Error("Could not find player entity");
+            }
+
+            int newCredits = (int)args[0];
+
+            if (newCredits < 0)
+            {
+                return TextCommandResult.Error("Credits cannot be negative");
+            }
+
+            if (newCredits > MaxRangedDamagePercent)
+            {
+                return TextCommandResult.Error($"Credits cannot exceed max ({MaxRangedDamagePercent})");
+            }
+
+            // Set the player's progress (clears per-weapon progress)
+            string playerUid = player.PlayerUID;
+            var progress = RangedProgress.GetOrAdd(playerUid, _ => new RangedProgressData());
+
+            progress.TotalCredits = newCredits;
+            progress.WeaponProgress.Clear(); // Reset all weapon progress
+
+            pendingRangedProgressSave = true;
+
+            // Apply the bonus
+            var (damageBonus, accuracyBonus, distanceBonus) = ApplyRangedBonusStatic(player, newCredits);
+
+            return TextCommandResult.Success($"Ranged credits set to {newCredits} (+{damageBonus}% damage, +{accuracyBonus}% accuracy, +{distanceBonus}% distance). Per-weapon progress reset.");
+        }
+
+        /// <summary>
+        /// Handler for /trait rangedmax command.
+        /// Gets or sets the maximum ranged damage bonus percent.
+        /// </summary>
+        private TextCommandResult OnTraitRangedMaxCommand(TextCommandCallingArgs args)
+        {
+            int? newValue = (int?)args[0];
+
+            if (newValue.HasValue)
+            {
+                if (newValue.Value < 1)
+                {
+                    return TextCommandResult.Error("Max ranged damage percent must be at least 1");
+                }
+
+                MaxRangedDamagePercent = newValue.Value;
+                pendingConfigSave = true;
+
+                // Recalculate and reapply bonuses for all online players
+                foreach (IServerPlayer player in ServerApi.World.AllOnlinePlayers)
+                {
+                    if (player?.Entity == null) continue;
+                    string playerUid = player.PlayerUID;
+                    var progress = RangedProgress.GetOrAdd(playerUid, _ => new RangedProgressData());
+                    ApplyRangedBonusStatic(player, progress.TotalCredits);
+                }
+
+                return TextCommandResult.Success($"Max ranged damage bonus set to +{MaxRangedDamagePercent}%. All player bonuses recalculated.");
+            }
+            else
+            {
+                return TextCommandResult.Success($"Current max ranged damage bonus: +{MaxRangedDamagePercent}%\nMax accuracy: +{MaxRangedAccuracyPercent}%\nMax distance: +{MaxRangedDistancePercent}%");
+            }
+        }
+
+        /// <summary>
         /// Calculate the melee damage bonus as an integer percentage (0 to 150).
         /// Each credit gives 1% bonus, capped at MaxMeleeDamagePercent.
         /// </summary>
         public static int CalculateMeleeBonusPercent(int credits)
         {
             return Math.Min(credits, MaxMeleeDamagePercent);
+        }
+
+        /// <summary>
+        /// Calculate ranged bonuses as percentages, accounting for vanilla Focused trait.
+        /// Returns (damageBonus, accuracyBonus, distanceBonus) as integers.
+        /// </summary>
+        public static (int damage, int accuracy, int distance) CalculateRangedBonusPercents(int credits, EntityPlayer entity)
+        {
+            bool hasFocused = entity != null && PlayerHasVanillaFocusedStatic(entity);
+            int vanillaDamage = hasFocused ? VANILLA_FOCUSED_DAMAGE_BONUS : 0;
+            int vanillaAccuracy = hasFocused ? VANILLA_FOCUSED_ACCURACY_BONUS : 0;
+            int vanillaDistance = hasFocused ? VANILLA_FOCUSED_DISTANCE_BONUS : 0;
+
+            // Each stat is capped individually
+            int earnableDamage = Math.Max(0, MaxRangedDamagePercent - vanillaDamage);
+            int earnableAccuracy = Math.Max(0, MaxRangedAccuracyPercent - vanillaAccuracy);
+            int earnableDistance = Math.Max(0, MaxRangedDistancePercent - vanillaDistance);
+
+            int damageBonus = Math.Min(credits, earnableDamage);
+            int accuracyBonus = Math.Min(credits, earnableAccuracy);
+            int distanceBonus = Math.Min(credits, earnableDistance);
+
+            return (damageBonus, accuracyBonus, distanceBonus);
+        }
+
+        /// <summary>
+        /// Checks if the player's class has the vanilla Focused trait.
+        /// </summary>
+        private static bool PlayerHasVanillaFocusedStatic(EntityPlayer entity)
+        {
+            string[] classTraits = entity.WatchedAttributes.GetStringArray("characterTraits", null);
+
+            if (classTraits != null)
+            {
+                foreach (string trait in classTraits)
+                {
+                    if (trait.Equals("focused", StringComparison.OrdinalIgnoreCase))
+                    {
+                        return true;
+                    }
+                }
+            }
+
+            // Fallback: check known classes that have Focused (Hunter)
+            string characterClass = entity.WatchedAttributes.GetString("characterClass", "");
+            return characterClass.Equals("hunter", StringComparison.OrdinalIgnoreCase);
         }
 
         /// <summary>
@@ -842,7 +1218,7 @@ namespace SimpleImprovingTraits
         }
 
         /// <summary>
-        /// Called when a player joins. Applies their saved bonuses (mining and melee).
+        /// Called when a player joins. Applies their saved bonuses (mining, melee, and ranged).
         /// </summary>
         private void OnPlayerJoin(IServerPlayer byPlayer)
         {
@@ -866,6 +1242,15 @@ namespace SimpleImprovingTraits
             if (meleeCredits > 0)
             {
                 ServerApi.Logger.Debug($"[SimpleImprovingTraits] Applied melee bonus {meleeCredits}% to player {byPlayer.PlayerName}");
+            }
+
+            // Apply ranged bonus
+            var rangedProg = RangedProgress.GetOrAdd(playerUid, _ => new RangedProgressData());
+            int rangedCredits = rangedProg.TotalCredits;
+            ApplyRangedBonusStatic(byPlayer, rangedCredits);
+            if (rangedCredits > 0)
+            {
+                ServerApi.Logger.Debug($"[SimpleImprovingTraits] Applied ranged bonus {rangedCredits} credits to player {byPlayer.PlayerName}");
             }
         }
 
@@ -1183,6 +1568,171 @@ namespace SimpleImprovingTraits
             return null;
         }
 
+        /// <summary>
+        /// Process ranged damage dealt by a player. Called from Harmony patch.
+        /// </summary>
+        public static void ProcessRangedDamage(IServerPlayer attackerPlayer, string weaponCombo, float damage)
+        {
+            if (attackerPlayer == null || string.IsNullOrEmpty(weaponCombo)) return;
+
+            string playerUid = attackerPlayer.PlayerUID;
+
+            // Get or create player progress data
+            var playerProgress = RangedProgress.GetOrAdd(playerUid, _ => new RangedProgressData());
+
+            // Skip all processing if already at max - completely invisible
+            if (playerProgress.TotalCredits >= MaxRangedDamagePercent) return;
+
+            // Get or create progress for this specific weapon combination
+            var weaponProgress = playerProgress.GetWeaponProgress(weaponCombo);
+
+            int oldCredits = playerProgress.TotalCredits;
+
+            // Add damage to THIS weapon combination's progress
+            weaponProgress.DamageInIncrement += damage;
+
+            // Check if we've earned any new credits with this weapon combination
+            while (weaponProgress.DamageInIncrement >= weaponProgress.CurrentIncrementSize && playerProgress.TotalCredits < MaxRangedDamagePercent)
+            {
+                // Earn a credit
+                playerProgress.TotalCredits++;
+                weaponProgress.DamageInIncrement -= weaponProgress.CurrentIncrementSize;
+                weaponProgress.CurrentIncrementSize += RangedIncrementStep;
+
+                ServerApi.Logger.Debug($"[SimpleImprovingTraits] Player {attackerPlayer.PlayerName} earned ranged credit {playerProgress.TotalCredits} with {weaponCombo}, next requires {weaponProgress.CurrentIncrementSize} damage");
+            }
+
+            pendingRangedProgressSave = true;
+
+            // If credits increased, update the stat and notify player
+            if (playerProgress.TotalCredits > oldCredits)
+            {
+                var (damageBonus, accuracyBonus, distanceBonus) = ApplyRangedBonusStatic(attackerPlayer, playerProgress.TotalCredits);
+
+                // Notify player of level up with actual applied bonuses
+                attackerPlayer.SendMessage(GlobalConstants.GeneralChatGroup,
+                    Lang.Get("simpleimprovingtraits:message-ranged-level-up", playerProgress.TotalCredits, damageBonus, accuracyBonus, distanceBonus),
+                    EnumChatType.Notification);
+            }
+        }
+
+        /// <summary>
+        /// Static version of ApplyRangedBonus for use from Harmony patches.
+        /// Returns (damageBonus, accuracyBonus, distanceBonus) as percentages.
+        /// </summary>
+        public static (int damage, int accuracy, int distance) ApplyRangedBonusStatic(IServerPlayer player, int level)
+        {
+            if (player?.Entity == null) return (0, 0, 0);
+
+            // Check if player has vanilla Focused (affects bonus caps)
+            bool hasVanillaFocused = PlayerHasVanillaFocusedStatic(player.Entity);
+            int vanillaDamage = hasVanillaFocused ? VANILLA_FOCUSED_DAMAGE_BONUS : 0;
+            int vanillaAccuracy = hasVanillaFocused ? VANILLA_FOCUSED_ACCURACY_BONUS : 0;
+            int vanillaDistance = hasVanillaFocused ? VANILLA_FOCUSED_DISTANCE_BONUS : 0;
+
+            // Calculate earnable bonuses (each stat capped individually)
+            float earnableDamage = Math.Max(0, (MaxRangedDamagePercent - vanillaDamage) / 100f);
+            float earnableAccuracy = Math.Max(0, (MaxRangedAccuracyPercent - vanillaAccuracy) / 100f);
+            float earnableDistance = Math.Max(0, (MaxRangedDistancePercent - vanillaDistance) / 100f);
+
+            // Calculate actual bonuses from level
+            float rawBonus = level * 0.01f;
+            float damageBonus = Math.Min(rawBonus, earnableDamage);
+            float accuracyBonus = Math.Min(rawBonus, earnableAccuracy);
+            float distanceBonus = Math.Min(rawBonus, earnableDistance);
+
+            // Set the ranged stats (persistent = false since we reapply on join)
+            // Note: All ranged stats are additive (0 = no change, not 1.0)
+            player.Entity.Stats.Set("rangedWeaponsDamage", RANGED_DAMAGE_STAT_CODE, damageBonus, false);
+            player.Entity.Stats.Set("rangedWeaponsAcc", RANGED_ACCURACY_STAT_CODE, accuracyBonus, false);
+            player.Entity.Stats.Set("rangedWeaponsSpeed", RANGED_DISTANCE_STAT_CODE, distanceBonus, false);
+
+            int damagePct = (int)(damageBonus * 100);
+            int accuracyPct = (int)(accuracyBonus * 100);
+            int distancePct = (int)(distanceBonus * 100);
+
+            // Sync level and bonuses to WatchedAttributes for client-side display
+            player.Entity.WatchedAttributes.SetInt(WATCHED_RANGED_LEVEL, level);
+            player.Entity.WatchedAttributes.SetInt(WATCHED_RANGED_DAMAGE_BONUS, damagePct);
+            player.Entity.WatchedAttributes.SetInt(WATCHED_RANGED_ACCURACY_BONUS, accuracyPct);
+            player.Entity.WatchedAttributes.SetInt(WATCHED_RANGED_DISTANCE_BONUS, distancePct);
+            player.Entity.WatchedAttributes.SetBool("sitHasVanillaFocused", hasVanillaFocused);
+
+            // Add our trait to extraTraits only if player doesn't already have Focused
+            UpdateExtraTraitStatic(player.Entity, RANGED_TRAIT_CODE, level > 0 && !hasVanillaFocused);
+
+            player.Entity.WatchedAttributes.MarkPathDirty(WATCHED_RANGED_LEVEL);
+
+            return (damagePct, accuracyPct, distancePct);
+        }
+
+        /// <summary>
+        /// Gets a weapon combination code from a projectile and the shooter's held weapon.
+        /// For bows+arrows, returns "bowCode+arrowCode" (e.g., "bow-long+arrow-copper").
+        /// For slings+stones, returns "sling+stone".
+        /// Returns null if not a qualifying ranged weapon.
+        /// </summary>
+        public static string GetRangedWeaponCombo(Entity projectile, EntityPlayer shooter)
+        {
+            if (projectile == null || shooter == null) return null;
+
+            string projectileCode = projectile.Code?.ToString() ?? "";
+            string heldItemCode = shooter.RightHandItemSlot?.Itemstack?.Collectible?.Code?.ToString() ?? "";
+
+            // Remove prefixes for checking
+            string projCheck = projectileCode.StartsWith("game:") ? projectileCode.Substring(5) : projectileCode;
+            string heldCheck = heldItemCode.StartsWith("game:") ? heldItemCode.Substring(5) : heldItemCode;
+
+            // Check for arrow projectiles
+            if (projCheck.StartsWith("arrow-") || projCheck == "arrow")
+            {
+                // Get bow type from held item (if still holding a bow)
+                string bowCode = "unknown-bow";
+                if (heldCheck.StartsWith("bow-") || heldCheck == "bow" ||
+                    heldCheck.StartsWith("longbow") || heldCheck.StartsWith("recurvebow") ||
+                    heldCheck.StartsWith("crudebow") || heldCheck.StartsWith("simplebow"))
+                {
+                    bowCode = heldCheck;
+                }
+                return $"{bowCode}+{projCheck}";
+            }
+
+            // Check for sling stones (thrown stones)
+            if (projCheck.StartsWith("stone-") || projCheck == "stone" || projCheck.StartsWith("thrownstone"))
+            {
+                // Check if holding a sling
+                string slingCode = "thrown";
+                if (heldCheck.StartsWith("sling"))
+                {
+                    slingCode = heldCheck;
+                }
+                return $"{slingCode}+{projCheck}";
+            }
+
+            // Check for spear throws (thrown spears deal ranged damage)
+            if (projCheck.StartsWith("spear-") || projCheck.StartsWith("thrownspear"))
+            {
+                return $"thrown+{projCheck}";
+            }
+
+            return null;
+        }
+
+        /// <summary>
+        /// Checks if a damage source is from a ranged attack (projectile).
+        /// </summary>
+        public static bool IsRangedDamage(DamageSource damageSource)
+        {
+            // CauseEntity is non-null for projectile damage (it's the shooter)
+            // SourceEntity is the projectile itself
+            if (damageSource?.CauseEntity == null) return false;
+
+            // Additional check: the damage should be from a projectile type
+            // PiercingAttack is typically used for arrows
+            return damageSource.Type == EnumDamageType.PiercingAttack ||
+                   damageSource.Type == EnumDamageType.BluntAttack; // For thrown stones
+        }
+
         public override void Dispose()
         {
             // Persist any pending progress before shutdown
@@ -1196,6 +1746,10 @@ namespace SimpleImprovingTraits
                 {
                     PersistMeleeProgress();
                 }
+                if (pendingRangedProgressSave || !RangedProgress.IsEmpty)
+                {
+                    PersistRangedProgress();
+                }
 
                 ServerApi.Event.DidBreakBlock -= OnBlockBroken;
                 ServerApi.Event.PlayerJoin -= OnPlayerJoin;
@@ -1203,6 +1757,7 @@ namespace SimpleImprovingTraits
                 ServerApi.Event.SaveGameLoaded -= LoadConfig;
                 ServerApi.Event.SaveGameLoaded -= LoadMiningProgress;
                 ServerApi.Event.SaveGameLoaded -= LoadMeleeProgress;
+                ServerApi.Event.SaveGameLoaded -= LoadRangedProgress;
             }
 
             // Unpatch server-side Harmony patches
@@ -1210,8 +1765,10 @@ namespace SimpleImprovingTraits
 
             MiningProgress.Clear();
             MeleeProgress.Clear();
+            RangedProgress.Clear();
             pendingMiningProgressSave = false;
             pendingMeleeProgressSave = false;
+            pendingRangedProgressSave = false;
             base.Dispose();
         }
 
@@ -1230,6 +1787,12 @@ namespace SimpleImprovingTraits
             {
                 PersistMeleeProgress();
                 pendingMeleeProgressSave = false;
+            }
+
+            if (pendingRangedProgressSave || !RangedProgress.IsEmpty)
+            {
+                PersistRangedProgress();
+                pendingRangedProgressSave = false;
             }
 
             if (pendingConfigSave)
@@ -1582,8 +2145,150 @@ namespace SimpleImprovingTraits
         }
 
         /// <summary>
+        /// Persist ranged progress to world save data.
+        /// Version 1 format stores per-weapon progress dictionary.
+        /// </summary>
+        public static void PersistRangedProgress()
+        {
+            if (ServerApi == null) return;
+
+            lock (persistLock)
+            {
+                if (RangedProgress.IsEmpty)
+                {
+                    ServerApi.WorldManager.SaveGame.StoreData(RANGED_PROGRESS_SAVE_KEY, null);
+                    return;
+                }
+
+                try
+                {
+                    var snapshot = RangedProgress.ToArray();
+
+                    byte[] data;
+                    using (var ms = new MemoryStream())
+                    {
+                        using (var writer = new BinaryWriter(ms))
+                        {
+                            // Write magic bytes and version
+                            writer.Write((byte)0x53); // 'S'
+                            writer.Write((byte)0x49); // 'I'
+                            writer.Write((byte)0x52); // 'R' (for Ranged)
+                            writer.Write((byte)1);    // Version 1: Per-weapon progress
+
+                            // Write number of players
+                            writer.Write(snapshot.Length);
+
+                            foreach (var playerKvp in snapshot)
+                            {
+                                writer.Write(playerKvp.Key);   // Player UID
+                                var progress = playerKvp.Value;
+                                writer.Write(progress.TotalCredits);
+
+                                // Write per-weapon progress dictionary
+                                writer.Write(progress.WeaponProgress.Count);
+                                foreach (var weaponKvp in progress.WeaponProgress)
+                                {
+                                    writer.Write(weaponKvp.Key); // Weapon combo
+                                    writer.Write(weaponKvp.Value.DamageInIncrement);
+                                    writer.Write(weaponKvp.Value.CurrentIncrementSize);
+                                }
+                            }
+                        }
+                        data = ms.ToArray();
+                    }
+
+                    ServerApi.WorldManager.SaveGame.StoreData(RANGED_PROGRESS_SAVE_KEY, data);
+                    ServerApi.Logger.Debug($"[SimpleImprovingTraits] Persisted ranged progress for {snapshot.Length} players");
+                }
+                catch (Exception ex)
+                {
+                    ServerApi.Logger.Error($"[SimpleImprovingTraits] Failed to persist ranged progress: {ex.Message}");
+                }
+            }
+        }
+
+        /// <summary>
+        /// Load ranged progress from world save data.
+        /// </summary>
+        private void LoadRangedProgress()
+        {
+            if (ServerApi == null) return;
+
+            RangedProgress.Clear();
+
+            try
+            {
+                byte[] data = ServerApi.WorldManager.SaveGame.GetData(RANGED_PROGRESS_SAVE_KEY);
+                if (data == null || data.Length == 0)
+                {
+                    ServerApi.Logger.Debug("[SimpleImprovingTraits] No ranged progress data found in world save");
+                    return;
+                }
+
+                using (var ms = new MemoryStream(data))
+                {
+                    using (var reader = new BinaryReader(ms))
+                    {
+                        // Check magic bytes
+                        byte b1 = reader.ReadByte();
+                        byte b2 = reader.ReadByte();
+                        byte b3 = reader.ReadByte();
+
+                        if (b1 != 0x53 || b2 != 0x49 || b3 != 0x52) // "SIR"
+                        {
+                            ServerApi.Logger.Warning("[SimpleImprovingTraits] Invalid ranged progress data format");
+                            return;
+                        }
+
+                        byte version = reader.ReadByte();
+                        int playerCount = reader.ReadInt32();
+
+                        if (version == 1)
+                        {
+                            // Current format: per-weapon progress
+                            for (int i = 0; i < playerCount; i++)
+                            {
+                                string playerUid = reader.ReadString();
+                                var progress = new RangedProgressData
+                                {
+                                    TotalCredits = reader.ReadInt32()
+                                };
+
+                                int weaponCount = reader.ReadInt32();
+                                for (int j = 0; j < weaponCount; j++)
+                                {
+                                    string weaponCombo = reader.ReadString();
+                                    var weaponProgress = new RangedWeaponProgressData
+                                    {
+                                        DamageInIncrement = reader.ReadSingle(),
+                                        CurrentIncrementSize = reader.ReadInt32()
+                                    };
+                                    progress.WeaponProgress[weaponCombo] = weaponProgress;
+                                }
+
+                                RangedProgress[playerUid] = progress;
+                            }
+                        }
+                        else
+                        {
+                            ServerApi.Logger.Warning($"[SimpleImprovingTraits] Unknown ranged save format version {version}");
+                            return;
+                        }
+                    }
+                }
+
+                ServerApi.Logger.Notification($"[SimpleImprovingTraits] Loaded ranged progress for {RangedProgress.Count} players");
+            }
+            catch (Exception ex)
+            {
+                RangedProgress.Clear();
+                ServerApi.Logger.Error($"[SimpleImprovingTraits] Failed to load ranged progress: {ex.Message}");
+            }
+        }
+
+        /// <summary>
         /// Persist config to world save data.
-        /// Version 4 adds melee configuration.
+        /// Version 5 adds ranged configuration.
         /// </summary>
         private void PersistConfig()
         {
@@ -1596,7 +2301,7 @@ namespace SimpleImprovingTraits
                 {
                     using (var writer = new BinaryWriter(ms))
                     {
-                        writer.Write((byte)4); // Version 4: adds melee config
+                        writer.Write((byte)5); // Version 5: adds ranged config
                         writer.Write(BaseBlocksPerIncrement);
                         writer.Write(IncrementStep);
                         writer.Write(MaxMiningSpeedPercent);
@@ -1605,12 +2310,18 @@ namespace SimpleImprovingTraits
                         writer.Write(BaseDamagePerIncrement);
                         writer.Write(MeleeIncrementStep);
                         writer.Write(MaxMeleeDamagePercent);
+                        // Ranged config
+                        writer.Write(BaseRangedDamagePerIncrement);
+                        writer.Write(RangedIncrementStep);
+                        writer.Write(MaxRangedDamagePercent);
+                        writer.Write(MaxRangedAccuracyPercent);
+                        writer.Write(MaxRangedDistancePercent);
                     }
                     data = ms.ToArray();
                 }
 
                 ServerApi.WorldManager.SaveGame.StoreData(CONFIG_SAVE_KEY, data);
-                ServerApi.Logger.Debug($"[SimpleImprovingTraits] Config saved (Mining: Base={BaseBlocksPerIncrement}, Max={MaxMiningSpeedPercent}%, Ore={OreMultiplier}x | Melee: Base={BaseDamagePerIncrement}, Max={MaxMeleeDamagePercent}%)");
+                ServerApi.Logger.Debug($"[SimpleImprovingTraits] Config saved (Mining: Base={BaseBlocksPerIncrement}, Max={MaxMiningSpeedPercent}% | Melee: Base={BaseDamagePerIncrement}, Max={MaxMeleeDamagePercent}% | Ranged: Base={BaseRangedDamagePerIncrement}, MaxDmg={MaxRangedDamagePercent}%)");
             }
             catch (Exception ex)
             {
@@ -1620,7 +2331,7 @@ namespace SimpleImprovingTraits
 
         /// <summary>
         /// Load config from world save data.
-        /// Supports versions 1-4 for backwards compatibility.
+        /// Supports versions 1-5 for backwards compatibility.
         /// </summary>
         private void LoadConfig()
         {
@@ -1653,7 +2364,7 @@ namespace SimpleImprovingTraits
                                 MaxMiningSpeedPercent = reader.ReadInt32();
                             }
                             // OreMultiplier uses default (5)
-                            // Melee uses defaults
+                            // Melee and Ranged use defaults
 
                             // Mark for re-save in new format
                             pendingConfigSave = true;
@@ -1664,14 +2375,14 @@ namespace SimpleImprovingTraits
                             IncrementStep = reader.ReadInt32();
                             MaxMiningSpeedPercent = reader.ReadInt32();
                             OreMultiplier = reader.ReadInt32();
-                            // Melee uses defaults
+                            // Melee and Ranged use defaults
 
                             // Mark for re-save in new format
                             pendingConfigSave = true;
                         }
                         else if (version == 4)
                         {
-                            // Current format with melee config
+                            // Version 4: has melee config but not ranged
                             BaseBlocksPerIncrement = reader.ReadInt32();
                             IncrementStep = reader.ReadInt32();
                             MaxMiningSpeedPercent = reader.ReadInt32();
@@ -1679,11 +2390,31 @@ namespace SimpleImprovingTraits
                             BaseDamagePerIncrement = reader.ReadInt32();
                             MeleeIncrementStep = reader.ReadInt32();
                             MaxMeleeDamagePercent = reader.ReadInt32();
+                            // Ranged uses defaults
+
+                            // Mark for re-save in new format
+                            pendingConfigSave = true;
+                        }
+                        else if (version == 5)
+                        {
+                            // Current format with ranged config
+                            BaseBlocksPerIncrement = reader.ReadInt32();
+                            IncrementStep = reader.ReadInt32();
+                            MaxMiningSpeedPercent = reader.ReadInt32();
+                            OreMultiplier = reader.ReadInt32();
+                            BaseDamagePerIncrement = reader.ReadInt32();
+                            MeleeIncrementStep = reader.ReadInt32();
+                            MaxMeleeDamagePercent = reader.ReadInt32();
+                            BaseRangedDamagePerIncrement = reader.ReadInt32();
+                            RangedIncrementStep = reader.ReadInt32();
+                            MaxRangedDamagePercent = reader.ReadInt32();
+                            MaxRangedAccuracyPercent = reader.ReadInt32();
+                            MaxRangedDistancePercent = reader.ReadInt32();
                         }
                     }
                 }
 
-                ServerApi.Logger.Notification($"[SimpleImprovingTraits] Config loaded (Mining: Base={BaseBlocksPerIncrement}, Max={MaxMiningSpeedPercent}% | Melee: Base={BaseDamagePerIncrement}, Max={MaxMeleeDamagePercent}%)");
+                ServerApi.Logger.Notification($"[SimpleImprovingTraits] Config loaded (Mining: Base={BaseBlocksPerIncrement}, Max={MaxMiningSpeedPercent}% | Melee: Base={BaseDamagePerIncrement}, Max={MaxMeleeDamagePercent}% | Ranged: Base={BaseRangedDamagePerIncrement}, MaxDmg={MaxRangedDamagePercent}%)");
             }
             catch (Exception ex)
             {
@@ -1807,7 +2538,14 @@ namespace SimpleImprovingTraits
             int meleeBonus = eplr.WatchedAttributes.GetInt(SimpleImprovingTraitsModSystem.WATCHED_MELEE_BONUS, 0);
             bool hasVanillaSoldier = eplr.WatchedAttributes.GetBool("sitHasVanillaSoldier", false);
 
-            ClientApi.Logger.Debug($"[SimpleImprovingTraits] getClassTraitText postfix called. Mining: Level={miningLevel}, Bonus={miningBonus}%, HasHardy={hasVanillaHardy} | Melee: Level={meleeLevel}, Bonus={meleeBonus}%, HasSoldier={hasVanillaSoldier}");
+            // Get ranged progression data
+            int rangedLevel = eplr.WatchedAttributes.GetInt(SimpleImprovingTraitsModSystem.WATCHED_RANGED_LEVEL, 0);
+            int rangedDamageBonus = eplr.WatchedAttributes.GetInt(SimpleImprovingTraitsModSystem.WATCHED_RANGED_DAMAGE_BONUS, 0);
+            int rangedAccuracyBonus = eplr.WatchedAttributes.GetInt(SimpleImprovingTraitsModSystem.WATCHED_RANGED_ACCURACY_BONUS, 0);
+            int rangedDistanceBonus = eplr.WatchedAttributes.GetInt(SimpleImprovingTraitsModSystem.WATCHED_RANGED_DISTANCE_BONUS, 0);
+            bool hasVanillaFocused = eplr.WatchedAttributes.GetBool("sitHasVanillaFocused", false);
+
+            ClientApi.Logger.Debug($"[SimpleImprovingTraits] getClassTraitText postfix called. Mining: Level={miningLevel}, Bonus={miningBonus}%, HasHardy={hasVanillaHardy} | Melee: Level={meleeLevel}, Bonus={meleeBonus}%, HasSoldier={hasVanillaSoldier} | Ranged: Level={rangedLevel}, HasFocused={hasVanillaFocused}");
 
             // Get the "no traits" message
             string noTraitsMsg = Lang.Get("charactersheet-notraits");
@@ -1901,6 +2639,63 @@ namespace SimpleImprovingTraits
                 }
             }
 
+            // Process ranged progression (Focused trait)
+            if (rangedLevel > 0)
+            {
+                string plainRangedTraitName = Lang.Get("simpleimprovingtraits:trait-sitrangedmastery");
+
+                // Re-check hasNoTraits after melee processing
+                hasNoTraits = string.IsNullOrEmpty(__result) ||
+                              __result.Trim() == noTraitsMsg.Trim() ||
+                              __result == noTraitsMsg;
+
+                if (hasVanillaFocused)
+                {
+                    // Class already has Focused (e.g., Hunter) - update the existing Focused's stats
+                    // Ranged damage
+                    int combinedDamage = SimpleImprovingTraitsModSystem.VANILLA_FOCUSED_DAMAGE_BONUS + rangedDamageBonus;
+                    __result = __result.Replace(
+                        $"+{SimpleImprovingTraitsModSystem.VANILLA_FOCUSED_DAMAGE_BONUS}% ranged damage",
+                        $"+{combinedDamage}% ranged damage");
+
+                    // Ranged accuracy
+                    int combinedAccuracy = SimpleImprovingTraitsModSystem.VANILLA_FOCUSED_ACCURACY_BONUS + rangedAccuracyBonus;
+                    __result = __result.Replace(
+                        $"+{SimpleImprovingTraitsModSystem.VANILLA_FOCUSED_ACCURACY_BONUS}% ranged accuracy",
+                        $"+{combinedAccuracy}% ranged accuracy");
+
+                    // Ranged distance
+                    int combinedDistance = SimpleImprovingTraitsModSystem.VANILLA_FOCUSED_DISTANCE_BONUS + rangedDistanceBonus;
+                    __result = __result.Replace(
+                        $"+{SimpleImprovingTraitsModSystem.VANILLA_FOCUSED_DISTANCE_BONUS}% ranged distance",
+                        $"+{combinedDistance}% ranged distance");
+
+                    // Remove our separate sitrangedmastery entry if somehow present
+                    if (__result.Contains(plainRangedTraitName))
+                    {
+                        __result = __result.Replace("\n" + plainRangedTraitName, "");
+                        __result = __result.Replace(plainRangedTraitName + "\n", "");
+                        __result = __result.Replace(plainRangedTraitName, "");
+                    }
+                }
+                else if (hasNoTraits)
+                {
+                    // Commoner or other class with no traits - replace entirely with our dynamic Focused
+                    __result = Lang.Get("simpleimprovingtraits:trait-focused-dynamic", rangedDamageBonus, rangedAccuracyBonus, rangedDistanceBonus);
+                }
+                else if (__result.Contains(plainRangedTraitName))
+                {
+                    // We have our trait but no vanilla Focused - replace plain name with dynamic version
+                    __result = __result.Replace(plainRangedTraitName,
+                        Lang.Get("simpleimprovingtraits:trait-focused-dynamic", rangedDamageBonus, rangedAccuracyBonus, rangedDistanceBonus));
+                }
+                else
+                {
+                    // Has other traits but no Focused at all - append our dynamic Focused
+                    __result = __result + "\n" + Lang.Get("simpleimprovingtraits:trait-focused-dynamic", rangedDamageBonus, rangedAccuracyBonus, rangedDistanceBonus);
+                }
+            }
+
             // Clean up any double newlines that might have been introduced
             while (__result.Contains("\n\n"))
             {
@@ -1918,15 +2713,37 @@ namespace SimpleImprovingTraits
     public static class EntityDamagePatches
     {
         /// <summary>
-        /// Postfix for Entity.ReceiveDamage - tracks melee damage dealt by players.
-        /// Calculates base weapon damage by removing the player's melee multiplier.
+        /// Postfix for Entity.ReceiveDamage - tracks melee and ranged damage dealt by players.
         /// </summary>
         public static void ReceiveDamage_Postfix(Entity __instance, DamageSource damageSource, float damage, bool __result)
         {
             // Only process if damage was actually dealt
             if (!__result || damage <= 0) return;
 
-            // Check if damage was dealt by a player
+            // Check if this is ranged damage (projectile with CauseEntity)
+            if (SimpleImprovingTraitsModSystem.IsRangedDamage(damageSource))
+            {
+                // For ranged: CauseEntity is the shooter, SourceEntity is the projectile
+                var shooterEntity = damageSource.CauseEntity as EntityPlayer;
+                if (shooterEntity == null) return;
+
+                var shooterPlayer = shooterEntity.Player as IServerPlayer;
+                if (shooterPlayer == null) return;
+
+                // Don't count self-damage
+                if (__instance == shooterEntity) return;
+
+                // Get the weapon combination (bow+arrow, sling+stone, etc.)
+                string weaponCombo = SimpleImprovingTraitsModSystem.GetRangedWeaponCombo(damageSource.SourceEntity, shooterEntity);
+
+                if (weaponCombo != null)
+                {
+                    SimpleImprovingTraitsModSystem.ProcessRangedDamage(shooterPlayer, weaponCombo, damage);
+                }
+                return; // Don't also count as melee
+            }
+
+            // Check if damage was dealt by a player (melee)
             if (damageSource?.SourceEntity == null) return;
 
             var attackerPlayer = (damageSource.SourceEntity as EntityPlayer)?.Player as IServerPlayer;

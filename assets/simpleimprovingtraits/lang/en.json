@@ -8,5 +8,9 @@
   "message-melee-level-up": "Melee level up! You are now level {0} with +{1}% melee damage.",
   "trait-soldier-dynamic": "<font color=\"#84ff84\">Soldier</font> (+{0}% melee damage)",
   "trait-sitmeleemastery": "<font color=\"#84ff84\">Soldier</font>",
-  "traitname-sitmeleemastery": "Soldier"
+  "traitname-sitmeleemastery": "Soldier",
+  "message-ranged-level-up": "Ranged level up! You are now level {0} with +{1}% ranged damage, +{2}% ranged accuracy, +{3}% ranged distance.",
+  "trait-focused-dynamic": "<font color=\"#84ff84\">Focused</font> (+{0}% ranged damage, +{1}% ranged accuracy, +{2}% ranged distance)",
+  "trait-sitrangedmastery": "<font color=\"#84ff84\">Focused</font>",
+  "traitname-sitrangedmastery": "Focused"
 }

@@ -10,6 +10,7 @@ using Vintagestory.API.Common;
 using Vintagestory.API.Common.Entities;
 using Vintagestory.API.Config;
 using Vintagestory.API.Datastructures;
+using Vintagestory.API.MathTools;
 using Vintagestory.API.Server;
 
 namespace SimpleImprovingTraits
@@ -93,6 +94,42 @@ namespace SimpleImprovingTraits
                 clone.WeaponProgress[kvp.Key] = kvp.Value.Clone();
             }
             return clone;
+        }
+    }
+
+    /// <summary>
+    /// Data structure for tracking walking speed progression.
+    /// Simpler than other progression systems since walking has no "tools".
+    /// </summary>
+    public class WalkingProgressData
+    {
+        /// <summary>Total credits earned (each credit = 1% bonus). Max 15.</summary>
+        public int TotalCredits { get; set; }
+
+        /// <summary>Blocks walked toward the next credit.</summary>
+        public float BlocksInIncrement { get; set; }
+
+        /// <summary>Blocks needed for the next credit (1000, 2000, 3000, etc.).</summary>
+        public int CurrentIncrementSize { get; set; }
+
+        public WalkingProgressData()
+        {
+            TotalCredits = 0;
+            BlocksInIncrement = 0;
+            CurrentIncrementSize = 1000; // Base increment size
+        }
+
+        /// <summary>
+        /// Create a copy of this data.
+        /// </summary>
+        public WalkingProgressData Clone()
+        {
+            return new WalkingProgressData
+            {
+                TotalCredits = this.TotalCredits,
+                BlocksInIncrement = this.BlocksInIncrement,
+                CurrentIncrementSize = this.CurrentIncrementSize
+            };
         }
     }
 
@@ -356,6 +393,39 @@ namespace SimpleImprovingTraits
         // Flag to indicate pending ranged progress save
         private static volatile bool pendingRangedProgressSave = false;
 
+        // Keys for walking speed progression system
+        public const string WALKING_STAT_CODE = "sitWalkingBonus";
+        private const string WALKING_PROGRESS_SAVE_KEY = "sitWalkingProgress";
+
+        // WatchedAttributes keys for client sync (walking)
+        public const string WATCHED_WALKING_LEVEL = "sitWalkingLevel";
+        public const string WATCHED_WALKING_BONUS = "sitWalkingBonusPercent";
+
+        // Trait code for the walking speed mastery trait (Fleetfooted)
+        public const string WALKING_TRAIT_CODE = "sitwalkingmastery";
+
+        // Walking speed progression configuration
+        // Base blocks for first 1%: 1000 blocks
+        // Each subsequent 1% requires +1000 more blocks (1000, 2000, 3000, etc.)
+        public static int BaseBlocksWalkedPerIncrement = 1000;  // Base blocks needed for first credit
+        public static int WalkingIncrementStep = 1000;          // How much more blocks each subsequent credit needs
+        public static int MaxWalkingSpeedPercent = 15;          // 15% max bonus (115% total speed)
+
+        // Vanilla Fleetfooted trait walk speed bonus (used for cap calculations)
+        public const int VANILLA_FLEETFOOTED_WALK_BONUS = 10;
+
+        // Storage for walking progress - keyed by player UID
+        public static ConcurrentDictionary<string, WalkingProgressData> WalkingProgress = new ConcurrentDictionary<string, WalkingProgressData>();
+
+        // Flag to indicate pending walking progress save
+        private static volatile bool pendingWalkingProgressSave = false;
+
+        // Tracking last known positions for walking distance calculation
+        private static ConcurrentDictionary<string, Vec3d> lastPlayerPositions = new ConcurrentDictionary<string, Vec3d>();
+
+        // Maximum distance per tick to count (prevents teleportation from counting)
+        private const float MAX_DISTANCE_PER_TICK = 10f;
+
         private const string CONFIG_SAVE_KEY = "sitConfig";
 
         // Vanilla Hardy trait mining speed bonus (used for cap calculations)
@@ -488,6 +558,37 @@ namespace SimpleImprovingTraits
                     .WithArgs(api.ChatCommands.Parsers.OptionalInt("step"))
                     .RequiresPrivilege(Privilege.controlserver)
                     .HandleWith(OnTraitRangedIncrementCommand)
+                .EndSubCommand()
+                .BeginSubCommand("walking")
+                    .WithDescription("View your walking speed progression stats")
+                    .RequiresPrivilege(Privilege.chat)
+                    .RequiresPlayer()
+                    .HandleWith(OnTraitWalkingCommand)
+                .EndSubCommand()
+                .BeginSubCommand("walkingbase")
+                    .WithDescription("Get or set the base blocks per level (admin only)")
+                    .WithArgs(api.ChatCommands.Parsers.OptionalInt("blocks"))
+                    .RequiresPrivilege(Privilege.controlserver)
+                    .HandleWith(OnTraitWalkingBaseCommand)
+                .EndSubCommand()
+                .BeginSubCommand("walkinglevel")
+                    .WithDescription("Set your walking level (admin only)")
+                    .WithArgs(api.ChatCommands.Parsers.Int("level"))
+                    .RequiresPrivilege(Privilege.controlserver)
+                    .RequiresPlayer()
+                    .HandleWith(OnTraitWalkingLevelCommand)
+                .EndSubCommand()
+                .BeginSubCommand("walkingmax")
+                    .WithDescription("Get or set the max walking speed bonus percent (admin only)")
+                    .WithArgs(api.ChatCommands.Parsers.OptionalInt("percent"))
+                    .RequiresPrivilege(Privilege.controlserver)
+                    .HandleWith(OnTraitWalkingMaxCommand)
+                .EndSubCommand()
+                .BeginSubCommand("walkingincrement")
+                    .WithDescription("Get or set the walking increment step per credit (admin only)")
+                    .WithArgs(api.ChatCommands.Parsers.OptionalInt("step"))
+                    .RequiresPrivilege(Privilege.controlserver)
+                    .HandleWith(OnTraitWalkingIncrementCommand)
                 .EndSubCommand();
 
             // Hook into block breaking for mining progression
@@ -507,6 +608,13 @@ namespace SimpleImprovingTraits
             api.Event.SaveGameLoaded += LoadMiningProgress;
             api.Event.SaveGameLoaded += LoadMeleeProgress;
             api.Event.SaveGameLoaded += LoadRangedProgress;
+            api.Event.SaveGameLoaded += LoadWalkingProgress;
+
+            // Register game tick listener for walking distance tracking (every 500ms)
+            api.Event.RegisterGameTickListener(OnWalkingTick, 500);
+
+            // Hook into player disconnect to clean up position tracking
+            api.Event.PlayerDisconnect += OnPlayerDisconnect;
 
             api.Logger.Notification("[SimpleImprovingTraits] Mod loaded");
         }
@@ -534,7 +642,12 @@ namespace SimpleImprovingTraits
                 "  /trait rangedlevel [level] - Set your ranged level (admin)\n" +
                 "  /trait rangedmax [percent] - Get or set max ranged damage bonus (admin)\n" +
                 "  /trait rangedmaxacc [percent] - Get or set max ranged accuracy bonus (admin)\n" +
-                "  /trait rangedmaxdist [percent] - Get or set max ranged distance bonus (admin)");
+                "  /trait rangedmaxdist [percent] - Get or set max ranged distance bonus (admin)\n" +
+                "  /trait walking - View your walking speed progression stats\n" +
+                "  /trait walkingbase [value] - Get or set base blocks for first credit (admin)\n" +
+                "  /trait walkingincrement [value] - Get or set walking increment step per credit (admin)\n" +
+                "  /trait walkinglevel [level] - Set your walking level (admin)\n" +
+                "  /trait walkingmax [percent] - Get or set max walking speed bonus (admin)");
         }
 
         /// <summary>
@@ -1188,6 +1301,185 @@ namespace SimpleImprovingTraits
         }
 
         /// <summary>
+        /// Handler for /trait walking command.
+        /// </summary>
+        private TextCommandResult OnTraitWalkingCommand(TextCommandCallingArgs args)
+        {
+            var player = args.Caller.Player;
+            if (player?.Entity == null)
+            {
+                return TextCommandResult.Error("Could not find player entity");
+            }
+
+            string playerUid = player.PlayerUID;
+            var progress = WalkingProgress.GetOrAdd(playerUid, _ => new WalkingProgressData
+            {
+                CurrentIncrementSize = BaseBlocksWalkedPerIncrement
+            });
+
+            int currentCredits = progress.TotalCredits;
+            int bonusPercent = CalculateWalkingBonusPercent(currentCredits, player.Entity as EntityPlayer);
+
+            var sb = new StringBuilder();
+            sb.AppendLine($"Walking progression: {currentCredits}% / {MaxWalkingSpeedPercent}%");
+            sb.AppendLine($"Current bonus: +{bonusPercent}% walk speed");
+            sb.AppendLine($"Progress: {progress.BlocksInIncrement:F1}/{progress.CurrentIncrementSize} blocks");
+
+            if (currentCredits >= MaxWalkingSpeedPercent)
+            {
+                sb.Insert(0, "=== MAXED OUT ===\n");
+            }
+
+            return TextCommandResult.Success(sb.ToString().TrimEnd());
+        }
+
+        /// <summary>
+        /// Handler for /trait walkingbase command.
+        /// Sets the base blocks needed for the first 1% increment.
+        /// </summary>
+        private TextCommandResult OnTraitWalkingBaseCommand(TextCommandCallingArgs args)
+        {
+            int? newValue = (int?)args[0];
+
+            if (newValue.HasValue)
+            {
+                if (newValue.Value < 1)
+                {
+                    return TextCommandResult.Error("Base blocks per increment must be at least 1");
+                }
+
+                BaseBlocksWalkedPerIncrement = newValue.Value;
+                pendingConfigSave = true;
+
+                return TextCommandResult.Success($"Base blocks per increment set to {BaseBlocksWalkedPerIncrement}. New progress will require this many blocks for first 1%.");
+            }
+            else
+            {
+                return TextCommandResult.Success($"Current base blocks per increment: {BaseBlocksWalkedPerIncrement}\nIncrement step: +{WalkingIncrementStep} per credit");
+            }
+        }
+
+        /// <summary>
+        /// Handler for /trait walkingincrement command.
+        /// Sets how many additional blocks are required for each subsequent credit.
+        /// </summary>
+        private TextCommandResult OnTraitWalkingIncrementCommand(TextCommandCallingArgs args)
+        {
+            int? newValue = (int?)args[0];
+
+            if (newValue.HasValue)
+            {
+                if (newValue.Value < 0)
+                {
+                    return TextCommandResult.Error("Increment step cannot be negative");
+                }
+
+                WalkingIncrementStep = newValue.Value;
+                pendingConfigSave = true;
+
+                return TextCommandResult.Success($"Walking increment step set to +{WalkingIncrementStep} per credit.\nProgression: {BaseBlocksWalkedPerIncrement}, {BaseBlocksWalkedPerIncrement + WalkingIncrementStep}, {BaseBlocksWalkedPerIncrement + WalkingIncrementStep * 2}...");
+            }
+            else
+            {
+                return TextCommandResult.Success($"Current walking increment step: +{WalkingIncrementStep} per credit\nProgression: {BaseBlocksWalkedPerIncrement}, {BaseBlocksWalkedPerIncrement + WalkingIncrementStep}, {BaseBlocksWalkedPerIncrement + WalkingIncrementStep * 2}...");
+            }
+        }
+
+        /// <summary>
+        /// Handler for /trait walkinglevel command.
+        /// Sets the player's walking credits (level) directly.
+        /// </summary>
+        private TextCommandResult OnTraitWalkingLevelCommand(TextCommandCallingArgs args)
+        {
+            var player = args.Caller.Player as IServerPlayer;
+            if (player?.Entity == null)
+            {
+                return TextCommandResult.Error("Could not find player entity");
+            }
+
+            int newCredits = (int)args[0];
+
+            if (newCredits < 0)
+            {
+                return TextCommandResult.Error("Credits cannot be negative");
+            }
+
+            if (newCredits > MaxWalkingSpeedPercent)
+            {
+                return TextCommandResult.Error($"Credits cannot exceed max ({MaxWalkingSpeedPercent})");
+            }
+
+            // Set the player's progress
+            string playerUid = player.PlayerUID;
+            var progress = WalkingProgress.GetOrAdd(playerUid, _ => new WalkingProgressData
+            {
+                CurrentIncrementSize = BaseBlocksWalkedPerIncrement
+            });
+
+            progress.TotalCredits = newCredits;
+            progress.BlocksInIncrement = 0;
+            // Calculate what the increment size should be at this level
+            progress.CurrentIncrementSize = BaseBlocksWalkedPerIncrement + (newCredits * WalkingIncrementStep);
+
+            pendingWalkingProgressSave = true;
+
+            // Apply the bonus
+            int bonusPercent = ApplyWalkingBonusStatic(player, newCredits);
+
+            return TextCommandResult.Success($"Walking credits set to {newCredits} (+{bonusPercent}% walk speed).");
+        }
+
+        /// <summary>
+        /// Handler for /trait walkingmax command.
+        /// Gets or sets the maximum walking speed bonus percent.
+        /// </summary>
+        private TextCommandResult OnTraitWalkingMaxCommand(TextCommandCallingArgs args)
+        {
+            int? newValue = (int?)args[0];
+
+            if (newValue.HasValue)
+            {
+                if (newValue.Value < 1)
+                {
+                    return TextCommandResult.Error("Max walking speed percent must be at least 1");
+                }
+
+                MaxWalkingSpeedPercent = newValue.Value;
+                pendingConfigSave = true;
+
+                // Recalculate and reapply bonuses for all online players
+                foreach (IServerPlayer player in ServerApi.World.AllOnlinePlayers)
+                {
+                    if (player?.Entity == null) continue;
+                    string playerUid = player.PlayerUID;
+                    var progress = WalkingProgress.GetOrAdd(playerUid, _ => new WalkingProgressData
+                    {
+                        CurrentIncrementSize = BaseBlocksWalkedPerIncrement
+                    });
+                    ApplyWalkingBonusStatic(player, progress.TotalCredits);
+                }
+
+                return TextCommandResult.Success($"Max walking speed bonus set to +{MaxWalkingSpeedPercent}%. All player bonuses recalculated.");
+            }
+            else
+            {
+                return TextCommandResult.Success($"Current max walking speed bonus: +{MaxWalkingSpeedPercent}%");
+            }
+        }
+
+        /// <summary>
+        /// Calculate the walking speed bonus as an integer percentage.
+        /// Accounts for vanilla Fleetfooted trait (+10% walk speed).
+        /// </summary>
+        public static int CalculateWalkingBonusPercent(int credits, EntityPlayer entity)
+        {
+            bool hasFleetfooted = entity != null && PlayerHasVanillaFleetfootedStatic(entity);
+            int vanillaBonus = hasFleetfooted ? VANILLA_FLEETFOOTED_WALK_BONUS : 0;
+            int earnableBonus = Math.Max(0, MaxWalkingSpeedPercent - vanillaBonus);
+            return Math.Min(credits, earnableBonus);
+        }
+
+        /// <summary>
         /// Calculate the melee damage bonus as an integer percentage (0 to 150).
         /// Each credit gives 1% bonus, capped at MaxMeleeDamagePercent.
         /// </summary>
@@ -1240,6 +1532,69 @@ namespace SimpleImprovingTraits
             // Fallback: check known classes that have Focused (Hunter)
             string characterClass = entity.WatchedAttributes.GetString("characterClass", "");
             return characterClass.Equals("hunter", StringComparison.OrdinalIgnoreCase);
+        }
+
+        /// <summary>
+        /// Checks if the player's class has the vanilla Fleetfooted trait.
+        /// </summary>
+        private static bool PlayerHasVanillaFleetfootedStatic(EntityPlayer entity)
+        {
+            string[] classTraits = entity.WatchedAttributes.GetStringArray("characterTraits", null);
+
+            if (classTraits != null)
+            {
+                foreach (string trait in classTraits)
+                {
+                    if (trait.Equals("fleetfooted", StringComparison.OrdinalIgnoreCase))
+                    {
+                        return true;
+                    }
+                }
+            }
+
+            // Fallback: check known classes that have Fleetfooted (Hunter, Clockmaker)
+            string characterClass = entity.WatchedAttributes.GetString("characterClass", "");
+            return characterClass.Equals("hunter", StringComparison.OrdinalIgnoreCase) ||
+                   characterClass.Equals("clockmaker", StringComparison.OrdinalIgnoreCase);
+        }
+
+        /// <summary>
+        /// Apply walking speed bonus to a player based on their level.
+        /// Returns the actual applied bonus percentage.
+        /// </summary>
+        public static int ApplyWalkingBonusStatic(IServerPlayer player, int level)
+        {
+            if (player?.Entity == null) return 0;
+
+            // Check if player has vanilla Fleetfooted (affects bonus cap)
+            bool hasVanillaFleetfooted = PlayerHasVanillaFleetfootedStatic(player.Entity);
+            int vanillaFleetfootedBonus = hasVanillaFleetfooted ? VANILLA_FLEETFOOTED_WALK_BONUS : 0;
+
+            // Calculate raw bonus from level (1% per level)
+            float rawBonus = level * 0.01f;
+
+            // Cap earned bonus so total (vanilla + earned) doesn't exceed MaxWalkingSpeedPercent
+            float maxEarnableBonus = (MaxWalkingSpeedPercent - vanillaFleetfootedBonus) / 100f;
+            float bonus = Math.Min(rawBonus, Math.Max(0, maxEarnableBonus));
+
+            // Set the walk speed stat (persistent = false since we reapply on join)
+            // walkspeed is a multiplicative stat used by Stats.GetBlended("walkspeed")
+            // Adding 0.1 means +10% speed, 0.5 means +50%, etc.
+            player.Entity.Stats.Set("walkspeed", WALKING_STAT_CODE, bonus, false);
+
+            int bonusPercent = (int)(bonus * 100);
+
+            // Sync level and bonus to WatchedAttributes for client-side display
+            player.Entity.WatchedAttributes.SetInt(WATCHED_WALKING_LEVEL, level);
+            player.Entity.WatchedAttributes.SetInt(WATCHED_WALKING_BONUS, bonusPercent);
+            player.Entity.WatchedAttributes.SetBool("sitHasVanillaFleetfooted", hasVanillaFleetfooted);
+
+            // Add our trait to extraTraits only if player doesn't already have Fleetfooted
+            UpdateExtraTraitStatic(player.Entity, WALKING_TRAIT_CODE, level > 0 && !hasVanillaFleetfooted);
+
+            player.Entity.WatchedAttributes.MarkPathDirty(WATCHED_WALKING_LEVEL);
+
+            return bonusPercent;
         }
 
         /// <summary>
@@ -1302,7 +1657,91 @@ namespace SimpleImprovingTraits
         }
 
         /// <summary>
-        /// Called when a player joins. Applies their saved bonuses (mining, melee, and ranged).
+        /// Called every 500ms to track walking distance for all online players.
+        /// Calculates 2D horizontal distance moved (ignoring Y-axis for climbing/falling).
+        /// </summary>
+        private void OnWalkingTick(float dt)
+        {
+            foreach (IServerPlayer player in ServerApi.World.AllOnlinePlayers)
+            {
+                if (player?.Entity == null) continue;
+
+                string playerUid = player.PlayerUID;
+                Vec3d currentPos = player.Entity.Pos.XYZ;
+
+                // Get or initialize last position
+                if (!lastPlayerPositions.TryGetValue(playerUid, out Vec3d lastPos))
+                {
+                    lastPlayerPositions[playerUid] = currentPos.Clone();
+                    continue;
+                }
+
+                // Calculate 2D horizontal distance (ignore Y axis to avoid counting climbing/falling)
+                double dx = currentPos.X - lastPos.X;
+                double dz = currentPos.Z - lastPos.Z;
+                float distance = (float)Math.Sqrt(dx * dx + dz * dz);
+
+                // Update last position
+                lastPlayerPositions[playerUid] = currentPos.Clone();
+
+                // Skip if no movement or teleportation (too far)
+                if (distance < 0.01f || distance > MAX_DISTANCE_PER_TICK) continue;
+
+                // Get or create player progress data
+                var playerProgress = WalkingProgress.GetOrAdd(playerUid, _ => new WalkingProgressData
+                {
+                    CurrentIncrementSize = BaseBlocksWalkedPerIncrement
+                });
+
+                // Skip all processing if already at max - completely invisible
+                if (playerProgress.TotalCredits >= MaxWalkingSpeedPercent) continue;
+
+                int oldCredits = playerProgress.TotalCredits;
+
+                // Add distance to progress
+                playerProgress.BlocksInIncrement += distance;
+
+                // Check if we've earned any new credits
+                while (playerProgress.BlocksInIncrement >= playerProgress.CurrentIncrementSize && playerProgress.TotalCredits < MaxWalkingSpeedPercent)
+                {
+                    // Earn a credit
+                    playerProgress.TotalCredits++;
+                    playerProgress.BlocksInIncrement -= playerProgress.CurrentIncrementSize;
+                    playerProgress.CurrentIncrementSize += WalkingIncrementStep;
+
+                    ServerApi.Logger.Debug($"[SimpleImprovingTraits] Player {player.PlayerName} earned walking credit {playerProgress.TotalCredits}, next requires {playerProgress.CurrentIncrementSize} blocks");
+                }
+
+                // Mark for saving if any progress was made
+                if (playerProgress.BlocksInIncrement > 0 || playerProgress.TotalCredits > oldCredits)
+                {
+                    pendingWalkingProgressSave = true;
+                }
+
+                // If credits increased, update the stat and notify player
+                if (playerProgress.TotalCredits > oldCredits)
+                {
+                    int actualBonusPercent = ApplyWalkingBonusStatic(player, playerProgress.TotalCredits);
+
+                    // Notify player of level up with actual applied bonus (respects caps)
+                    player.SendMessage(GlobalConstants.GeneralChatGroup,
+                        Lang.Get("simpleimprovingtraits:message-walking-level-up", playerProgress.TotalCredits, actualBonusPercent),
+                        EnumChatType.Notification);
+                }
+            }
+        }
+
+        /// <summary>
+        /// Called when a player disconnects. Cleans up their position tracking data.
+        /// </summary>
+        private void OnPlayerDisconnect(IServerPlayer byPlayer)
+        {
+            if (byPlayer == null) return;
+            lastPlayerPositions.TryRemove(byPlayer.PlayerUID, out _);
+        }
+
+        /// <summary>
+        /// Called when a player joins. Applies their saved bonuses (mining, melee, ranged, and walking).
         /// </summary>
         private void OnPlayerJoin(IServerPlayer byPlayer)
         {
@@ -1335,6 +1774,18 @@ namespace SimpleImprovingTraits
             if (rangedCredits > 0)
             {
                 ServerApi.Logger.Debug($"[SimpleImprovingTraits] Applied ranged bonus {rangedCredits} credits to player {byPlayer.PlayerName}");
+            }
+
+            // Apply walking bonus
+            var walkingProg = WalkingProgress.GetOrAdd(playerUid, _ => new WalkingProgressData
+            {
+                CurrentIncrementSize = BaseBlocksWalkedPerIncrement
+            });
+            int walkingCredits = walkingProg.TotalCredits;
+            ApplyWalkingBonusStatic(byPlayer, walkingCredits);
+            if (walkingCredits > 0)
+            {
+                ServerApi.Logger.Debug($"[SimpleImprovingTraits] Applied walking bonus {walkingCredits}% to player {byPlayer.PlayerName}");
             }
         }
 
@@ -1843,14 +2294,20 @@ namespace SimpleImprovingTraits
                 {
                     PersistRangedProgress();
                 }
+                if (pendingWalkingProgressSave || !WalkingProgress.IsEmpty)
+                {
+                    PersistWalkingProgress();
+                }
 
                 ServerApi.Event.DidBreakBlock -= OnBlockBroken;
                 ServerApi.Event.PlayerJoin -= OnPlayerJoin;
+                ServerApi.Event.PlayerDisconnect -= OnPlayerDisconnect;
                 ServerApi.Event.GameWorldSave -= OnGameWorldSave;
                 ServerApi.Event.SaveGameLoaded -= LoadConfig;
                 ServerApi.Event.SaveGameLoaded -= LoadMiningProgress;
                 ServerApi.Event.SaveGameLoaded -= LoadMeleeProgress;
                 ServerApi.Event.SaveGameLoaded -= LoadRangedProgress;
+                ServerApi.Event.SaveGameLoaded -= LoadWalkingProgress;
             }
 
             // Unpatch server-side Harmony patches
@@ -1859,9 +2316,12 @@ namespace SimpleImprovingTraits
             MiningProgress.Clear();
             MeleeProgress.Clear();
             RangedProgress.Clear();
+            WalkingProgress.Clear();
+            lastPlayerPositions.Clear();
             pendingMiningProgressSave = false;
             pendingMeleeProgressSave = false;
             pendingRangedProgressSave = false;
+            pendingWalkingProgressSave = false;
             base.Dispose();
         }
 
@@ -1886,6 +2346,12 @@ namespace SimpleImprovingTraits
             {
                 PersistRangedProgress();
                 pendingRangedProgressSave = false;
+            }
+
+            if (pendingWalkingProgressSave || !WalkingProgress.IsEmpty)
+            {
+                PersistWalkingProgress();
+                pendingWalkingProgressSave = false;
             }
 
             if (pendingConfigSave)
@@ -2380,8 +2846,132 @@ namespace SimpleImprovingTraits
         }
 
         /// <summary>
+        /// Persist walking progress to world save data.
+        /// Version 1 format: simple progress tracking (no per-tool).
+        /// </summary>
+        public static void PersistWalkingProgress()
+        {
+            if (ServerApi == null) return;
+
+            lock (persistLock)
+            {
+                if (WalkingProgress.IsEmpty)
+                {
+                    ServerApi.WorldManager.SaveGame.StoreData(WALKING_PROGRESS_SAVE_KEY, null);
+                    return;
+                }
+
+                try
+                {
+                    var snapshot = WalkingProgress.ToArray();
+
+                    byte[] data;
+                    using (var ms = new MemoryStream())
+                    {
+                        using (var writer = new BinaryWriter(ms))
+                        {
+                            // Write magic bytes and version
+                            writer.Write((byte)0x53); // 'S'
+                            writer.Write((byte)0x49); // 'I'
+                            writer.Write((byte)0x57); // 'W' (for Walking)
+                            writer.Write((byte)1);    // Version 1
+
+                            // Write number of players
+                            writer.Write(snapshot.Length);
+
+                            foreach (var playerKvp in snapshot)
+                            {
+                                writer.Write(playerKvp.Key);   // Player UID
+                                var progress = playerKvp.Value;
+                                writer.Write(progress.TotalCredits);
+                                writer.Write(progress.BlocksInIncrement);
+                                writer.Write(progress.CurrentIncrementSize);
+                            }
+                        }
+                        data = ms.ToArray();
+                    }
+
+                    ServerApi.WorldManager.SaveGame.StoreData(WALKING_PROGRESS_SAVE_KEY, data);
+                    ServerApi.Logger.Debug($"[SimpleImprovingTraits] Persisted walking progress for {snapshot.Length} players");
+                }
+                catch (Exception ex)
+                {
+                    ServerApi.Logger.Error($"[SimpleImprovingTraits] Failed to persist walking progress: {ex.Message}");
+                }
+            }
+        }
+
+        /// <summary>
+        /// Load walking progress from world save data.
+        /// </summary>
+        private void LoadWalkingProgress()
+        {
+            if (ServerApi == null) return;
+
+            WalkingProgress.Clear();
+
+            try
+            {
+                byte[] data = ServerApi.WorldManager.SaveGame.GetData(WALKING_PROGRESS_SAVE_KEY);
+                if (data == null || data.Length == 0)
+                {
+                    ServerApi.Logger.Debug("[SimpleImprovingTraits] No walking progress data found in world save");
+                    return;
+                }
+
+                using (var ms = new MemoryStream(data))
+                {
+                    using (var reader = new BinaryReader(ms))
+                    {
+                        // Check magic bytes
+                        byte b1 = reader.ReadByte();
+                        byte b2 = reader.ReadByte();
+                        byte b3 = reader.ReadByte();
+
+                        if (b1 != 0x53 || b2 != 0x49 || b3 != 0x57) // "SIW"
+                        {
+                            ServerApi.Logger.Warning("[SimpleImprovingTraits] Invalid walking progress data format");
+                            return;
+                        }
+
+                        byte version = reader.ReadByte();
+                        int playerCount = reader.ReadInt32();
+
+                        if (version == 1)
+                        {
+                            for (int i = 0; i < playerCount; i++)
+                            {
+                                string playerUid = reader.ReadString();
+                                var progress = new WalkingProgressData
+                                {
+                                    TotalCredits = reader.ReadInt32(),
+                                    BlocksInIncrement = reader.ReadSingle(),
+                                    CurrentIncrementSize = reader.ReadInt32()
+                                };
+
+                                WalkingProgress[playerUid] = progress;
+                            }
+                        }
+                        else
+                        {
+                            ServerApi.Logger.Warning($"[SimpleImprovingTraits] Unknown walking save format version {version}");
+                            return;
+                        }
+                    }
+                }
+
+                ServerApi.Logger.Notification($"[SimpleImprovingTraits] Loaded walking progress for {WalkingProgress.Count} players");
+            }
+            catch (Exception ex)
+            {
+                WalkingProgress.Clear();
+                ServerApi.Logger.Error($"[SimpleImprovingTraits] Failed to load walking progress: {ex.Message}");
+            }
+        }
+
+        /// <summary>
         /// Persist config to world save data.
-        /// Version 5 adds ranged configuration.
+        /// Version 6 adds walking configuration.
         /// </summary>
         private void PersistConfig()
         {
@@ -2394,7 +2984,7 @@ namespace SimpleImprovingTraits
                 {
                     using (var writer = new BinaryWriter(ms))
                     {
-                        writer.Write((byte)5); // Version 5: adds ranged config
+                        writer.Write((byte)6); // Version 6: adds walking config
                         writer.Write(BaseBlocksPerIncrement);
                         writer.Write(IncrementStep);
                         writer.Write(MaxMiningSpeedPercent);
@@ -2409,12 +2999,16 @@ namespace SimpleImprovingTraits
                         writer.Write(MaxRangedDamagePercent);
                         writer.Write(MaxRangedAccuracyPercent);
                         writer.Write(MaxRangedDistancePercent);
+                        // Walking config
+                        writer.Write(BaseBlocksWalkedPerIncrement);
+                        writer.Write(WalkingIncrementStep);
+                        writer.Write(MaxWalkingSpeedPercent);
                     }
                     data = ms.ToArray();
                 }
 
                 ServerApi.WorldManager.SaveGame.StoreData(CONFIG_SAVE_KEY, data);
-                ServerApi.Logger.Debug($"[SimpleImprovingTraits] Config saved (Mining: Base={BaseBlocksPerIncrement}, Max={MaxMiningSpeedPercent}% | Melee: Base={BaseDamagePerIncrement}, Max={MaxMeleeDamagePercent}% | Ranged: Base={BaseRangedDamagePerIncrement}, MaxDmg={MaxRangedDamagePercent}%)");
+                ServerApi.Logger.Debug($"[SimpleImprovingTraits] Config saved (Mining: Base={BaseBlocksPerIncrement}, Max={MaxMiningSpeedPercent}% | Melee: Base={BaseDamagePerIncrement}, Max={MaxMeleeDamagePercent}% | Ranged: Base={BaseRangedDamagePerIncrement}, MaxDmg={MaxRangedDamagePercent}% | Walking: Base={BaseBlocksWalkedPerIncrement}, Max={MaxWalkingSpeedPercent}%)");
             }
             catch (Exception ex)
             {
@@ -2424,7 +3018,7 @@ namespace SimpleImprovingTraits
 
         /// <summary>
         /// Load config from world save data.
-        /// Supports versions 1-5 for backwards compatibility.
+        /// Supports versions 1-6 for backwards compatibility.
         /// </summary>
         private void LoadConfig()
         {
@@ -2490,7 +3084,7 @@ namespace SimpleImprovingTraits
                         }
                         else if (version == 5)
                         {
-                            // Current format with ranged config
+                            // Version 5: has ranged config but not walking
                             BaseBlocksPerIncrement = reader.ReadInt32();
                             IncrementStep = reader.ReadInt32();
                             MaxMiningSpeedPercent = reader.ReadInt32();
@@ -2503,11 +3097,34 @@ namespace SimpleImprovingTraits
                             MaxRangedDamagePercent = reader.ReadInt32();
                             MaxRangedAccuracyPercent = reader.ReadInt32();
                             MaxRangedDistancePercent = reader.ReadInt32();
+                            // Walking uses defaults
+
+                            // Mark for re-save in new format
+                            pendingConfigSave = true;
+                        }
+                        else if (version == 6)
+                        {
+                            // Current format with walking config
+                            BaseBlocksPerIncrement = reader.ReadInt32();
+                            IncrementStep = reader.ReadInt32();
+                            MaxMiningSpeedPercent = reader.ReadInt32();
+                            OreMultiplier = reader.ReadInt32();
+                            BaseDamagePerIncrement = reader.ReadInt32();
+                            MeleeIncrementStep = reader.ReadInt32();
+                            MaxMeleeDamagePercent = reader.ReadInt32();
+                            BaseRangedDamagePerIncrement = reader.ReadInt32();
+                            RangedIncrementStep = reader.ReadInt32();
+                            MaxRangedDamagePercent = reader.ReadInt32();
+                            MaxRangedAccuracyPercent = reader.ReadInt32();
+                            MaxRangedDistancePercent = reader.ReadInt32();
+                            BaseBlocksWalkedPerIncrement = reader.ReadInt32();
+                            WalkingIncrementStep = reader.ReadInt32();
+                            MaxWalkingSpeedPercent = reader.ReadInt32();
                         }
                     }
                 }
 
-                ServerApi.Logger.Notification($"[SimpleImprovingTraits] Config loaded (Mining: Base={BaseBlocksPerIncrement}, Max={MaxMiningSpeedPercent}% | Melee: Base={BaseDamagePerIncrement}, Max={MaxMeleeDamagePercent}% | Ranged: Base={BaseRangedDamagePerIncrement}, MaxDmg={MaxRangedDamagePercent}%)");
+                ServerApi.Logger.Notification($"[SimpleImprovingTraits] Config loaded (Mining: Base={BaseBlocksPerIncrement}, Max={MaxMiningSpeedPercent}% | Melee: Base={BaseDamagePerIncrement}, Max={MaxMeleeDamagePercent}% | Ranged: Base={BaseRangedDamagePerIncrement}, MaxDmg={MaxRangedDamagePercent}% | Walking: Base={BaseBlocksWalkedPerIncrement}, Max={MaxWalkingSpeedPercent}%)");
             }
             catch (Exception ex)
             {
@@ -2638,7 +3255,12 @@ namespace SimpleImprovingTraits
             int rangedDistanceBonus = eplr.WatchedAttributes.GetInt(SimpleImprovingTraitsModSystem.WATCHED_RANGED_DISTANCE_BONUS, 0);
             bool hasVanillaFocused = eplr.WatchedAttributes.GetBool("sitHasVanillaFocused", false);
 
-            ClientApi.Logger.Debug($"[SimpleImprovingTraits] getClassTraitText postfix called. Mining: Level={miningLevel}, Bonus={miningBonus}%, HasHardy={hasVanillaHardy} | Melee: Level={meleeLevel}, Bonus={meleeBonus}%, HasSoldier={hasVanillaSoldier} | Ranged: Level={rangedLevel}, HasFocused={hasVanillaFocused}");
+            // Get walking progression data
+            int walkingLevel = eplr.WatchedAttributes.GetInt(SimpleImprovingTraitsModSystem.WATCHED_WALKING_LEVEL, 0);
+            int walkingBonus = eplr.WatchedAttributes.GetInt(SimpleImprovingTraitsModSystem.WATCHED_WALKING_BONUS, 0);
+            bool hasVanillaFleetfooted = eplr.WatchedAttributes.GetBool("sitHasVanillaFleetfooted", false);
+
+            ClientApi.Logger.Debug($"[SimpleImprovingTraits] getClassTraitText postfix called. Mining: Level={miningLevel}, Bonus={miningBonus}%, HasHardy={hasVanillaHardy} | Melee: Level={meleeLevel}, Bonus={meleeBonus}%, HasSoldier={hasVanillaSoldier} | Ranged: Level={rangedLevel}, HasFocused={hasVanillaFocused} | Walking: Level={walkingLevel}, HasFleetfooted={hasVanillaFleetfooted}");
 
             // Get the "no traits" message
             string noTraitsMsg = Lang.Get("charactersheet-notraits");
@@ -2786,6 +3408,50 @@ namespace SimpleImprovingTraits
                 {
                     // Has other traits but no Focused at all - append our dynamic Focused
                     __result = __result + "\n" + Lang.Get("simpleimprovingtraits:trait-focused-dynamic", rangedDamageBonus, rangedAccuracyBonus, rangedDistanceBonus);
+                }
+            }
+
+            // Process walking progression (Fleetfooted trait)
+            if (walkingLevel > 0)
+            {
+                string plainWalkingTraitName = Lang.Get("simpleimprovingtraits:trait-sitwalkingmastery");
+
+                // Re-check hasNoTraits after ranged processing
+                hasNoTraits = string.IsNullOrEmpty(__result) ||
+                              __result.Trim() == noTraitsMsg.Trim() ||
+                              __result == noTraitsMsg;
+
+                if (hasVanillaFleetfooted)
+                {
+                    // Class already has Fleetfooted (e.g., Hunter, Clockmaker) - update the existing Fleetfooted's walk speed
+                    int combinedBonus = SimpleImprovingTraitsModSystem.VANILLA_FLEETFOOTED_WALK_BONUS + walkingBonus;
+                    __result = __result.Replace(
+                        $"+{SimpleImprovingTraitsModSystem.VANILLA_FLEETFOOTED_WALK_BONUS}% walk speed",
+                        $"+{combinedBonus}% walk speed");
+
+                    // Remove our separate sitwalkingmastery entry if somehow present
+                    if (__result.Contains(plainWalkingTraitName))
+                    {
+                        __result = __result.Replace("\n" + plainWalkingTraitName, "");
+                        __result = __result.Replace(plainWalkingTraitName + "\n", "");
+                        __result = __result.Replace(plainWalkingTraitName, "");
+                    }
+                }
+                else if (hasNoTraits)
+                {
+                    // Commoner or other class with no traits - replace entirely with our dynamic Fleetfooted
+                    __result = Lang.Get("simpleimprovingtraits:trait-fleetfooted-dynamic", walkingBonus);
+                }
+                else if (__result.Contains(plainWalkingTraitName))
+                {
+                    // We have our trait but no vanilla Fleetfooted - replace plain name with dynamic version
+                    __result = __result.Replace(plainWalkingTraitName,
+                        Lang.Get("simpleimprovingtraits:trait-fleetfooted-dynamic", walkingBonus));
+                }
+                else
+                {
+                    // Has other traits but no Fleetfooted at all - append our dynamic Fleetfooted
+                    __result = __result + "\n" + Lang.Get("simpleimprovingtraits:trait-fleetfooted-dynamic", walkingBonus);
                 }
             }
 

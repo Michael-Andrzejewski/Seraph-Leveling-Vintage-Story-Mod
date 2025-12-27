@@ -12,5 +12,9 @@
   "message-ranged-level-up": "Ranged level up! You are now level {0} with +{1}% ranged damage, +{2}% ranged accuracy, +{3}% draw speed.",
   "trait-focused-dynamic": "<font color=\"#84ff84\">Focused</font> (+{0}% ranged damage, +{1}% ranged accuracy, +{2}% draw speed)",
   "trait-sitrangedmastery": "<font color=\"#84ff84\">Focused</font>",
-  "traitname-sitrangedmastery": "Focused"
+  "traitname-sitrangedmastery": "Focused",
+  "message-walking-level-up": "Walking level up! You are now level {0} with +{1}% walk speed.",
+  "trait-fleetfooted-dynamic": "<font color=\"#84ff84\">Fleetfooted</font> (+{0}% walk speed)",
+  "trait-sitwalkingmastery": "<font color=\"#84ff84\">Fleetfooted</font>",
+  "traitname-sitwalkingmastery": "Fleetfooted"
 }

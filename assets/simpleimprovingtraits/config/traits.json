@@ -8,5 +8,15 @@
     "code": "sitmeleemastery",
     "type": "positive",
     "attributes": {}
+  },
+  {
+    "code": "sitrangedmastery",
+    "type": "positive",
+    "attributes": {}
+  },
+  {
+    "code": "sitwalkingmastery",
+    "type": "positive",
+    "attributes": {}
   }
 ]

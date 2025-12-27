@@ -15,6 +15,88 @@ using Vintagestory.API.Server;
 namespace SimpleImprovingTraits
 {
     /// <summary>
+    /// Tracks progress for a specific weapon type (for melee damage progression).
+    /// Each weapon type has its own increment counter that persists.
+    /// </summary>
+    public class WeaponProgressData
+    {
+        /// <summary>Damage accumulated toward the next credit with this weapon type.</summary>
+        public float DamageInIncrement { get; set; }
+
+        /// <summary>Damage needed for the next credit with this weapon type (100, 200, 300, etc.).</summary>
+        public int CurrentIncrementSize { get; set; }
+
+        public WeaponProgressData()
+        {
+            DamageInIncrement = 0;
+            CurrentIncrementSize = 100; // Base increment size
+        }
+
+        public WeaponProgressData Clone()
+        {
+            return new WeaponProgressData
+            {
+                DamageInIncrement = this.DamageInIncrement,
+                CurrentIncrementSize = this.CurrentIncrementSize
+            };
+        }
+    }
+
+    /// <summary>
+    /// Data structure for tracking melee damage progression with per-weapon progress.
+    /// Each weapon type remembers its own increment counter, encouraging use of many weapon types.
+    /// </summary>
+    public class MeleeProgressData
+    {
+        /// <summary>Total credits earned (each credit = 1% bonus). Max 150.</summary>
+        public int TotalCredits { get; set; }
+
+        /// <summary>Per-weapon progress tracking. Key is weapon type (e.g., "sword", "falx", "spear").</summary>
+        public Dictionary<string, WeaponProgressData> WeaponProgress { get; set; }
+
+        public MeleeProgressData()
+        {
+            TotalCredits = 0;
+            WeaponProgress = new Dictionary<string, WeaponProgressData>();
+        }
+
+        /// <summary>
+        /// Get or create progress data for a specific weapon type.
+        /// New weapons start with the configured BaseDamagePerIncrement.
+        /// </summary>
+        public WeaponProgressData GetWeaponProgress(string weaponType)
+        {
+            if (!WeaponProgress.TryGetValue(weaponType, out var progress))
+            {
+                progress = new WeaponProgressData
+                {
+                    DamageInIncrement = 0,
+                    CurrentIncrementSize = SimpleImprovingTraitsModSystem.BaseDamagePerIncrement
+                };
+                WeaponProgress[weaponType] = progress;
+            }
+            return progress;
+        }
+
+        /// <summary>
+        /// Create a copy of this data.
+        /// </summary>
+        public MeleeProgressData Clone()
+        {
+            var clone = new MeleeProgressData
+            {
+                TotalCredits = this.TotalCredits,
+                WeaponProgress = new Dictionary<string, WeaponProgressData>()
+            };
+            foreach (var kvp in this.WeaponProgress)
+            {
+                clone.WeaponProgress[kvp.Key] = kvp.Value.Clone();
+            }
+            return clone;
+        }
+    }
+
+    /// <summary>
     /// Tracks progress for a specific pickaxe type.
     /// Each pickaxe type has its own increment counter that persists.
     /// </summary>
@@ -62,12 +144,17 @@ namespace SimpleImprovingTraits
 
         /// <summary>
         /// Get or create progress data for a specific pickaxe.
+        /// New pickaxes start with the configured BaseBlocksPerIncrement.
         /// </summary>
         public PickaxeProgressData GetPickaxeProgress(string pickaxeCode)
         {
             if (!PickaxeProgress.TryGetValue(pickaxeCode, out var progress))
             {
-                progress = new PickaxeProgressData();
+                progress = new PickaxeProgressData
+                {
+                    BlocksInIncrement = 0,
+                    CurrentIncrementSize = SimpleImprovingTraitsModSystem.BaseBlocksPerIncrement
+                };
                 PickaxeProgress[pickaxeCode] = progress;
             }
             return progress;
@@ -172,6 +259,12 @@ namespace SimpleImprovingTraits
                     .WithArgs(api.ChatCommands.Parsers.OptionalInt("percent"))
                     .RequiresPrivilege(Privilege.controlserver)
                     .HandleWith(OnTraitMiningMaxCommand)
+                .EndSubCommand()
+                .BeginSubCommand("miningincrement")
+                    .WithDescription("Get or set the increment step per credit (admin only)")
+                    .WithArgs(api.ChatCommands.Parsers.OptionalInt("step"))
+                    .RequiresPrivilege(Privilege.controlserver)
+                    .HandleWith(OnTraitMiningIncrementCommand)
                 .EndSubCommand();
 
             // Hook into block breaking for mining progression
@@ -198,7 +291,8 @@ namespace SimpleImprovingTraits
             return TextCommandResult.Success(
                 "Usage:\n" +
                 "  /trait mining - View your mining progression stats\n" +
-                "  /trait miningbase [value] - Get or set base blocks per level (admin)\n" +
+                "  /trait miningbase [value] - Get or set base points for first credit (admin)\n" +
+                "  /trait miningincrement [value] - Get or set increment step per credit (admin)\n" +
                 "  /trait mininglevel <level> - Set your mining level (admin)\n" +
                 "  /trait miningmax [percent] - Get or set max mining speed bonus (admin)");
         }
@@ -267,23 +361,39 @@ namespace SimpleImprovingTraits
                 }
 
                 BaseBlocksPerIncrement = newValue.Value;
-                IncrementStep = newValue.Value; // Keep step and base synchronized
                 pendingConfigSave = true;
 
-                // Reapply bonuses for all online players (credits stay the same, just re-sync)
-                foreach (IServerPlayer player in ServerApi.World.AllOnlinePlayers)
-                {
-                    if (player?.Entity == null) continue;
-                    string playerUid = player.PlayerUID;
-                    var progress = MiningProgress.GetOrAdd(playerUid, _ => new MiningProgressData());
-                    ApplyMiningBonus(player, progress.TotalCredits);
-                }
-
-                return TextCommandResult.Success($"Base blocks per increment set to {BaseBlocksPerIncrement}. New players will require this many points for first 1%.");
+                return TextCommandResult.Success($"Base blocks per increment set to {BaseBlocksPerIncrement}. New pickaxes will require this many points for first 1%.");
             }
             else
             {
                 return TextCommandResult.Success($"Current base blocks per increment: {BaseBlocksPerIncrement}\nIncrement step: +{IncrementStep} per credit");
+            }
+        }
+
+        /// <summary>
+        /// Handler for /trait miningincrement command.
+        /// Sets how many additional points are required for each subsequent credit.
+        /// </summary>
+        private TextCommandResult OnTraitMiningIncrementCommand(TextCommandCallingArgs args)
+        {
+            int? newValue = (int?)args[0];
+
+            if (newValue.HasValue)
+            {
+                if (newValue.Value < 0)
+                {
+                    return TextCommandResult.Error("Increment step cannot be negative");
+                }
+
+                IncrementStep = newValue.Value;
+                pendingConfigSave = true;
+
+                return TextCommandResult.Success($"Increment step set to +{IncrementStep} per credit.\nProgression: {BaseBlocksPerIncrement}, {BaseBlocksPerIncrement + IncrementStep}, {BaseBlocksPerIncrement + IncrementStep * 2}...");
+            }
+            else
+            {
+                return TextCommandResult.Success($"Current increment step: +{IncrementStep} per credit\nProgression: {BaseBlocksPerIncrement}, {BaseBlocksPerIncrement + IncrementStep}, {BaseBlocksPerIncrement + IncrementStep * 2}...");
             }
         }
 
@@ -346,7 +456,14 @@ namespace SimpleImprovingTraits
 
         /// <summary>
         /// Determines the point value for a broken block.
-        /// Returns 5 for ore blocks, 1 for stone blocks, 0 for other blocks.
+        /// Returns OreMultiplier (default 5) for ore blocks, 1 for stone blocks, 0 for other blocks.
+        ///
+        /// Stone block patterns (1 point each):
+        /// - rock-{type} (e.g., rock-granite, rock-limestone)
+        /// - crackedrock-{type} (e.g., crackedrock-granite)
+        ///
+        /// Ore block patterns (OreMultiplier points):
+        /// - Contains "ore-" (e.g., ore-copper-granite, ore-lignite-chalk)
         /// </summary>
         private int GetBlockPoints(int blockId)
         {
@@ -357,15 +474,18 @@ namespace SimpleImprovingTraits
 
             string blockCode = block.Code?.ToString() ?? "";
 
-            // Ore blocks: code contains "ore-" (e.g., "ore-lignite-chalk", "ore-copper-breccia")
-            if (blockCode.Contains("ore-"))
+            // Remove "game:" prefix if present for consistent matching
+            string codeToCheck = blockCode.StartsWith("game:") ? blockCode.Substring(5) : blockCode;
+
+            // Ore blocks: code contains "ore-" (e.g., "ore-lignite-chalk", "ore-copper-granite")
+            if (codeToCheck.Contains("ore-"))
             {
                 return OreMultiplier;
             }
 
-            // Stone blocks: code starts with "rock-" (e.g., "rock-granite", "rock-limestone")
-            // Also include "gravel-" as it's mining-related
-            if (blockCode.StartsWith("rock-") || blockCode.StartsWith("game:rock-"))
+            // Stone/rock blocks that should count for mining XP
+            if (codeToCheck.StartsWith("rock-") ||           // Regular rock (rock-granite)
+                codeToCheck.StartsWith("crackedrock-"))      // Cracked rock (crackedrock-granite)
             {
                 return 1;
             }

@@ -878,6 +878,12 @@ namespace SimpleImprovingTraits
         public static ConcurrentDictionary<string, MenderProgressData> MenderProgress = new ConcurrentDictionary<string, MenderProgressData>();
         private static volatile bool pendingMenderProgressSave = false;
 
+        // Durability tracking for repair detection - key is "playerUid_slotId", value is last known durability
+        private static ConcurrentDictionary<string, int> TrackedItemDurabilities = new ConcurrentDictionary<string, int>();
+
+        // Sewing kit consumption tracking - key is playerUid, value is last known sewing kit count on mouse cursor
+        private static ConcurrentDictionary<string, int> TrackedSewingKitCounts = new ConcurrentDictionary<string, int>();
+
         // =========================================================================
         // PILFERER TRAIT - Tracks chests/vessels for loot bonuses
         // =========================================================================
@@ -1362,6 +1368,9 @@ namespace SimpleImprovingTraits
 
             // Register game tick listener for clothing tracking (every 1000ms / 1 second)
             api.Event.RegisterGameTickListener(OnClothingTick, 1000);
+
+            // Register game tick listener for Mender repair tracking (every 500ms for responsive detection)
+            api.Event.RegisterGameTickListener(OnMenderRepairTick, 500);
 
             // Hook into player disconnect to clean up position tracking
             api.Event.PlayerDisconnect += OnPlayerDisconnect;
@@ -5740,6 +5749,130 @@ namespace SimpleImprovingTraits
             UpdateExtraTraitStatic(player.Entity, "clothier", progress.SewingKitUnlocked);
         }
 
+        /// <summary>
+        /// Tick handler for Mender repair detection.
+        /// Uses two detection methods:
+        /// 1. Tracks sewing kit consumption from mouse cursor (most reliable)
+        /// 2. Tracks durability increases on wearable items (backup method)
+        /// </summary>
+        private void OnMenderRepairTick(float dt)
+        {
+            if (ServerApi == null) return;
+
+            foreach (IServerPlayer player in ServerApi.World.AllOnlinePlayers)
+            {
+                if (player?.Entity == null) continue;
+                if (!player.Entity.Alive) continue;
+
+                string playerUid = player.PlayerUID;
+
+                // =============================================
+                // METHOD 1: Track sewing kit consumption from mouse cursor
+                // When player holds sewing kits and clicks on clothing, the count decreases
+                // =============================================
+                var mouseSlot = player.InventoryManager?.MouseItemSlot;
+                if (mouseSlot?.Itemstack?.Collectible != null)
+                {
+                    string mouseItemCode = mouseSlot.Itemstack.Collectible.Code?.ToString()?.ToLowerInvariant() ?? "";
+
+                    if (mouseItemCode.Contains("sewingkit"))
+                    {
+                        int currentCount = mouseSlot.Itemstack.StackSize;
+
+                        if (TrackedSewingKitCounts.TryGetValue(playerUid, out int previousCount))
+                        {
+                            if (currentCount < previousCount)
+                            {
+                                // Sewing kit was consumed - repair happened!
+                                int kitsUsed = previousCount - currentCount;
+                                ServerApi.Logger.Debug($"[SimpleImprovingTraits] Player {player.PlayerName} used {kitsUsed} sewing kit(s) for repair");
+
+                                for (int i = 0; i < kitsUsed; i++)
+                                {
+                                    ProcessMenderRepair(player);
+                                }
+                            }
+                        }
+
+                        // Update tracked count
+                        TrackedSewingKitCounts[playerUid] = currentCount;
+                    }
+                    else
+                    {
+                        // Not holding sewing kit anymore, clear tracking
+                        TrackedSewingKitCounts.TryRemove(playerUid, out _);
+                    }
+                }
+                else
+                {
+                    // Mouse slot empty, clear tracking
+                    TrackedSewingKitCounts.TryRemove(playerUid, out _);
+                }
+
+                // =============================================
+                // METHOD 2: Track durability increases on wearable items (backup)
+                // =============================================
+                var characterInventory = player.InventoryManager?.GetOwnInventory(GlobalConstants.characterInvClassName);
+                if (characterInventory == null) continue;
+
+                int slotIndex = 0;
+                foreach (var slot in characterInventory)
+                {
+                    slotIndex++;
+                    if (slot?.Itemstack?.Collectible == null) continue;
+
+                    string itemCode = slot.Itemstack.Collectible.Code?.ToString();
+                    if (string.IsNullOrEmpty(itemCode)) continue;
+
+                    // Only track clothing and armor
+                    if (!IsClothingItem(itemCode) && !IsArmorItem(itemCode)) continue;
+
+                    // Get current durability
+                    int currentDurability = slot.Itemstack.Collectible.GetRemainingDurability(slot.Itemstack);
+                    int maxDurability = slot.Itemstack.Collectible.GetMaxDurability(slot.Itemstack);
+
+                    // Skip items without durability
+                    if (maxDurability <= 0) continue;
+
+                    // Create a tracking key for this item in this slot
+                    string trackingKey = $"{playerUid}_{slotIndex}_{itemCode}";
+
+                    // Check if durability increased (repair happened)
+                    if (TrackedItemDurabilities.TryGetValue(trackingKey, out int previousDurability))
+                    {
+                        if (currentDurability > previousDurability)
+                        {
+                            // Durability increased - a repair happened!
+                            int durabilityRestored = currentDurability - previousDurability;
+                            int repairPercent = (durabilityRestored * 100) / maxDurability;
+
+                            // Only credit significant repairs (at least 5% durability restored)
+                            // This filters out minor fluctuations and avoids double-counting with method 1
+                            // Use a higher threshold since method 1 should catch most sewing kit repairs
+                            if (repairPercent >= 10)
+                            {
+                                ServerApi.Logger.Debug($"[SimpleImprovingTraits] Player {player.PlayerName} repaired {itemCode} (+{repairPercent}% durability) via durability tracking");
+                                ProcessMenderRepair(player);
+                            }
+                        }
+                    }
+
+                    // Update tracked durability
+                    TrackedItemDurabilities[trackingKey] = currentDurability;
+                }
+            }
+        }
+
+        /// <summary>
+        /// Check if an item code represents armor.
+        /// </summary>
+        private static bool IsArmorItem(string itemCode)
+        {
+            if (string.IsNullOrEmpty(itemCode)) return false;
+            string lowerCode = itemCode.ToLowerInvariant();
+            return lowerCode.Contains("armor-");
+        }
+
         // =========================================================================
         // MENDER TRAIT IMPLEMENTATION
         // =========================================================================
@@ -6282,13 +6415,12 @@ namespace SimpleImprovingTraits
 
         /// <summary>
         /// Calculate the resourceful speed bonus as an integer percentage.
+        /// Speed bonus scales indefinitely with level (1% per credit), no cap.
         /// </summary>
         public static int CalculateResourcefulSpeedBonusPercent(int credits, EntityPlayer entity)
         {
-            bool hasVanillaResourceful = entity != null && PlayerHasVanillaResourcefulStatic(entity);
-            int vanillaBonus = hasVanillaResourceful ? VANILLA_RESOURCEFUL_SPEED_BONUS : 0;
-            int earnableBonus = Math.Max(0, MaxResourcefulSpeedPercent - vanillaBonus);
-            return Math.Min(credits, earnableBonus);
+            // Speed bonus scales indefinitely - 1% per credit, no cap
+            return credits;
         }
 
         /// <summary>

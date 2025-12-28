@@ -1,0 +1,21 @@
+# Build outputs
+bin/
+obj/
+
+# IDE/Editor folders
+.vs/
+.vscode/
+.idea/
+*.user
+*.suo
+
+# NuGet
+*.nupkg
+packages/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Accidental files
+nul

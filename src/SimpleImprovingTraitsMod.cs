@@ -134,6 +134,43 @@ namespace SimpleImprovingTraits
     }
 
     /// <summary>
+    /// Data structure for tracking hunger rate progression.
+    /// Simpler than other progression systems since hunger has no "tools".
+    /// Tracks time spent at full saturation.
+    /// </summary>
+    public class HungerProgressData
+    {
+        /// <summary>Total credits earned (each credit = 1% hunger rate reduction). Max 25.</summary>
+        public int TotalCredits { get; set; }
+
+        /// <summary>Seconds at full saturation toward the next credit.</summary>
+        public float SecondsInIncrement { get; set; }
+
+        /// <summary>Seconds needed for the next credit (300, 360, 420, etc.).</summary>
+        public int CurrentIncrementSize { get; set; }
+
+        public HungerProgressData()
+        {
+            TotalCredits = 0;
+            SecondsInIncrement = 0;
+            CurrentIncrementSize = 300; // Base increment size (5 minutes)
+        }
+
+        /// <summary>
+        /// Create a copy of this data.
+        /// </summary>
+        public HungerProgressData Clone()
+        {
+            return new HungerProgressData
+            {
+                TotalCredits = this.TotalCredits,
+                SecondsInIncrement = this.SecondsInIncrement,
+                CurrentIncrementSize = this.CurrentIncrementSize
+            };
+        }
+    }
+
+    /// <summary>
     /// Tracks progress for a specific weapon type (for melee damage progression).
     /// Each weapon type has its own increment counter that persists.
     /// </summary>
@@ -426,6 +463,34 @@ namespace SimpleImprovingTraits
         // Maximum distance per tick to count (prevents teleportation from counting)
         private const float MAX_DISTANCE_PER_TICK = 10f;
 
+        // Keys for hunger rate progression system
+        public const string HUNGER_STAT_CODE = "sitHungerBonus";
+        private const string HUNGER_PROGRESS_SAVE_KEY = "sitHungerProgress";
+
+        // WatchedAttributes keys for client sync (hunger)
+        public const string WATCHED_HUNGER_LEVEL = "sitHungerLevel";
+        public const string WATCHED_HUNGER_BONUS = "sitHungerBonusPercent";
+
+        // Trait code for the hunger mastery trait
+        public const string HUNGER_TRAIT_CODE = "sithungermastery";
+
+        // Hunger rate progression configuration
+        // Base seconds at full saturation for first 1%: 300 seconds (5 minutes)
+        // Each subsequent 1% requires +60 more seconds (5 min, 6 min, 7 min, etc.)
+        public static int BaseSecondsPerIncrement = 300;   // Base seconds needed for first credit (5 minutes)
+        public static int HungerIncrementStep = 60;        // How many more seconds each subsequent credit needs (1 minute)
+        public static int MaxHungerReductionPercent = 25;  // 25% max hunger rate reduction (to 75% rate)
+
+        // Vanilla Ravenous trait hunger rate increase (used for cap calculations)
+        // Blackguard has +30% hunger rate, so earning 25% brings them back to nearly normal
+        public const int VANILLA_RAVENOUS_HUNGER_PENALTY = 30;
+
+        // Storage for hunger progress - keyed by player UID
+        public static ConcurrentDictionary<string, HungerProgressData> HungerProgress = new ConcurrentDictionary<string, HungerProgressData>();
+
+        // Flag to indicate pending hunger progress save
+        private static volatile bool pendingHungerProgressSave = false;
+
         private const string CONFIG_SAVE_KEY = "sitConfig";
 
         // Vanilla Hardy trait mining speed bonus (used for cap calculations)
@@ -589,6 +654,37 @@ namespace SimpleImprovingTraits
                     .WithArgs(api.ChatCommands.Parsers.OptionalInt("step"))
                     .RequiresPrivilege(Privilege.controlserver)
                     .HandleWith(OnTraitWalkingIncrementCommand)
+                .EndSubCommand()
+                .BeginSubCommand("hunger")
+                    .WithDescription("View your hunger rate progression stats")
+                    .RequiresPrivilege(Privilege.chat)
+                    .RequiresPlayer()
+                    .HandleWith(OnTraitHungerCommand)
+                .EndSubCommand()
+                .BeginSubCommand("hungerbase")
+                    .WithDescription("Get or set the base seconds per level (admin only)")
+                    .WithArgs(api.ChatCommands.Parsers.OptionalInt("seconds"))
+                    .RequiresPrivilege(Privilege.controlserver)
+                    .HandleWith(OnTraitHungerBaseCommand)
+                .EndSubCommand()
+                .BeginSubCommand("hungerlevel")
+                    .WithDescription("Set your hunger level (admin only)")
+                    .WithArgs(api.ChatCommands.Parsers.Int("level"))
+                    .RequiresPrivilege(Privilege.controlserver)
+                    .RequiresPlayer()
+                    .HandleWith(OnTraitHungerLevelCommand)
+                .EndSubCommand()
+                .BeginSubCommand("hungermax")
+                    .WithDescription("Get or set the max hunger rate reduction percent (admin only)")
+                    .WithArgs(api.ChatCommands.Parsers.OptionalInt("percent"))
+                    .RequiresPrivilege(Privilege.controlserver)
+                    .HandleWith(OnTraitHungerMaxCommand)
+                .EndSubCommand()
+                .BeginSubCommand("hungerincrement")
+                    .WithDescription("Get or set the hunger increment step per credit (admin only)")
+                    .WithArgs(api.ChatCommands.Parsers.OptionalInt("step"))
+                    .RequiresPrivilege(Privilege.controlserver)
+                    .HandleWith(OnTraitHungerIncrementCommand)
                 .EndSubCommand();
 
             // Hook into block breaking for mining progression
@@ -609,9 +705,13 @@ namespace SimpleImprovingTraits
             api.Event.SaveGameLoaded += LoadMeleeProgress;
             api.Event.SaveGameLoaded += LoadRangedProgress;
             api.Event.SaveGameLoaded += LoadWalkingProgress;
+            api.Event.SaveGameLoaded += LoadHungerProgress;
 
             // Register game tick listener for walking distance tracking (every 500ms)
             api.Event.RegisterGameTickListener(OnWalkingTick, 500);
+
+            // Register game tick listener for hunger tracking (every 1000ms / 1 second)
+            api.Event.RegisterGameTickListener(OnHungerTick, 1000);
 
             // Hook into player disconnect to clean up position tracking
             api.Event.PlayerDisconnect += OnPlayerDisconnect;
@@ -647,7 +747,12 @@ namespace SimpleImprovingTraits
                 "  /trait walkingbase [value] - Get or set base blocks for first credit (admin)\n" +
                 "  /trait walkingincrement [value] - Get or set walking increment step per credit (admin)\n" +
                 "  /trait walkinglevel [level] - Set your walking level (admin)\n" +
-                "  /trait walkingmax [percent] - Get or set max walking speed bonus (admin)");
+                "  /trait walkingmax [percent] - Get or set max walking speed bonus (admin)\n" +
+                "  /trait hunger - View your hunger rate progression stats\n" +
+                "  /trait hungerbase [value] - Get or set base seconds for first credit (admin)\n" +
+                "  /trait hungerincrement [value] - Get or set hunger increment step per credit (admin)\n" +
+                "  /trait hungerlevel [level] - Set your hunger level (admin)\n" +
+                "  /trait hungermax [percent] - Get or set max hunger rate reduction (admin)");
         }
 
         /// <summary>
@@ -1468,6 +1573,289 @@ namespace SimpleImprovingTraits
         }
 
         /// <summary>
+        /// Handler for /trait hunger command.
+        /// </summary>
+        private TextCommandResult OnTraitHungerCommand(TextCommandCallingArgs args)
+        {
+            var player = args.Caller.Player;
+            if (player?.Entity == null)
+            {
+                return TextCommandResult.Error("Could not find player entity");
+            }
+
+            string playerUid = player.PlayerUID;
+            var progress = HungerProgress.GetOrAdd(playerUid, _ => new HungerProgressData
+            {
+                CurrentIncrementSize = BaseSecondsPerIncrement
+            });
+
+            int currentCredits = progress.TotalCredits;
+            int playerMaxCredits = CalculateMaxHungerCredits(player.Entity as EntityPlayer);
+            int bonusPercent = CalculateHungerBonusPercent(currentCredits, player.Entity as EntityPlayer);
+            bool hasRavenous = PlayerHasVanillaRavenousStatic(player.Entity as EntityPlayer);
+
+            // Calculate target hunger rate (same for all classes)
+            int targetHungerRate = 100 - MaxHungerReductionPercent;
+
+            var sb = new StringBuilder();
+            sb.AppendLine($"Hunger progression: {currentCredits} / {playerMaxCredits} credits");
+            sb.AppendLine($"Current bonus: -{bonusPercent}% hunger rate");
+            if (hasRavenous)
+            {
+                int currentRate = 130 - bonusPercent;
+                sb.AppendLine($"Effective hunger rate: {currentRate}% (Ravenous: 130% base)");
+            }
+            else
+            {
+                int currentRate = 100 - bonusPercent;
+                sb.AppendLine($"Effective hunger rate: {currentRate}%");
+            }
+            sb.AppendLine($"Target hunger rate: {targetHungerRate}%");
+            sb.AppendLine($"\nProgress toward next credit:");
+            sb.AppendLine($"  {progress.SecondsInIncrement:F0}/{progress.CurrentIncrementSize} seconds at full saturation");
+
+            if (currentCredits >= playerMaxCredits)
+            {
+                sb.Insert(0, "=== MAXED OUT ===\n");
+            }
+
+            return TextCommandResult.Success(sb.ToString().TrimEnd());
+        }
+
+        /// <summary>
+        /// Handler for /trait hungerbase command.
+        /// Sets the base seconds needed for the first 1% increment.
+        /// </summary>
+        private TextCommandResult OnTraitHungerBaseCommand(TextCommandCallingArgs args)
+        {
+            int? newValue = (int?)args[0];
+
+            if (newValue.HasValue)
+            {
+                if (newValue.Value < 1)
+                {
+                    return TextCommandResult.Error("Base seconds per increment must be at least 1");
+                }
+
+                BaseSecondsPerIncrement = newValue.Value;
+                pendingConfigSave = true;
+
+                return TextCommandResult.Success($"Base seconds per increment set to {BaseSecondsPerIncrement}. First 1% requires {BaseSecondsPerIncrement} seconds at full saturation.");
+            }
+            else
+            {
+                return TextCommandResult.Success($"Current base seconds per increment: {BaseSecondsPerIncrement}\nIncrement step: +{HungerIncrementStep} per credit");
+            }
+        }
+
+        /// <summary>
+        /// Handler for /trait hungerincrement command.
+        /// Sets how many additional seconds are required for each subsequent credit.
+        /// </summary>
+        private TextCommandResult OnTraitHungerIncrementCommand(TextCommandCallingArgs args)
+        {
+            int? newValue = (int?)args[0];
+
+            if (newValue.HasValue)
+            {
+                if (newValue.Value < 0)
+                {
+                    return TextCommandResult.Error("Increment step cannot be negative");
+                }
+
+                HungerIncrementStep = newValue.Value;
+                pendingConfigSave = true;
+
+                return TextCommandResult.Success($"Hunger increment step set to +{HungerIncrementStep} per credit.\nProgression: {BaseSecondsPerIncrement}, {BaseSecondsPerIncrement + HungerIncrementStep}, {BaseSecondsPerIncrement + HungerIncrementStep * 2}...");
+            }
+            else
+            {
+                return TextCommandResult.Success($"Current hunger increment step: +{HungerIncrementStep} per credit\nProgression: {BaseSecondsPerIncrement}, {BaseSecondsPerIncrement + HungerIncrementStep}, {BaseSecondsPerIncrement + HungerIncrementStep * 2}...");
+            }
+        }
+
+        /// <summary>
+        /// Handler for /trait hungerlevel command.
+        /// Sets the player's hunger credits (level) directly.
+        /// </summary>
+        private TextCommandResult OnTraitHungerLevelCommand(TextCommandCallingArgs args)
+        {
+            var player = args.Caller.Player as IServerPlayer;
+            if (player?.Entity == null)
+            {
+                return TextCommandResult.Error("Could not find player entity");
+            }
+
+            int newCredits = (int)args[0];
+
+            if (newCredits < 0)
+            {
+                return TextCommandResult.Error("Credits cannot be negative");
+            }
+
+            // Calculate player-specific max credits
+            int playerMaxCredits = CalculateMaxHungerCredits(player.Entity);
+
+            if (newCredits > playerMaxCredits)
+            {
+                return TextCommandResult.Error($"Credits cannot exceed max for this player ({playerMaxCredits})");
+            }
+
+            // Set the player's progress
+            string playerUid = player.PlayerUID;
+            var progress = HungerProgress.GetOrAdd(playerUid, _ => new HungerProgressData
+            {
+                CurrentIncrementSize = BaseSecondsPerIncrement
+            });
+
+            progress.TotalCredits = newCredits;
+            progress.SecondsInIncrement = 0;
+            // Calculate what the increment size should be at this level
+            progress.CurrentIncrementSize = BaseSecondsPerIncrement + (newCredits * HungerIncrementStep);
+
+            pendingHungerProgressSave = true;
+
+            // Apply the bonus
+            int bonusPercent = ApplyHungerBonusStatic(player, newCredits);
+
+            bool hasRavenous = PlayerHasVanillaRavenousStatic(player.Entity);
+            int effectiveRate = hasRavenous ? (130 - bonusPercent) : (100 - bonusPercent);
+
+            return TextCommandResult.Success($"Hunger credits set to {newCredits}/{playerMaxCredits} (-{bonusPercent}% hunger rate, effective rate: {effectiveRate}%).");
+        }
+
+        /// <summary>
+        /// Handler for /trait hungermax command.
+        /// Gets or sets the maximum hunger rate reduction percent (for non-Ravenous players).
+        /// This determines the target hunger rate for all classes.
+        /// </summary>
+        private TextCommandResult OnTraitHungerMaxCommand(TextCommandCallingArgs args)
+        {
+            int? newValue = (int?)args[0];
+
+            if (newValue.HasValue)
+            {
+                if (newValue.Value < 1)
+                {
+                    return TextCommandResult.Error("Max hunger rate reduction percent must be at least 1");
+                }
+
+                MaxHungerReductionPercent = newValue.Value;
+                pendingConfigSave = true;
+
+                // Recalculate and reapply bonuses for all online players
+                foreach (IServerPlayer player in ServerApi.World.AllOnlinePlayers)
+                {
+                    if (player?.Entity == null) continue;
+                    string playerUid = player.PlayerUID;
+                    var progress = HungerProgress.GetOrAdd(playerUid, _ => new HungerProgressData
+                    {
+                        CurrentIncrementSize = BaseSecondsPerIncrement
+                    });
+                    ApplyHungerBonusStatic(player, progress.TotalCredits);
+                }
+
+                int targetRate = 100 - MaxHungerReductionPercent;
+                return TextCommandResult.Success($"Target hunger rate set to {targetRate}% (non-Ravenous: {MaxHungerReductionPercent} credits, Ravenous: {MaxHungerReductionPercent + VANILLA_RAVENOUS_HUNGER_PENALTY} credits). All player bonuses recalculated.");
+            }
+            else
+            {
+                int targetRate = 100 - MaxHungerReductionPercent;
+                return TextCommandResult.Success($"Target hunger rate: {targetRate}%\nNon-Ravenous players need {MaxHungerReductionPercent} credits\nRavenous players need {MaxHungerReductionPercent + VANILLA_RAVENOUS_HUNGER_PENALTY} credits");
+            }
+        }
+
+        /// <summary>
+        /// Calculate the maximum hunger credits a player can earn.
+        /// Ravenous players need more credits to reach the same target hunger rate.
+        /// Target is (100 - MaxHungerReductionPercent)% = 75% by default.
+        /// Non-Ravenous: 100% - 75% = 25 credits needed
+        /// Ravenous: 130% - 75% = 55 credits needed
+        /// </summary>
+        public static int CalculateMaxHungerCredits(EntityPlayer entity)
+        {
+            bool hasRavenous = entity != null && PlayerHasVanillaRavenousStatic(entity);
+            int ravenousPenalty = hasRavenous ? VANILLA_RAVENOUS_HUNGER_PENALTY : 0;
+            // MaxHungerReductionPercent represents how much a normal player needs to reduce
+            // Ravenous players need that PLUS their penalty to reach the same target
+            return MaxHungerReductionPercent + ravenousPenalty;
+        }
+
+        /// <summary>
+        /// Calculate the hunger rate reduction bonus as an integer percentage.
+        /// This is the actual reduction applied (1% per credit, up to player's max).
+        /// </summary>
+        public static int CalculateHungerBonusPercent(int credits, EntityPlayer entity)
+        {
+            int maxCredits = CalculateMaxHungerCredits(entity);
+            return Math.Min(credits, maxCredits);
+        }
+
+        /// <summary>
+        /// Checks if the player's class has the vanilla Ravenous trait.
+        /// </summary>
+        private static bool PlayerHasVanillaRavenousStatic(EntityPlayer entity)
+        {
+            string[] classTraits = entity.WatchedAttributes.GetStringArray("characterTraits", null);
+
+            if (classTraits != null)
+            {
+                foreach (string trait in classTraits)
+                {
+                    if (trait.Equals("ravenous", StringComparison.OrdinalIgnoreCase))
+                    {
+                        return true;
+                    }
+                }
+            }
+
+            // Fallback: check known classes that have Ravenous (Blackguard)
+            string characterClass = entity.WatchedAttributes.GetString("characterClass", "");
+            return characterClass.Equals("blackguard", StringComparison.OrdinalIgnoreCase);
+        }
+
+        /// <summary>
+        /// Apply hunger rate reduction to a player based on their level.
+        /// Returns the actual applied bonus percentage.
+        /// All classes can reach the same target hunger rate (75% by default).
+        /// Ravenous players start at 130% and need 55 credits to reach 75%.
+        /// Non-Ravenous players start at 100% and need 25 credits to reach 75%.
+        /// </summary>
+        public static int ApplyHungerBonusStatic(IServerPlayer player, int level)
+        {
+            if (player?.Entity == null) return 0;
+
+            // Check if player has vanilla Ravenous
+            bool hasVanillaRavenous = PlayerHasVanillaRavenousStatic(player.Entity);
+
+            // Calculate max credits this player can earn
+            int maxCredits = CalculateMaxHungerCredits(player.Entity);
+
+            // Calculate bonus from level (1% per level, capped at player's max)
+            int cappedLevel = Math.Min(level, maxCredits);
+            float bonus = cappedLevel * 0.01f;
+
+            // Set the hunger rate stat (hungerrate is multiplicative, so 0.75 = 75% hunger rate)
+            // We want to REDUCE hunger rate, so we subtract the bonus from 1.0
+            player.Entity.Stats.Set("hungerrate", HUNGER_STAT_CODE, 1f - bonus, false);
+
+            int bonusPercent = (int)(bonus * 100);
+
+            // Sync level and bonus to WatchedAttributes for client-side display
+            player.Entity.WatchedAttributes.SetInt(WATCHED_HUNGER_LEVEL, level);
+            player.Entity.WatchedAttributes.SetInt(WATCHED_HUNGER_BONUS, bonusPercent);
+            player.Entity.WatchedAttributes.SetBool("sitHasVanillaRavenous", hasVanillaRavenous);
+            player.Entity.WatchedAttributes.SetInt("sitMaxHungerCredits", maxCredits);
+
+            // Add our trait to extraTraits (hunger mastery is unique, doesn't replace a vanilla trait)
+            UpdateExtraTraitStatic(player.Entity, HUNGER_TRAIT_CODE, level > 0);
+
+            player.Entity.WatchedAttributes.MarkPathDirty(WATCHED_HUNGER_LEVEL);
+
+            return bonusPercent;
+        }
+
+        /// <summary>
         /// Calculate the walking speed bonus as an integer percentage.
         /// Accounts for vanilla Fleetfooted trait (+10% walk speed).
         /// </summary>
@@ -1732,6 +2120,76 @@ namespace SimpleImprovingTraits
         }
 
         /// <summary>
+        /// Called every 1000ms (1 second) to track time spent at full saturation for all online players.
+        /// Players at maximum saturation (1500/1500) accumulate time toward hunger rate reduction.
+        /// </summary>
+        private void OnHungerTick(float dt)
+        {
+            foreach (IServerPlayer player in ServerApi.World.AllOnlinePlayers)
+            {
+                if (player?.Entity == null) continue;
+
+                string playerUid = player.PlayerUID;
+
+                // Get the player's hunger data from WatchedAttributes
+                var hungerTree = player.Entity.WatchedAttributes.GetTreeAttribute("hunger");
+                if (hungerTree == null) continue;
+
+                // Check if player is at full saturation (1500/1500)
+                float currentSaturation = hungerTree.GetFloat("currentsaturation", 0);
+                float maxSaturation = hungerTree.GetFloat("maxsaturation", 1500);
+
+                // Only count time when at exactly max saturation
+                if (currentSaturation < maxSaturation) continue;
+
+                // Get or create player progress data
+                var playerProgress = HungerProgress.GetOrAdd(playerUid, _ => new HungerProgressData
+                {
+                    CurrentIncrementSize = BaseSecondsPerIncrement
+                });
+
+                // Calculate player-specific max credits (Ravenous players need more)
+                int playerMaxCredits = CalculateMaxHungerCredits(player.Entity);
+
+                // Skip all processing if already at max - completely invisible
+                if (playerProgress.TotalCredits >= playerMaxCredits) continue;
+
+                int oldCredits = playerProgress.TotalCredits;
+
+                // Add 1 second of time (since tick is every 1000ms)
+                playerProgress.SecondsInIncrement += 1f;
+
+                // Check if we've earned any new credits
+                while (playerProgress.SecondsInIncrement >= playerProgress.CurrentIncrementSize && playerProgress.TotalCredits < playerMaxCredits)
+                {
+                    // Earn a credit
+                    playerProgress.TotalCredits++;
+                    playerProgress.SecondsInIncrement -= playerProgress.CurrentIncrementSize;
+                    playerProgress.CurrentIncrementSize += HungerIncrementStep;
+
+                    ServerApi.Logger.Debug($"[SimpleImprovingTraits] Player {player.PlayerName} earned hunger credit {playerProgress.TotalCredits}/{playerMaxCredits}, next requires {playerProgress.CurrentIncrementSize} seconds");
+                }
+
+                // Mark for saving if any progress was made
+                if (playerProgress.SecondsInIncrement > 0 || playerProgress.TotalCredits > oldCredits)
+                {
+                    pendingHungerProgressSave = true;
+                }
+
+                // If credits increased, update the stat and notify player
+                if (playerProgress.TotalCredits > oldCredits)
+                {
+                    int actualBonusPercent = ApplyHungerBonusStatic(player, playerProgress.TotalCredits);
+
+                    // Notify player of level up with actual applied bonus
+                    player.SendMessage(GlobalConstants.GeneralChatGroup,
+                        Lang.Get("simpleimprovingtraits:message-hunger-level-up", playerProgress.TotalCredits, actualBonusPercent),
+                        EnumChatType.Notification);
+                }
+            }
+        }
+
+        /// <summary>
         /// Called when a player disconnects. Cleans up their position tracking data.
         /// </summary>
         private void OnPlayerDisconnect(IServerPlayer byPlayer)
@@ -1741,7 +2199,7 @@ namespace SimpleImprovingTraits
         }
 
         /// <summary>
-        /// Called when a player joins. Applies their saved bonuses (mining, melee, ranged, and walking).
+        /// Called when a player joins. Applies their saved bonuses (mining, melee, ranged, walking, and hunger).
         /// </summary>
         private void OnPlayerJoin(IServerPlayer byPlayer)
         {
@@ -1786,6 +2244,18 @@ namespace SimpleImprovingTraits
             if (walkingCredits > 0)
             {
                 ServerApi.Logger.Debug($"[SimpleImprovingTraits] Applied walking bonus {walkingCredits}% to player {byPlayer.PlayerName}");
+            }
+
+            // Apply hunger bonus
+            var hungerProg = HungerProgress.GetOrAdd(playerUid, _ => new HungerProgressData
+            {
+                CurrentIncrementSize = BaseSecondsPerIncrement
+            });
+            int hungerCredits = hungerProg.TotalCredits;
+            ApplyHungerBonusStatic(byPlayer, hungerCredits);
+            if (hungerCredits > 0)
+            {
+                ServerApi.Logger.Debug($"[SimpleImprovingTraits] Applied hunger bonus -{hungerCredits}% to player {byPlayer.PlayerName}");
             }
         }
 
@@ -2298,6 +2768,10 @@ namespace SimpleImprovingTraits
                 {
                     PersistWalkingProgress();
                 }
+                if (pendingHungerProgressSave || !HungerProgress.IsEmpty)
+                {
+                    PersistHungerProgress();
+                }
 
                 ServerApi.Event.DidBreakBlock -= OnBlockBroken;
                 ServerApi.Event.PlayerJoin -= OnPlayerJoin;
@@ -2308,6 +2782,7 @@ namespace SimpleImprovingTraits
                 ServerApi.Event.SaveGameLoaded -= LoadMeleeProgress;
                 ServerApi.Event.SaveGameLoaded -= LoadRangedProgress;
                 ServerApi.Event.SaveGameLoaded -= LoadWalkingProgress;
+                ServerApi.Event.SaveGameLoaded -= LoadHungerProgress;
             }
 
             // Unpatch server-side Harmony patches
@@ -2317,11 +2792,13 @@ namespace SimpleImprovingTraits
             MeleeProgress.Clear();
             RangedProgress.Clear();
             WalkingProgress.Clear();
+            HungerProgress.Clear();
             lastPlayerPositions.Clear();
             pendingMiningProgressSave = false;
             pendingMeleeProgressSave = false;
             pendingRangedProgressSave = false;
             pendingWalkingProgressSave = false;
+            pendingHungerProgressSave = false;
             base.Dispose();
         }
 
@@ -2352,6 +2829,12 @@ namespace SimpleImprovingTraits
             {
                 PersistWalkingProgress();
                 pendingWalkingProgressSave = false;
+            }
+
+            if (pendingHungerProgressSave || !HungerProgress.IsEmpty)
+            {
+                PersistHungerProgress();
+                pendingHungerProgressSave = false;
             }
 
             if (pendingConfigSave)
@@ -2970,8 +3453,132 @@ namespace SimpleImprovingTraits
         }
 
         /// <summary>
+        /// Persist hunger progress to world save data.
+        /// Version 1 format: simple progress tracking (no per-tool).
+        /// </summary>
+        public static void PersistHungerProgress()
+        {
+            if (ServerApi == null) return;
+
+            lock (persistLock)
+            {
+                if (HungerProgress.IsEmpty)
+                {
+                    ServerApi.WorldManager.SaveGame.StoreData(HUNGER_PROGRESS_SAVE_KEY, null);
+                    return;
+                }
+
+                try
+                {
+                    var snapshot = HungerProgress.ToArray();
+
+                    byte[] data;
+                    using (var ms = new MemoryStream())
+                    {
+                        using (var writer = new BinaryWriter(ms))
+                        {
+                            // Write magic bytes and version
+                            writer.Write((byte)0x53); // 'S'
+                            writer.Write((byte)0x49); // 'I'
+                            writer.Write((byte)0x48); // 'H' (for Hunger)
+                            writer.Write((byte)1);    // Version 1
+
+                            // Write number of players
+                            writer.Write(snapshot.Length);
+
+                            foreach (var playerKvp in snapshot)
+                            {
+                                writer.Write(playerKvp.Key);   // Player UID
+                                var progress = playerKvp.Value;
+                                writer.Write(progress.TotalCredits);
+                                writer.Write(progress.SecondsInIncrement);
+                                writer.Write(progress.CurrentIncrementSize);
+                            }
+                        }
+                        data = ms.ToArray();
+                    }
+
+                    ServerApi.WorldManager.SaveGame.StoreData(HUNGER_PROGRESS_SAVE_KEY, data);
+                    ServerApi.Logger.Debug($"[SimpleImprovingTraits] Persisted hunger progress for {snapshot.Length} players");
+                }
+                catch (Exception ex)
+                {
+                    ServerApi.Logger.Error($"[SimpleImprovingTraits] Failed to persist hunger progress: {ex.Message}");
+                }
+            }
+        }
+
+        /// <summary>
+        /// Load hunger progress from world save data.
+        /// </summary>
+        private void LoadHungerProgress()
+        {
+            if (ServerApi == null) return;
+
+            HungerProgress.Clear();
+
+            try
+            {
+                byte[] data = ServerApi.WorldManager.SaveGame.GetData(HUNGER_PROGRESS_SAVE_KEY);
+                if (data == null || data.Length == 0)
+                {
+                    ServerApi.Logger.Debug("[SimpleImprovingTraits] No hunger progress data found in world save");
+                    return;
+                }
+
+                using (var ms = new MemoryStream(data))
+                {
+                    using (var reader = new BinaryReader(ms))
+                    {
+                        // Check magic bytes
+                        byte b1 = reader.ReadByte();
+                        byte b2 = reader.ReadByte();
+                        byte b3 = reader.ReadByte();
+
+                        if (b1 != 0x53 || b2 != 0x49 || b3 != 0x48) // "SIH"
+                        {
+                            ServerApi.Logger.Warning("[SimpleImprovingTraits] Invalid hunger progress data format");
+                            return;
+                        }
+
+                        byte version = reader.ReadByte();
+                        int playerCount = reader.ReadInt32();
+
+                        if (version == 1)
+                        {
+                            for (int i = 0; i < playerCount; i++)
+                            {
+                                string playerUid = reader.ReadString();
+                                var progress = new HungerProgressData
+                                {
+                                    TotalCredits = reader.ReadInt32(),
+                                    SecondsInIncrement = reader.ReadSingle(),
+                                    CurrentIncrementSize = reader.ReadInt32()
+                                };
+
+                                HungerProgress[playerUid] = progress;
+                            }
+                        }
+                        else
+                        {
+                            ServerApi.Logger.Warning($"[SimpleImprovingTraits] Unknown hunger save format version {version}");
+                            return;
+                        }
+                    }
+                }
+
+                ServerApi.Logger.Notification($"[SimpleImprovingTraits] Loaded hunger progress for {HungerProgress.Count} players");
+            }
+            catch (Exception ex)
+            {
+                HungerProgress.Clear();
+                ServerApi.Logger.Error($"[SimpleImprovingTraits] Failed to load hunger progress: {ex.Message}");
+            }
+        }
+
+        /// <summary>
         /// Persist config to world save data.
-        /// Version 6 adds walking configuration.
+        /// Version 7 adds hunger configuration.
         /// </summary>
         private void PersistConfig()
         {
@@ -2984,7 +3591,7 @@ namespace SimpleImprovingTraits
                 {
                     using (var writer = new BinaryWriter(ms))
                     {
-                        writer.Write((byte)6); // Version 6: adds walking config
+                        writer.Write((byte)7); // Version 7: adds hunger config
                         writer.Write(BaseBlocksPerIncrement);
                         writer.Write(IncrementStep);
                         writer.Write(MaxMiningSpeedPercent);
@@ -3003,12 +3610,16 @@ namespace SimpleImprovingTraits
                         writer.Write(BaseBlocksWalkedPerIncrement);
                         writer.Write(WalkingIncrementStep);
                         writer.Write(MaxWalkingSpeedPercent);
+                        // Hunger config
+                        writer.Write(BaseSecondsPerIncrement);
+                        writer.Write(HungerIncrementStep);
+                        writer.Write(MaxHungerReductionPercent);
                     }
                     data = ms.ToArray();
                 }
 
                 ServerApi.WorldManager.SaveGame.StoreData(CONFIG_SAVE_KEY, data);
-                ServerApi.Logger.Debug($"[SimpleImprovingTraits] Config saved (Mining: Base={BaseBlocksPerIncrement}, Max={MaxMiningSpeedPercent}% | Melee: Base={BaseDamagePerIncrement}, Max={MaxMeleeDamagePercent}% | Ranged: Base={BaseRangedDamagePerIncrement}, MaxDmg={MaxRangedDamagePercent}% | Walking: Base={BaseBlocksWalkedPerIncrement}, Max={MaxWalkingSpeedPercent}%)");
+                ServerApi.Logger.Debug($"[SimpleImprovingTraits] Config saved (Mining: Base={BaseBlocksPerIncrement}, Max={MaxMiningSpeedPercent}% | Melee: Base={BaseDamagePerIncrement}, Max={MaxMeleeDamagePercent}% | Ranged: Base={BaseRangedDamagePerIncrement}, MaxDmg={MaxRangedDamagePercent}% | Walking: Base={BaseBlocksWalkedPerIncrement}, Max={MaxWalkingSpeedPercent}% | Hunger: Base={BaseSecondsPerIncrement}, Max={MaxHungerReductionPercent}%)");
             }
             catch (Exception ex)
             {
@@ -3018,7 +3629,7 @@ namespace SimpleImprovingTraits
 
         /// <summary>
         /// Load config from world save data.
-        /// Supports versions 1-6 for backwards compatibility.
+        /// Supports versions 1-7 for backwards compatibility.
         /// </summary>
         private void LoadConfig()
         {
@@ -3051,7 +3662,7 @@ namespace SimpleImprovingTraits
                                 MaxMiningSpeedPercent = reader.ReadInt32();
                             }
                             // OreMultiplier uses default (5)
-                            // Melee and Ranged use defaults
+                            // Melee, Ranged, Walking, and Hunger use defaults
 
                             // Mark for re-save in new format
                             pendingConfigSave = true;
@@ -3062,14 +3673,14 @@ namespace SimpleImprovingTraits
                             IncrementStep = reader.ReadInt32();
                             MaxMiningSpeedPercent = reader.ReadInt32();
                             OreMultiplier = reader.ReadInt32();
-                            // Melee and Ranged use defaults
+                            // Melee, Ranged, Walking, and Hunger use defaults
 
                             // Mark for re-save in new format
                             pendingConfigSave = true;
                         }
                         else if (version == 4)
                         {
-                            // Version 4: has melee config but not ranged
+                            // Version 4: has melee config but not ranged, walking, or hunger
                             BaseBlocksPerIncrement = reader.ReadInt32();
                             IncrementStep = reader.ReadInt32();
                             MaxMiningSpeedPercent = reader.ReadInt32();
@@ -3077,14 +3688,14 @@ namespace SimpleImprovingTraits
                             BaseDamagePerIncrement = reader.ReadInt32();
                             MeleeIncrementStep = reader.ReadInt32();
                             MaxMeleeDamagePercent = reader.ReadInt32();
-                            // Ranged uses defaults
+                            // Ranged, Walking, and Hunger use defaults
 
                             // Mark for re-save in new format
                             pendingConfigSave = true;
                         }
                         else if (version == 5)
                         {
-                            // Version 5: has ranged config but not walking
+                            // Version 5: has ranged config but not walking or hunger
                             BaseBlocksPerIncrement = reader.ReadInt32();
                             IncrementStep = reader.ReadInt32();
                             MaxMiningSpeedPercent = reader.ReadInt32();
@@ -3097,14 +3708,14 @@ namespace SimpleImprovingTraits
                             MaxRangedDamagePercent = reader.ReadInt32();
                             MaxRangedAccuracyPercent = reader.ReadInt32();
                             MaxRangedDistancePercent = reader.ReadInt32();
-                            // Walking uses defaults
+                            // Walking and Hunger use defaults
 
                             // Mark for re-save in new format
                             pendingConfigSave = true;
                         }
                         else if (version == 6)
                         {
-                            // Current format with walking config
+                            // Version 6: has walking config but not hunger
                             BaseBlocksPerIncrement = reader.ReadInt32();
                             IncrementStep = reader.ReadInt32();
                             MaxMiningSpeedPercent = reader.ReadInt32();
@@ -3120,11 +3731,37 @@ namespace SimpleImprovingTraits
                             BaseBlocksWalkedPerIncrement = reader.ReadInt32();
                             WalkingIncrementStep = reader.ReadInt32();
                             MaxWalkingSpeedPercent = reader.ReadInt32();
+                            // Hunger uses defaults
+
+                            // Mark for re-save in new format
+                            pendingConfigSave = true;
+                        }
+                        else if (version == 7)
+                        {
+                            // Current format with hunger config
+                            BaseBlocksPerIncrement = reader.ReadInt32();
+                            IncrementStep = reader.ReadInt32();
+                            MaxMiningSpeedPercent = reader.ReadInt32();
+                            OreMultiplier = reader.ReadInt32();
+                            BaseDamagePerIncrement = reader.ReadInt32();
+                            MeleeIncrementStep = reader.ReadInt32();
+                            MaxMeleeDamagePercent = reader.ReadInt32();
+                            BaseRangedDamagePerIncrement = reader.ReadInt32();
+                            RangedIncrementStep = reader.ReadInt32();
+                            MaxRangedDamagePercent = reader.ReadInt32();
+                            MaxRangedAccuracyPercent = reader.ReadInt32();
+                            MaxRangedDistancePercent = reader.ReadInt32();
+                            BaseBlocksWalkedPerIncrement = reader.ReadInt32();
+                            WalkingIncrementStep = reader.ReadInt32();
+                            MaxWalkingSpeedPercent = reader.ReadInt32();
+                            BaseSecondsPerIncrement = reader.ReadInt32();
+                            HungerIncrementStep = reader.ReadInt32();
+                            MaxHungerReductionPercent = reader.ReadInt32();
                         }
                     }
                 }
 
-                ServerApi.Logger.Notification($"[SimpleImprovingTraits] Config loaded (Mining: Base={BaseBlocksPerIncrement}, Max={MaxMiningSpeedPercent}% | Melee: Base={BaseDamagePerIncrement}, Max={MaxMeleeDamagePercent}% | Ranged: Base={BaseRangedDamagePerIncrement}, MaxDmg={MaxRangedDamagePercent}% | Walking: Base={BaseBlocksWalkedPerIncrement}, Max={MaxWalkingSpeedPercent}%)");
+                ServerApi.Logger.Notification($"[SimpleImprovingTraits] Config loaded (Mining: Base={BaseBlocksPerIncrement}, Max={MaxMiningSpeedPercent}% | Melee: Base={BaseDamagePerIncrement}, Max={MaxMeleeDamagePercent}% | Ranged: Base={BaseRangedDamagePerIncrement}, MaxDmg={MaxRangedDamagePercent}% | Walking: Base={BaseBlocksWalkedPerIncrement}, Max={MaxWalkingSpeedPercent}% | Hunger: Base={BaseSecondsPerIncrement}, Max={MaxHungerReductionPercent}%)");
             }
             catch (Exception ex)
             {

@@ -18,5 +18,40 @@
     "code": "sitwalkingmastery",
     "type": "positive",
     "attributes": {}
+  },
+  {
+    "code": "sithungermastery",
+    "type": "positive",
+    "attributes": {}
+  },
+  {
+    "code": "sitarmormastery",
+    "type": "positive",
+    "attributes": {}
+  },
+  {
+    "code": "sitclothiermastery",
+    "type": "positive",
+    "attributes": {}
+  },
+  {
+    "code": "sitmendermastery",
+    "type": "positive",
+    "attributes": {}
+  },
+  {
+    "code": "sitpilferermastery",
+    "type": "positive",
+    "attributes": {}
+  },
+  {
+    "code": "sitresourcefulmastery",
+    "type": "positive",
+    "attributes": {}
+  },
+  {
+    "code": "sitforagermastery",
+    "type": "positive",
+    "attributes": {}
   }
 ]

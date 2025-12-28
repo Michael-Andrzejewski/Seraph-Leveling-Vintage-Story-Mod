@@ -462,6 +462,171 @@ namespace SimpleImprovingTraits
     }
 
     /// <summary>
+    /// Data structure for tracking Clothier progression.
+    /// Tracks unique clothing items worn to unlock sewing kit crafting.
+    /// </summary>
+    public class ClothierProgressData
+    {
+        /// <summary>Set of unique clothing item codes that have been worn.</summary>
+        public HashSet<string> UniqueClothesWorn { get; set; }
+
+        /// <summary>Whether the sewing kit crafting has been unlocked.</summary>
+        public bool SewingKitUnlocked { get; set; }
+
+        public ClothierProgressData()
+        {
+            UniqueClothesWorn = new HashSet<string>();
+            SewingKitUnlocked = false;
+        }
+
+        public ClothierProgressData Clone()
+        {
+            return new ClothierProgressData
+            {
+                UniqueClothesWorn = new HashSet<string>(this.UniqueClothesWorn),
+                SewingKitUnlocked = this.SewingKitUnlocked
+            };
+        }
+    }
+
+    /// <summary>
+    /// Data structure for tracking Mender progression.
+    /// Tracks repairs done with sewing kit to earn armor/clothing durability bonuses.
+    /// </summary>
+    public class MenderProgressData
+    {
+        /// <summary>Total credits earned (each credit = 1% bonus). Max 20.</summary>
+        public int TotalCredits { get; set; }
+
+        /// <summary>Repairs done toward the next credit.</summary>
+        public int RepairsInIncrement { get; set; }
+
+        /// <summary>Repairs needed for the next credit (5, 6, 7, etc.).</summary>
+        public int CurrentIncrementSize { get; set; }
+
+        public MenderProgressData()
+        {
+            TotalCredits = 0;
+            RepairsInIncrement = 0;
+            CurrentIncrementSize = 5; // Base increment size
+        }
+
+        public MenderProgressData Clone()
+        {
+            return new MenderProgressData
+            {
+                TotalCredits = this.TotalCredits,
+                RepairsInIncrement = this.RepairsInIncrement,
+                CurrentIncrementSize = this.CurrentIncrementSize
+            };
+        }
+    }
+
+    /// <summary>
+    /// Data structure for tracking Pilferer progression.
+    /// Tracks collapsed chests opened and vessels broken for loot bonuses.
+    /// </summary>
+    public class PilfererProgressData
+    {
+        /// <summary>Total credits earned (each credit = 1% bonus). Max 20.</summary>
+        public int TotalCredits { get; set; }
+
+        /// <summary>Points accumulated toward the next credit.</summary>
+        public int PointsInIncrement { get; set; }
+
+        /// <summary>Points needed for the next credit (10, 20, 30, etc.).</summary>
+        public int CurrentIncrementSize { get; set; }
+
+        /// <summary>Set of chest block positions that have been opened (for first-time tracking).</summary>
+        public HashSet<string> OpenedChestPositions { get; set; }
+
+        public PilfererProgressData()
+        {
+            TotalCredits = 0;
+            PointsInIncrement = 0;
+            CurrentIncrementSize = 10; // Base increment size
+            OpenedChestPositions = new HashSet<string>();
+        }
+
+        public PilfererProgressData Clone()
+        {
+            return new PilfererProgressData
+            {
+                TotalCredits = this.TotalCredits,
+                PointsInIncrement = this.PointsInIncrement,
+                CurrentIncrementSize = this.CurrentIncrementSize,
+                OpenedChestPositions = new HashSet<string>(this.OpenedChestPositions)
+            };
+        }
+    }
+
+    /// <summary>
+    /// Data structure for tracking Resourceful progression.
+    /// Tracks animal harvesting for loot and speed bonuses.
+    /// </summary>
+    public class ResourcefulProgressData
+    {
+        /// <summary>Total credits earned (each credit = 1% bonus). Max 20.</summary>
+        public int TotalCredits { get; set; }
+
+        /// <summary>Animals harvested toward the next credit.</summary>
+        public int AnimalsInIncrement { get; set; }
+
+        /// <summary>Animals needed for the next credit (10, 20, 30, etc.).</summary>
+        public int CurrentIncrementSize { get; set; }
+
+        public ResourcefulProgressData()
+        {
+            TotalCredits = 0;
+            AnimalsInIncrement = 0;
+            CurrentIncrementSize = 10; // Base increment size
+        }
+
+        public ResourcefulProgressData Clone()
+        {
+            return new ResourcefulProgressData
+            {
+                TotalCredits = this.TotalCredits,
+                AnimalsInIncrement = this.AnimalsInIncrement,
+                CurrentIncrementSize = this.CurrentIncrementSize
+            };
+        }
+    }
+
+    /// <summary>
+    /// Data structure for tracking Forager progression.
+    /// Tracks wild crop breaking for foraging loot bonuses.
+    /// </summary>
+    public class ForagerProgressData
+    {
+        /// <summary>Total credits earned (each credit = 1% bonus). Max 20.</summary>
+        public int TotalCredits { get; set; }
+
+        /// <summary>Wild crops broken toward the next credit.</summary>
+        public int CropsInIncrement { get; set; }
+
+        /// <summary>Crops needed for the next credit (10, 20, 30, etc.).</summary>
+        public int CurrentIncrementSize { get; set; }
+
+        public ForagerProgressData()
+        {
+            TotalCredits = 0;
+            CropsInIncrement = 0;
+            CurrentIncrementSize = 10; // Base increment size
+        }
+
+        public ForagerProgressData Clone()
+        {
+            return new ForagerProgressData
+            {
+                TotalCredits = this.TotalCredits,
+                CropsInIncrement = this.CropsInIncrement,
+                CurrentIncrementSize = this.CurrentIncrementSize
+            };
+        }
+    }
+
+    /// <summary>
     /// Main mod system for Simple Improving Traits.
     /// Provides a progression system that improves player traits through gameplay.
     /// Currently implements mining speed progression based on blocks mined.
@@ -669,6 +834,126 @@ namespace SimpleImprovingTraits
 
         // Tracking currently equipped armor for each player (for time tracking and equip detection)
         private static ConcurrentDictionary<string, Dictionary<string, string>> playerEquippedArmor = new ConcurrentDictionary<string, Dictionary<string, string>>();
+
+        // =========================================================================
+        // CLOTHIER TRAIT - Tracks unique clothing worn to unlock sewing kit crafting
+        // =========================================================================
+        public const string CLOTHIER_STAT_CODE = "sitClothierBonus";
+        private const string CLOTHIER_PROGRESS_SAVE_KEY = "sitClothierProgress";
+        public const string WATCHED_CLOTHIER_COUNT = "sitClothierCount";
+        public const string WATCHED_CLOTHIER_UNLOCKED = "sitClothierUnlocked";
+        public const string CLOTHIER_TRAIT_CODE = "sitclothiermastery";
+
+        // Clothier progression configuration
+        public static int ClothierRequiredUniqueClothes = 20; // Number of unique clothes to unlock sewing kit
+
+        // Vanilla Clothier trait (Tailor exclusive)
+        public const int VANILLA_CLOTHIER_BONUS = 0; // No vanilla bonus, this is unlock-based
+
+        // Storage for clothier progress
+        public static ConcurrentDictionary<string, ClothierProgressData> ClothierProgress = new ConcurrentDictionary<string, ClothierProgressData>();
+        private static volatile bool pendingClothierProgressSave = false;
+
+        // Tracking currently equipped clothing for each player
+        private static ConcurrentDictionary<string, Dictionary<string, string>> playerEquippedClothing = new ConcurrentDictionary<string, Dictionary<string, string>>();
+
+        // =========================================================================
+        // MENDER TRAIT - Tracks sewing kit repairs for durability bonus
+        // =========================================================================
+        public const string MENDER_STAT_CODE = "sitMenderBonus";
+        private const string MENDER_PROGRESS_SAVE_KEY = "sitMenderProgress";
+        public const string WATCHED_MENDER_LEVEL = "sitMenderLevel";
+        public const string WATCHED_MENDER_BONUS = "sitMenderBonusPercent";
+        public const string MENDER_TRAIT_CODE = "sitmendermastery";
+
+        // Mender progression configuration
+        public static int BaseMenderRepairsPerIncrement = 5;   // Base repairs for first credit
+        public static int MenderIncrementStep = 1;              // Increment step per credit
+        public static int MaxMenderPercent = 20;                // 20% max armor/clothing durability bonus
+
+        // Vanilla Mender trait bonus (used for cap calculations)
+        public const int VANILLA_MENDER_ARMOR_DURABILITY_BONUS = 10;
+
+        // Storage for mender progress
+        public static ConcurrentDictionary<string, MenderProgressData> MenderProgress = new ConcurrentDictionary<string, MenderProgressData>();
+        private static volatile bool pendingMenderProgressSave = false;
+
+        // =========================================================================
+        // PILFERER TRAIT - Tracks chests/vessels for loot bonuses
+        // =========================================================================
+        public const string PILFERER_RUSTY_GEAR_STAT_CODE = "sitPilfererRustyGear";
+        public const string PILFERER_VESSEL_CONTENTS_STAT_CODE = "sitPilfererVesselContents";
+        public const string PILFERER_WHOLE_VESSEL_STAT_CODE = "sitPilfererWholeVessel";
+        private const string PILFERER_PROGRESS_SAVE_KEY = "sitPilfererProgress";
+        public const string WATCHED_PILFERER_LEVEL = "sitPilfererLevel";
+        public const string WATCHED_PILFERER_BONUS = "sitPilfererBonusPercent";
+        public const string PILFERER_TRAIT_CODE = "sitpilferermastery";
+
+        // Pilferer progression configuration
+        public static int BasePilfererPointsPerIncrement = 10;  // Base points for first credit
+        public static int PilfererIncrementStep = 10;           // Increment step per credit
+        public static int MaxPilfererPercent = 20;              // 20% max bonus for all three stats
+        public const int PILFERER_CHEST_POINTS = 1;             // Points per first-time chest opening
+        public const int PILFERER_VESSEL_POINTS = 2;            // Points per broken vessel
+
+        // Vanilla Pilferer trait bonuses (Malefactor exclusive)
+        public const int VANILLA_PILFERER_RUSTY_GEAR_BONUS = 10;
+        public const int VANILLA_PILFERER_VESSEL_CONTENTS_BONUS = 15;
+        public const int VANILLA_PILFERER_WHOLE_VESSEL_BONUS = 12;
+
+        // Storage for pilferer progress
+        public static ConcurrentDictionary<string, PilfererProgressData> PilfererProgress = new ConcurrentDictionary<string, PilfererProgressData>();
+        private static volatile bool pendingPilfererProgressSave = false;
+
+        // =========================================================================
+        // RESOURCEFUL TRAIT - Tracks animal harvesting for loot/speed bonuses
+        // =========================================================================
+        public const string RESOURCEFUL_LOOT_STAT_CODE = "sitResourcefulLoot";
+        public const string RESOURCEFUL_SPEED_STAT_CODE = "sitResourcefulSpeed";
+        private const string RESOURCEFUL_PROGRESS_SAVE_KEY = "sitResourcefulProgress";
+        public const string WATCHED_RESOURCEFUL_LEVEL = "sitResourcefulLevel";
+        public const string WATCHED_RESOURCEFUL_LOOT_BONUS = "sitResourcefulLootBonusPercent";
+        public const string WATCHED_RESOURCEFUL_SPEED_BONUS = "sitResourcefulSpeedBonusPercent";
+        public const string RESOURCEFUL_TRAIT_CODE = "sitresourcefulmastery";
+
+        // Resourceful progression configuration
+        public static int BaseResourcefulAnimalsPerIncrement = 10;  // Base animals for first credit
+        public static int ResourcefulIncrementStep = 10;            // Increment step per credit
+        public static int MaxResourcefulLootPercent = 20;           // 20% max animal loot bonus
+        public static int MaxResourcefulSpeedPercent = 25;          // 25% max harvesting speed bonus
+
+        // Vanilla Resourceful trait bonuses (Hunter/Malefactor)
+        public const int VANILLA_RESOURCEFUL_LOOT_BONUS = 10;
+        public const int VANILLA_RESOURCEFUL_SPEED_BONUS = 25;
+
+        // Storage for resourceful progress
+        public static ConcurrentDictionary<string, ResourcefulProgressData> ResourcefulProgress = new ConcurrentDictionary<string, ResourcefulProgressData>();
+        private static volatile bool pendingResourcefulProgressSave = false;
+
+        // =========================================================================
+        // FORAGER TRAIT - Tracks wild crop breaking for foraging loot bonuses
+        // =========================================================================
+        public const string FORAGER_LOOT_STAT_CODE = "sitForagerLoot";
+        public const string FORAGER_WILD_CROP_STAT_CODE = "sitForagerWildCrop";
+        private const string FORAGER_PROGRESS_SAVE_KEY = "sitForagerProgress";
+        public const string WATCHED_FORAGER_LEVEL = "sitForagerLevel";
+        public const string WATCHED_FORAGER_LOOT_BONUS = "sitForagerLootBonusPercent";
+        public const string WATCHED_FORAGER_WILD_CROP_BONUS = "sitForagerWildCropBonusPercent";
+        public const string FORAGER_TRAIT_CODE = "sitforagermastery";
+
+        // Forager progression configuration
+        public static int BaseForagerCropsPerIncrement = 10;    // Base crops for first credit
+        public static int ForagerIncrementStep = 10;            // Increment step per credit
+        public static int MaxForagerLootPercent = 20;           // 20% max foraging loot bonus
+        public static int MaxForagerWildCropPercent = 20;       // 20% max wild crop drop bonus
+
+        // Vanilla Forager trait bonuses (Hunter/Malefactor)
+        public const int VANILLA_FORAGER_LOOT_BONUS = 10;
+        public const int VANILLA_FORAGER_WILD_CROP_BONUS = 20;
+
+        // Storage for forager progress
+        public static ConcurrentDictionary<string, ForagerProgressData> ForagerProgress = new ConcurrentDictionary<string, ForagerProgressData>();
+        private static volatile bool pendingForagerProgressSave = false;
 
         private const string CONFIG_SAVE_KEY = "sitConfig";
 
@@ -914,6 +1199,130 @@ namespace SimpleImprovingTraits
                     .WithArgs(api.ChatCommands.Parsers.OptionalInt("repairs"))
                     .RequiresPrivilege(Privilege.controlserver)
                     .HandleWith(OnTraitArmorRepairBaseCommand)
+                .EndSubCommand()
+                // Clothier trait commands
+                .BeginSubCommand("clothier")
+                    .WithDescription("View your clothier progression stats")
+                    .RequiresPrivilege(Privilege.chat)
+                    .RequiresPlayer()
+                    .HandleWith(OnTraitClothierCommand)
+                .EndSubCommand()
+                .BeginSubCommand("clothierrequired")
+                    .WithDescription("Get or set the required unique clothes to unlock sewing kit (admin only)")
+                    .WithArgs(api.ChatCommands.Parsers.OptionalInt("count"))
+                    .RequiresPrivilege(Privilege.controlserver)
+                    .HandleWith(OnTraitClothierRequiredCommand)
+                .EndSubCommand()
+                .BeginSubCommand("clothierlevel")
+                    .WithDescription("Set your clothier progress (unique clothes count) (admin only)")
+                    .WithArgs(api.ChatCommands.Parsers.Int("level"))
+                    .RequiresPrivilege(Privilege.controlserver)
+                    .RequiresPlayer()
+                    .HandleWith(OnTraitClothierLevelCommand)
+                .EndSubCommand()
+                // Mender trait commands
+                .BeginSubCommand("mender")
+                    .WithDescription("View your mender progression stats")
+                    .RequiresPrivilege(Privilege.chat)
+                    .RequiresPlayer()
+                    .HandleWith(OnTraitMenderCommand)
+                .EndSubCommand()
+                .BeginSubCommand("menderbase")
+                    .WithDescription("Get or set the base repairs per level (admin only)")
+                    .WithArgs(api.ChatCommands.Parsers.OptionalInt("repairs"))
+                    .RequiresPrivilege(Privilege.controlserver)
+                    .HandleWith(OnTraitMenderBaseCommand)
+                .EndSubCommand()
+                .BeginSubCommand("menderlevel")
+                    .WithDescription("Set your mender level (admin only)")
+                    .WithArgs(api.ChatCommands.Parsers.Int("level"))
+                    .RequiresPrivilege(Privilege.controlserver)
+                    .RequiresPlayer()
+                    .HandleWith(OnTraitMenderLevelCommand)
+                .EndSubCommand()
+                .BeginSubCommand("mendermax")
+                    .WithDescription("Get or set the max mender bonus percent (admin only)")
+                    .WithArgs(api.ChatCommands.Parsers.OptionalInt("percent"))
+                    .RequiresPrivilege(Privilege.controlserver)
+                    .HandleWith(OnTraitMenderMaxCommand)
+                .EndSubCommand()
+                // Pilferer trait commands
+                .BeginSubCommand("pilferer")
+                    .WithDescription("View your pilferer progression stats")
+                    .RequiresPrivilege(Privilege.chat)
+                    .RequiresPlayer()
+                    .HandleWith(OnTraitPilfererCommand)
+                .EndSubCommand()
+                .BeginSubCommand("pilfererbase")
+                    .WithDescription("Get or set the base points per level (admin only)")
+                    .WithArgs(api.ChatCommands.Parsers.OptionalInt("points"))
+                    .RequiresPrivilege(Privilege.controlserver)
+                    .HandleWith(OnTraitPilfererBaseCommand)
+                .EndSubCommand()
+                .BeginSubCommand("pilfererlevel")
+                    .WithDescription("Set your pilferer level (admin only)")
+                    .WithArgs(api.ChatCommands.Parsers.Int("level"))
+                    .RequiresPrivilege(Privilege.controlserver)
+                    .RequiresPlayer()
+                    .HandleWith(OnTraitPilfererLevelCommand)
+                .EndSubCommand()
+                .BeginSubCommand("pilferermax")
+                    .WithDescription("Get or set the max pilferer bonus percent (admin only)")
+                    .WithArgs(api.ChatCommands.Parsers.OptionalInt("percent"))
+                    .RequiresPrivilege(Privilege.controlserver)
+                    .HandleWith(OnTraitPilfererMaxCommand)
+                .EndSubCommand()
+                // Resourceful trait commands
+                .BeginSubCommand("resourceful")
+                    .WithDescription("View your resourceful progression stats")
+                    .RequiresPrivilege(Privilege.chat)
+                    .RequiresPlayer()
+                    .HandleWith(OnTraitResourcefulCommand)
+                .EndSubCommand()
+                .BeginSubCommand("resourcefulbase")
+                    .WithDescription("Get or set the base animals per level (admin only)")
+                    .WithArgs(api.ChatCommands.Parsers.OptionalInt("animals"))
+                    .RequiresPrivilege(Privilege.controlserver)
+                    .HandleWith(OnTraitResourcefulBaseCommand)
+                .EndSubCommand()
+                .BeginSubCommand("resourcefullevel")
+                    .WithDescription("Set your resourceful level (admin only)")
+                    .WithArgs(api.ChatCommands.Parsers.Int("level"))
+                    .RequiresPrivilege(Privilege.controlserver)
+                    .RequiresPlayer()
+                    .HandleWith(OnTraitResourcefulLevelCommand)
+                .EndSubCommand()
+                .BeginSubCommand("resourcefulmax")
+                    .WithDescription("Get or set the max resourceful loot bonus percent (admin only)")
+                    .WithArgs(api.ChatCommands.Parsers.OptionalInt("percent"))
+                    .RequiresPrivilege(Privilege.controlserver)
+                    .HandleWith(OnTraitResourcefulMaxCommand)
+                .EndSubCommand()
+                // Forager trait commands
+                .BeginSubCommand("forager")
+                    .WithDescription("View your forager progression stats")
+                    .RequiresPrivilege(Privilege.chat)
+                    .RequiresPlayer()
+                    .HandleWith(OnTraitForagerCommand)
+                .EndSubCommand()
+                .BeginSubCommand("foragerbase")
+                    .WithDescription("Get or set the base crops per level (admin only)")
+                    .WithArgs(api.ChatCommands.Parsers.OptionalInt("crops"))
+                    .RequiresPrivilege(Privilege.controlserver)
+                    .HandleWith(OnTraitForagerBaseCommand)
+                .EndSubCommand()
+                .BeginSubCommand("foragerlevel")
+                    .WithDescription("Set your forager level (admin only)")
+                    .WithArgs(api.ChatCommands.Parsers.Int("level"))
+                    .RequiresPrivilege(Privilege.controlserver)
+                    .RequiresPlayer()
+                    .HandleWith(OnTraitForagerLevelCommand)
+                .EndSubCommand()
+                .BeginSubCommand("foragermax")
+                    .WithDescription("Get or set the max forager bonus percent (admin only)")
+                    .WithArgs(api.ChatCommands.Parsers.OptionalInt("percent"))
+                    .RequiresPrivilege(Privilege.controlserver)
+                    .HandleWith(OnTraitForagerMaxCommand)
                 .EndSubCommand();
 
             // Hook into block breaking for mining progression
@@ -936,6 +1345,11 @@ namespace SimpleImprovingTraits
             api.Event.SaveGameLoaded += LoadWalkingProgress;
             api.Event.SaveGameLoaded += LoadHungerProgress;
             api.Event.SaveGameLoaded += LoadArmorProgress;
+            api.Event.SaveGameLoaded += LoadClothierProgress;
+            api.Event.SaveGameLoaded += LoadMenderProgress;
+            api.Event.SaveGameLoaded += LoadPilfererProgress;
+            api.Event.SaveGameLoaded += LoadResourcefulProgress;
+            api.Event.SaveGameLoaded += LoadForagerProgress;
 
             // Register game tick listener for walking distance tracking (every 500ms)
             api.Event.RegisterGameTickListener(OnWalkingTick, 500);
@@ -945,6 +1359,9 @@ namespace SimpleImprovingTraits
 
             // Register game tick listener for armor time tracking (every 1000ms / 1 second)
             api.Event.RegisterGameTickListener(OnArmorTick, 1000);
+
+            // Register game tick listener for clothing tracking (every 1000ms / 1 second)
+            api.Event.RegisterGameTickListener(OnClothingTick, 1000);
 
             // Hook into player disconnect to clean up position tracking
             api.Event.PlayerDisconnect += OnPlayerDisconnect;
@@ -2861,9 +3278,21 @@ namespace SimpleImprovingTraits
         {
             if (byPlayer?.Entity == null) return;
 
-            // Check if player is using a pickaxe
+            // Check for Forager progression (wild crops)
+            if (IsWildCropBlock(oldblockId))
+            {
+                ProcessWildCropBroken(byPlayer);
+            }
+
+            // Check for Pilferer progression (vessels)
+            if (IsVesselBlock(oldblockId))
+            {
+                ProcessVesselBreak(byPlayer);
+            }
+
+            // Check if player is using a pickaxe for mining progression
             string pickaxeCode = GetHeldPickaxeCode(byPlayer);
-            if (pickaxeCode == null) return; // Not using a pickaxe, skip
+            if (pickaxeCode == null) return; // Not using a pickaxe, skip mining
 
             // Check block type and get points
             int points = GetBlockPoints(oldblockId);
@@ -3131,6 +3560,62 @@ namespace SimpleImprovingTraits
             if (armorProg.TotalDurabilityCredits > 0 || armorProg.TotalWalkSpeedCredits > 0)
             {
                 ServerApi.Logger.Debug($"[SimpleImprovingTraits] Applied armor bonuses: +{armorProg.TotalDurabilityCredits}% durability, -{armorProg.TotalWalkSpeedCredits}% walk speed penalty to player {byPlayer.PlayerName}");
+            }
+
+            // Apply clothier bonus
+            var clothierProg = ClothierProgress.GetOrAdd(playerUid, _ => new ClothierProgressData());
+            ApplyClothierBonusStatic(byPlayer, clothierProg);
+            if (clothierProg.SewingKitUnlocked)
+            {
+                ServerApi.Logger.Debug($"[SimpleImprovingTraits] Applied clothier unlock to player {byPlayer.PlayerName}");
+            }
+
+            // Apply mender bonus
+            var menderProg = MenderProgress.GetOrAdd(playerUid, _ => new MenderProgressData
+            {
+                CurrentIncrementSize = BaseMenderRepairsPerIncrement
+            });
+            int menderCredits = menderProg.TotalCredits;
+            ApplyMenderBonusStatic(byPlayer, menderCredits);
+            if (menderCredits > 0)
+            {
+                ServerApi.Logger.Debug($"[SimpleImprovingTraits] Applied mender bonus +{menderCredits}% to player {byPlayer.PlayerName}");
+            }
+
+            // Apply pilferer bonus
+            var pilfererProg = PilfererProgress.GetOrAdd(playerUid, _ => new PilfererProgressData
+            {
+                CurrentIncrementSize = BasePilfererPointsPerIncrement
+            });
+            int pilfererCredits = pilfererProg.TotalCredits;
+            ApplyPilfererBonusStatic(byPlayer, pilfererCredits);
+            if (pilfererCredits > 0)
+            {
+                ServerApi.Logger.Debug($"[SimpleImprovingTraits] Applied pilferer bonus +{pilfererCredits}% to player {byPlayer.PlayerName}");
+            }
+
+            // Apply resourceful bonus
+            var resourcefulProg = ResourcefulProgress.GetOrAdd(playerUid, _ => new ResourcefulProgressData
+            {
+                CurrentIncrementSize = BaseResourcefulAnimalsPerIncrement
+            });
+            int resourcefulCredits = resourcefulProg.TotalCredits;
+            ApplyResourcefulBonusStatic(byPlayer, resourcefulCredits);
+            if (resourcefulCredits > 0)
+            {
+                ServerApi.Logger.Debug($"[SimpleImprovingTraits] Applied resourceful bonus +{resourcefulCredits}% to player {byPlayer.PlayerName}");
+            }
+
+            // Apply forager bonus
+            var foragerProg = ForagerProgress.GetOrAdd(playerUid, _ => new ForagerProgressData
+            {
+                CurrentIncrementSize = BaseForagerCropsPerIncrement
+            });
+            int foragerCredits = foragerProg.TotalCredits;
+            ApplyForagerBonusStatic(byPlayer, foragerCredits);
+            if (foragerCredits > 0)
+            {
+                ServerApi.Logger.Debug($"[SimpleImprovingTraits] Applied forager bonus +{foragerCredits}% to player {byPlayer.PlayerName}");
             }
 
             // Initialize equipped armor tracking for this player
@@ -3417,6 +3902,31 @@ namespace SimpleImprovingTraits
         }
 
         /// <summary>
+        /// Updates the characterTraits array to add or remove a trait.
+        /// This is used for traits that unlock recipes (like Clothier).
+        /// Unlike extraTraits which is only for UI display, characterTraits is
+        /// what the game actually checks for recipe requirements.
+        /// </summary>
+        private static void UpdateCharacterTraitStatic(EntityPlayer entity, string traitCode, bool shouldHave)
+        {
+            string[] currentTraits = entity.WatchedAttributes.GetStringArray("characterTraits", null) ?? Array.Empty<string>();
+            bool hasTrait = currentTraits.Contains(traitCode);
+
+            if (shouldHave && !hasTrait)
+            {
+                var newTraits = currentTraits.Append(traitCode).ToArray();
+                entity.WatchedAttributes.SetStringArray("characterTraits", newTraits);
+                entity.WatchedAttributes.MarkPathDirty("characterTraits");
+            }
+            else if (!shouldHave && hasTrait)
+            {
+                var newTraits = currentTraits.Where(t => t != traitCode).ToArray();
+                entity.WatchedAttributes.SetStringArray("characterTraits", newTraits);
+                entity.WatchedAttributes.MarkPathDirty("characterTraits");
+            }
+        }
+
+        /// <summary>
         /// Gets the weapon code from a held item if it's a qualifying melee weapon, or null otherwise.
         /// Returns the full item code (e.g., "game:sword-copper") to track each weapon type individually.
         /// Static version for use from Harmony patches.
@@ -3650,6 +4160,30 @@ namespace SimpleImprovingTraits
                 {
                     PersistHungerProgress();
                 }
+                if (pendingArmorProgressSave || !ArmorProgress.IsEmpty)
+                {
+                    PersistArmorProgress();
+                }
+                if (pendingClothierProgressSave || !ClothierProgress.IsEmpty)
+                {
+                    PersistClothierProgress();
+                }
+                if (pendingMenderProgressSave || !MenderProgress.IsEmpty)
+                {
+                    PersistMenderProgress();
+                }
+                if (pendingPilfererProgressSave || !PilfererProgress.IsEmpty)
+                {
+                    PersistPilfererProgress();
+                }
+                if (pendingResourcefulProgressSave || !ResourcefulProgress.IsEmpty)
+                {
+                    PersistResourcefulProgress();
+                }
+                if (pendingForagerProgressSave || !ForagerProgress.IsEmpty)
+                {
+                    PersistForagerProgress();
+                }
 
                 ServerApi.Event.DidBreakBlock -= OnBlockBroken;
                 ServerApi.Event.PlayerJoin -= OnPlayerJoin;
@@ -3661,6 +4195,12 @@ namespace SimpleImprovingTraits
                 ServerApi.Event.SaveGameLoaded -= LoadRangedProgress;
                 ServerApi.Event.SaveGameLoaded -= LoadWalkingProgress;
                 ServerApi.Event.SaveGameLoaded -= LoadHungerProgress;
+                ServerApi.Event.SaveGameLoaded -= LoadArmorProgress;
+                ServerApi.Event.SaveGameLoaded -= LoadClothierProgress;
+                ServerApi.Event.SaveGameLoaded -= LoadMenderProgress;
+                ServerApi.Event.SaveGameLoaded -= LoadPilfererProgress;
+                ServerApi.Event.SaveGameLoaded -= LoadResourcefulProgress;
+                ServerApi.Event.SaveGameLoaded -= LoadForagerProgress;
             }
 
             // Unpatch server-side Harmony patches
@@ -3671,12 +4211,24 @@ namespace SimpleImprovingTraits
             RangedProgress.Clear();
             WalkingProgress.Clear();
             HungerProgress.Clear();
+            ArmorProgress.Clear();
+            ClothierProgress.Clear();
+            MenderProgress.Clear();
+            PilfererProgress.Clear();
+            ResourcefulProgress.Clear();
+            ForagerProgress.Clear();
             lastPlayerPositions.Clear();
             pendingMiningProgressSave = false;
             pendingMeleeProgressSave = false;
             pendingRangedProgressSave = false;
             pendingWalkingProgressSave = false;
             pendingHungerProgressSave = false;
+            pendingArmorProgressSave = false;
+            pendingClothierProgressSave = false;
+            pendingMenderProgressSave = false;
+            pendingPilfererProgressSave = false;
+            pendingResourcefulProgressSave = false;
+            pendingForagerProgressSave = false;
             base.Dispose();
         }
 
@@ -3719,6 +4271,36 @@ namespace SimpleImprovingTraits
             {
                 PersistArmorProgress();
                 pendingArmorProgressSave = false;
+            }
+
+            if (pendingClothierProgressSave || !ClothierProgress.IsEmpty)
+            {
+                PersistClothierProgress();
+                pendingClothierProgressSave = false;
+            }
+
+            if (pendingMenderProgressSave || !MenderProgress.IsEmpty)
+            {
+                PersistMenderProgress();
+                pendingMenderProgressSave = false;
+            }
+
+            if (pendingPilfererProgressSave || !PilfererProgress.IsEmpty)
+            {
+                PersistPilfererProgress();
+                pendingPilfererProgressSave = false;
+            }
+
+            if (pendingResourcefulProgressSave || !ResourcefulProgress.IsEmpty)
+            {
+                PersistResourcefulProgress();
+                pendingResourcefulProgressSave = false;
+            }
+
+            if (pendingForagerProgressSave || !ForagerProgress.IsEmpty)
+            {
+                PersistForagerProgress();
+                pendingForagerProgressSave = false;
             }
 
             if (pendingConfigSave)
@@ -4849,6 +5431,1618 @@ namespace SimpleImprovingTraits
                 ServerApi.Logger.Error($"[SimpleImprovingTraits] Failed to load config: {ex.Message}");
             }
         }
+
+        // =========================================================================
+        // CLOTHIER TRAIT IMPLEMENTATION
+        // =========================================================================
+
+        /// <summary>
+        /// Handler for /trait clothier command.
+        /// </summary>
+        private TextCommandResult OnTraitClothierCommand(TextCommandCallingArgs args)
+        {
+            IServerPlayer player = args.Caller.Player as IServerPlayer;
+            if (player?.Entity == null) return TextCommandResult.Error("Player not found.");
+
+            var progress = ClothierProgress.GetOrAdd(player.PlayerUID, _ => new ClothierProgressData());
+            int uniqueCount = progress.UniqueClothesWorn.Count;
+            bool unlocked = progress.SewingKitUnlocked;
+
+            var sb = new StringBuilder();
+            sb.AppendLine($"Clothier progression: {uniqueCount} / {ClothierRequiredUniqueClothes} unique clothes worn");
+            if (unlocked)
+            {
+                sb.AppendLine("Status: Sewing kit crafting UNLOCKED!");
+            }
+            else
+            {
+                sb.AppendLine($"Status: Wear {ClothierRequiredUniqueClothes - uniqueCount} more unique clothes to unlock sewing kit");
+            }
+
+            return TextCommandResult.Success(sb.ToString());
+        }
+
+        /// <summary>
+        /// Handler for /trait clothierrequired command.
+        /// </summary>
+        private TextCommandResult OnTraitClothierRequiredCommand(TextCommandCallingArgs args)
+        {
+            int? newValue = (int?)args[0];
+
+            if (newValue.HasValue)
+            {
+                if (newValue.Value < 1) return TextCommandResult.Error("Required clothes must be at least 1.");
+                ClothierRequiredUniqueClothes = newValue.Value;
+                pendingConfigSave = true;
+                return TextCommandResult.Success($"Clothier required unique clothes set to {ClothierRequiredUniqueClothes}.");
+            }
+
+            return TextCommandResult.Success($"Current clothier required: {ClothierRequiredUniqueClothes} unique clothes.");
+        }
+
+        /// <summary>
+        /// Handler for /trait clothierlevel command.
+        /// Sets the player's clothier progress (unique clothes count).
+        /// </summary>
+        private TextCommandResult OnTraitClothierLevelCommand(TextCommandCallingArgs args)
+        {
+            IServerPlayer player = args.Caller.Player as IServerPlayer;
+            if (player?.Entity == null) return TextCommandResult.Error("Player not found.");
+
+            int newLevel = (int)args[0];
+            if (newLevel < 0)
+                return TextCommandResult.Error("Level must be 0 or greater.");
+
+            var progress = ClothierProgress.GetOrAdd(player.PlayerUID, _ => new ClothierProgressData());
+
+            // Clear the existing clothes set
+            progress.UniqueClothesWorn.Clear();
+
+            // Add placeholder entries up to the desired level
+            for (int i = 0; i < newLevel; i++)
+            {
+                progress.UniqueClothesWorn.Add($"__placeholder_cloth_{i}");
+            }
+
+            // Set unlock status based on whether we've reached the required amount
+            progress.SewingKitUnlocked = newLevel >= ClothierRequiredUniqueClothes;
+
+            pendingClothierProgressSave = true;
+
+            // Apply the bonus (this updates WatchedAttributes and extraTraits)
+            ApplyClothierBonusStatic(player, progress);
+
+            string status = progress.SewingKitUnlocked ? "Sewing kit UNLOCKED!" : $"{ClothierRequiredUniqueClothes - newLevel} more needed to unlock.";
+            return TextCommandResult.Success($"Clothier level set to {newLevel}/{ClothierRequiredUniqueClothes}. {status}");
+        }
+
+        /// <summary>
+        /// Tick handler for clothing tracking.
+        /// </summary>
+        private void OnClothingTick(float dt)
+        {
+            if (ServerApi == null) return;
+
+            foreach (IServerPlayer player in ServerApi.World.AllOnlinePlayers)
+            {
+                if (player?.Entity == null) continue;
+                if (!player.Entity.Alive) continue;
+
+                string playerUid = player.PlayerUID;
+                var clothierProgress = ClothierProgress.GetOrAdd(playerUid, _ => new ClothierProgressData());
+
+                // Skip if already unlocked
+                if (clothierProgress.SewingKitUnlocked) continue;
+
+                // Get the player's currently equipped clothing using character inventory
+                var characterInventory = player.InventoryManager?.GetOwnInventory(GlobalConstants.characterInvClassName);
+                if (characterInventory != null)
+                {
+                    foreach (var slot in characterInventory)
+                    {
+                        if (slot?.Itemstack?.Collectible != null)
+                        {
+                            string itemCode = slot.Itemstack.Collectible.Code?.ToString();
+                            if (IsClothingItem(itemCode))
+                            {
+                                if (clothierProgress.UniqueClothesWorn.Add(itemCode))
+                                {
+                                    // New unique clothing worn
+                                    pendingClothierProgressSave = true;
+                                    ServerApi.Logger.Debug($"[SimpleImprovingTraits] Player {player.PlayerName} wore new clothing: {itemCode} ({clothierProgress.UniqueClothesWorn.Count}/{ClothierRequiredUniqueClothes})");
+
+                                    // Check if unlocked
+                                    if (clothierProgress.UniqueClothesWorn.Count >= ClothierRequiredUniqueClothes && !clothierProgress.SewingKitUnlocked)
+                                    {
+                                        clothierProgress.SewingKitUnlocked = true;
+                                        ApplyClothierBonusStatic(player, clothierProgress);
+                                        player.SendMessage(GlobalConstants.GeneralChatGroup,
+                                            Lang.Get("simpleimprovingtraits:message-clothier-unlocked"),
+                                            EnumChatType.Notification);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        /// <summary>
+        /// Check if an item code represents clothing (not armor).
+        /// </summary>
+        private static bool IsClothingItem(string itemCode)
+        {
+            if (string.IsNullOrEmpty(itemCode)) return false;
+            string lowerCode = itemCode.ToLowerInvariant();
+
+            // Clothing items include clothes, not armor
+            if (lowerCode.Contains("clothes-")) return true;
+            if (lowerCode.Contains("shirt-")) return true;
+            if (lowerCode.Contains("trousers-")) return true;
+            if (lowerCode.Contains("dress-")) return true;
+            if (lowerCode.Contains("hat-")) return true;
+            if (lowerCode.Contains("cape-")) return true;
+            if (lowerCode.Contains("cloak-")) return true;
+            if (lowerCode.Contains("jacket-")) return true;
+            if (lowerCode.Contains("vest-")) return true;
+            if (lowerCode.Contains("skirt-")) return true;
+            if (lowerCode.Contains("gloves-")) return true;
+            if (lowerCode.Contains("boots-")) return true;
+            if (lowerCode.Contains("shoes-")) return true;
+            if (lowerCode.Contains("headband-")) return true;
+            if (lowerCode.Contains("mask-")) return true;
+            if (lowerCode.Contains("scarf-")) return true;
+
+            return false;
+        }
+
+        /// <summary>
+        /// Apply clothier bonus (update WatchedAttributes for client sync).
+        /// Also adds "clothier" to extraTraits to unlock sewing kit recipes.
+        /// </summary>
+        private static void ApplyClothierBonusStatic(IServerPlayer player, ClothierProgressData progress)
+        {
+            if (player?.Entity == null) return;
+
+            player.Entity.WatchedAttributes.SetInt(WATCHED_CLOTHIER_COUNT, progress.UniqueClothesWorn.Count);
+            player.Entity.WatchedAttributes.SetBool(WATCHED_CLOTHIER_UNLOCKED, progress.SewingKitUnlocked);
+            player.Entity.WatchedAttributes.MarkPathDirty(WATCHED_CLOTHIER_COUNT);
+
+            // Update extraTraits to show Clothier trait if unlocked (for UI display)
+            UpdateExtraTraitStatic(player.Entity, CLOTHIER_TRAIT_CODE, progress.SewingKitUnlocked);
+
+            // IMPORTANT: Add "clothier" to extraTraits to unlock sewing kit recipes
+            // The game's recipe system checks extraTraits for dynamically granted traits
+            // that unlock recipes via requiresTrait (e.g., the sewing kit requires "clothier")
+            UpdateExtraTraitStatic(player.Entity, "clothier", progress.SewingKitUnlocked);
+        }
+
+        // =========================================================================
+        // MENDER TRAIT IMPLEMENTATION
+        // =========================================================================
+
+        /// <summary>
+        /// Handler for /trait mender command.
+        /// </summary>
+        private TextCommandResult OnTraitMenderCommand(TextCommandCallingArgs args)
+        {
+            IServerPlayer player = args.Caller.Player as IServerPlayer;
+            if (player?.Entity == null) return TextCommandResult.Error("Player not found.");
+
+            var progress = MenderProgress.GetOrAdd(player.PlayerUID, _ => new MenderProgressData());
+            int bonusPercent = CalculateMenderBonusPercent(progress.TotalCredits, player.Entity);
+            bool hasVanillaMender = PlayerHasVanillaMenderStatic(player.Entity);
+
+            var sb = new StringBuilder();
+            sb.AppendLine($"Mender progression: Level {progress.TotalCredits} / {MaxMenderPercent}");
+            sb.AppendLine($"Current bonus: +{bonusPercent}% armor/clothing durability");
+            if (hasVanillaMender)
+            {
+                sb.AppendLine($"Combined with Mender trait: +{VANILLA_MENDER_ARMOR_DURABILITY_BONUS + bonusPercent}% total");
+            }
+            if (progress.TotalCredits < MaxMenderPercent)
+            {
+                int remaining = progress.CurrentIncrementSize - progress.RepairsInIncrement;
+                sb.AppendLine($"Progress: {progress.RepairsInIncrement} / {progress.CurrentIncrementSize} repairs until next level");
+            }
+            else
+            {
+                sb.AppendLine("Maximum level reached!");
+            }
+
+            return TextCommandResult.Success(sb.ToString());
+        }
+
+        /// <summary>
+        /// Handler for /trait menderbase command.
+        /// </summary>
+        private TextCommandResult OnTraitMenderBaseCommand(TextCommandCallingArgs args)
+        {
+            int? newValue = (int?)args[0];
+
+            if (newValue.HasValue)
+            {
+                if (newValue.Value < 1) return TextCommandResult.Error("Base repairs must be at least 1.");
+                BaseMenderRepairsPerIncrement = newValue.Value;
+                pendingConfigSave = true;
+                return TextCommandResult.Success($"Mender base repairs set to {BaseMenderRepairsPerIncrement}.");
+            }
+
+            return TextCommandResult.Success($"Current mender base repairs: {BaseMenderRepairsPerIncrement}.");
+        }
+
+        /// <summary>
+        /// Handler for /trait menderlevel command.
+        /// </summary>
+        private TextCommandResult OnTraitMenderLevelCommand(TextCommandCallingArgs args)
+        {
+            IServerPlayer player = args.Caller.Player as IServerPlayer;
+            if (player?.Entity == null) return TextCommandResult.Error("Player not found.");
+
+            int newLevel = (int)args[0];
+            if (newLevel < 0 || newLevel > MaxMenderPercent)
+                return TextCommandResult.Error($"Level must be between 0 and {MaxMenderPercent}.");
+
+            var progress = MenderProgress.GetOrAdd(player.PlayerUID, _ => new MenderProgressData());
+            progress.TotalCredits = newLevel;
+            progress.RepairsInIncrement = 0;
+            progress.CurrentIncrementSize = BaseMenderRepairsPerIncrement;
+
+            // Recalculate increment size for this level
+            for (int i = 0; i < newLevel; i++)
+            {
+                progress.CurrentIncrementSize += MenderIncrementStep;
+            }
+
+            pendingMenderProgressSave = true;
+
+            int bonusPercent = ApplyMenderBonusStatic(player, progress.TotalCredits);
+            return TextCommandResult.Success($"Mender level set to {newLevel} (+{bonusPercent}% durability).");
+        }
+
+        /// <summary>
+        /// Handler for /trait mendermax command.
+        /// </summary>
+        private TextCommandResult OnTraitMenderMaxCommand(TextCommandCallingArgs args)
+        {
+            int? newValue = (int?)args[0];
+
+            if (newValue.HasValue)
+            {
+                if (newValue.Value < 1) return TextCommandResult.Error("Max percent must be at least 1.");
+                MaxMenderPercent = newValue.Value;
+                pendingConfigSave = true;
+                return TextCommandResult.Success($"Mender max bonus set to {MaxMenderPercent}%.");
+            }
+
+            return TextCommandResult.Success($"Current mender max bonus: {MaxMenderPercent}%.");
+        }
+
+        /// <summary>
+        /// Calculate the mender durability bonus as an integer percentage.
+        /// </summary>
+        public static int CalculateMenderBonusPercent(int credits, EntityPlayer entity)
+        {
+            bool hasVanillaMender = entity != null && PlayerHasVanillaMenderStatic(entity);
+            int vanillaBonus = hasVanillaMender ? VANILLA_MENDER_ARMOR_DURABILITY_BONUS : 0;
+            int earnableBonus = Math.Max(0, MaxMenderPercent - vanillaBonus);
+            return Math.Min(credits, earnableBonus);
+        }
+
+        /// <summary>
+        /// Check if player has vanilla Mender trait.
+        /// </summary>
+        private static bool PlayerHasVanillaMenderStatic(EntityPlayer entity)
+        {
+            string[] classTraits = entity.WatchedAttributes.GetStringArray("characterTraits", null);
+            if (classTraits != null)
+            {
+                foreach (string trait in classTraits)
+                {
+                    if (trait.Equals("mender", StringComparison.OrdinalIgnoreCase))
+                    {
+                        return true;
+                    }
+                }
+            }
+            return false;
+        }
+
+        /// <summary>
+        /// Apply mender bonus.
+        /// </summary>
+        private static int ApplyMenderBonusStatic(IServerPlayer player, int level)
+        {
+            if (player?.Entity == null) return 0;
+
+            bool hasVanillaMender = PlayerHasVanillaMenderStatic(player.Entity);
+            int bonusPercent = CalculateMenderBonusPercent(level, player.Entity);
+            float bonus = bonusPercent * 0.01f;
+
+            // Apply to armor durability loss stat (reduces durability damage taken)
+            player.Entity.Stats.Set("armorDurabilityLoss", MENDER_STAT_CODE, 1f - bonus, false);
+
+            // Sync to WatchedAttributes
+            player.Entity.WatchedAttributes.SetInt(WATCHED_MENDER_LEVEL, level);
+            player.Entity.WatchedAttributes.SetInt(WATCHED_MENDER_BONUS, bonusPercent);
+            player.Entity.WatchedAttributes.SetBool("sitHasVanillaMender", hasVanillaMender);
+            player.Entity.WatchedAttributes.MarkPathDirty(WATCHED_MENDER_LEVEL);
+
+            // Update extraTraits
+            UpdateExtraTraitStatic(player.Entity, MENDER_TRAIT_CODE, level > 0 && !hasVanillaMender);
+
+            return bonusPercent;
+        }
+
+        /// <summary>
+        /// Process a sewing kit repair (called externally or via Harmony patch).
+        /// </summary>
+        public static void ProcessMenderRepair(IServerPlayer player)
+        {
+            if (player?.Entity == null) return;
+
+            string playerUid = player.PlayerUID;
+            var progress = MenderProgress.GetOrAdd(playerUid, _ => new MenderProgressData());
+
+            // Skip if at max
+            if (progress.TotalCredits >= MaxMenderPercent) return;
+
+            int oldCredits = progress.TotalCredits;
+            progress.RepairsInIncrement++;
+
+            // Check if we've earned a credit
+            while (progress.RepairsInIncrement >= progress.CurrentIncrementSize && progress.TotalCredits < MaxMenderPercent)
+            {
+                progress.TotalCredits++;
+                progress.RepairsInIncrement -= progress.CurrentIncrementSize;
+                progress.CurrentIncrementSize += MenderIncrementStep;
+
+                ServerApi.Logger.Debug($"[SimpleImprovingTraits] Player {player.PlayerName} earned mender credit {progress.TotalCredits}");
+            }
+
+            pendingMenderProgressSave = true;
+
+            if (progress.TotalCredits > oldCredits)
+            {
+                int bonusPercent = ApplyMenderBonusStatic(player, progress.TotalCredits);
+                player.SendMessage(GlobalConstants.GeneralChatGroup,
+                    Lang.Get("simpleimprovingtraits:message-mender-level-up", progress.TotalCredits, bonusPercent),
+                    EnumChatType.Notification);
+            }
+        }
+
+        // =========================================================================
+        // PILFERER TRAIT IMPLEMENTATION
+        // =========================================================================
+
+        /// <summary>
+        /// Handler for /trait pilferer command.
+        /// </summary>
+        private TextCommandResult OnTraitPilfererCommand(TextCommandCallingArgs args)
+        {
+            IServerPlayer player = args.Caller.Player as IServerPlayer;
+            if (player?.Entity == null) return TextCommandResult.Error("Player not found.");
+
+            var progress = PilfererProgress.GetOrAdd(player.PlayerUID, _ => new PilfererProgressData());
+            int bonusPercent = CalculatePilfererBonusPercent(progress.TotalCredits, player.Entity);
+            bool hasVanillaPilferer = PlayerHasVanillaPilfererStatic(player.Entity);
+
+            var sb = new StringBuilder();
+            sb.AppendLine($"Pilferer progression: Level {progress.TotalCredits} / {MaxPilfererPercent}");
+            sb.AppendLine($"Current bonus: +{bonusPercent}% rusty gear, vessel contents, and collection chance");
+            if (hasVanillaPilferer)
+            {
+                sb.AppendLine($"(Has vanilla Pilferer trait)");
+            }
+            sb.AppendLine($"Chests opened: {progress.OpenedChestPositions.Count}");
+            if (progress.TotalCredits < MaxPilfererPercent)
+            {
+                int remaining = progress.CurrentIncrementSize - progress.PointsInIncrement;
+                sb.AppendLine($"Progress: {progress.PointsInIncrement} / {progress.CurrentIncrementSize} points until next level");
+            }
+            else
+            {
+                sb.AppendLine("Maximum level reached!");
+            }
+
+            return TextCommandResult.Success(sb.ToString());
+        }
+
+        /// <summary>
+        /// Handler for /trait pilfererbase command.
+        /// </summary>
+        private TextCommandResult OnTraitPilfererBaseCommand(TextCommandCallingArgs args)
+        {
+            int? newValue = (int?)args[0];
+
+            if (newValue.HasValue)
+            {
+                if (newValue.Value < 1) return TextCommandResult.Error("Base points must be at least 1.");
+                BasePilfererPointsPerIncrement = newValue.Value;
+                pendingConfigSave = true;
+                return TextCommandResult.Success($"Pilferer base points set to {BasePilfererPointsPerIncrement}.");
+            }
+
+            return TextCommandResult.Success($"Current pilferer base points: {BasePilfererPointsPerIncrement}.");
+        }
+
+        /// <summary>
+        /// Handler for /trait pilfererlevel command.
+        /// </summary>
+        private TextCommandResult OnTraitPilfererLevelCommand(TextCommandCallingArgs args)
+        {
+            IServerPlayer player = args.Caller.Player as IServerPlayer;
+            if (player?.Entity == null) return TextCommandResult.Error("Player not found.");
+
+            int newLevel = (int)args[0];
+            if (newLevel < 0 || newLevel > MaxPilfererPercent)
+                return TextCommandResult.Error($"Level must be between 0 and {MaxPilfererPercent}.");
+
+            var progress = PilfererProgress.GetOrAdd(player.PlayerUID, _ => new PilfererProgressData());
+            progress.TotalCredits = newLevel;
+            progress.PointsInIncrement = 0;
+            progress.CurrentIncrementSize = BasePilfererPointsPerIncrement;
+
+            for (int i = 0; i < newLevel; i++)
+            {
+                progress.CurrentIncrementSize += PilfererIncrementStep;
+            }
+
+            pendingPilfererProgressSave = true;
+
+            int bonusPercent = ApplyPilfererBonusStatic(player, progress.TotalCredits);
+            return TextCommandResult.Success($"Pilferer level set to {newLevel} (+{bonusPercent}% bonuses).");
+        }
+
+        /// <summary>
+        /// Handler for /trait pilferermax command.
+        /// </summary>
+        private TextCommandResult OnTraitPilfererMaxCommand(TextCommandCallingArgs args)
+        {
+            int? newValue = (int?)args[0];
+
+            if (newValue.HasValue)
+            {
+                if (newValue.Value < 1) return TextCommandResult.Error("Max percent must be at least 1.");
+                MaxPilfererPercent = newValue.Value;
+                pendingConfigSave = true;
+                return TextCommandResult.Success($"Pilferer max bonus set to {MaxPilfererPercent}%.");
+            }
+
+            return TextCommandResult.Success($"Current pilferer max bonus: {MaxPilfererPercent}%.");
+        }
+
+        /// <summary>
+        /// Calculate the pilferer bonus as an integer percentage.
+        /// </summary>
+        public static int CalculatePilfererBonusPercent(int credits, EntityPlayer entity)
+        {
+            bool hasVanillaPilferer = entity != null && PlayerHasVanillaPilfererStatic(entity);
+            int vanillaBonus = hasVanillaPilferer ? VANILLA_PILFERER_RUSTY_GEAR_BONUS : 0;
+            int earnableBonus = Math.Max(0, MaxPilfererPercent - vanillaBonus);
+            return Math.Min(credits, earnableBonus);
+        }
+
+        /// <summary>
+        /// Check if player has vanilla Pilferer trait.
+        /// </summary>
+        private static bool PlayerHasVanillaPilfererStatic(EntityPlayer entity)
+        {
+            string[] classTraits = entity.WatchedAttributes.GetStringArray("characterTraits", null);
+            if (classTraits != null)
+            {
+                foreach (string trait in classTraits)
+                {
+                    if (trait.Equals("pilferer", StringComparison.OrdinalIgnoreCase))
+                    {
+                        return true;
+                    }
+                }
+            }
+            return false;
+        }
+
+        /// <summary>
+        /// Apply pilferer bonus.
+        /// </summary>
+        private static int ApplyPilfererBonusStatic(IServerPlayer player, int level)
+        {
+            if (player?.Entity == null) return 0;
+
+            bool hasVanillaPilferer = PlayerHasVanillaPilfererStatic(player.Entity);
+            int bonusPercent = CalculatePilfererBonusPercent(level, player.Entity);
+            float bonus = bonusPercent * 0.01f;
+
+            // Apply to pilferer-related stats
+            player.Entity.Stats.Set("rustyGearDropRate", PILFERER_RUSTY_GEAR_STAT_CODE, 1f + bonus, false);
+            player.Entity.Stats.Set("vesselContentsDropRate", PILFERER_VESSEL_CONTENTS_STAT_CODE, 1f + bonus, false);
+            player.Entity.Stats.Set("wholeVesselLootChance", PILFERER_WHOLE_VESSEL_STAT_CODE, bonus, false);
+
+            // Sync to WatchedAttributes
+            player.Entity.WatchedAttributes.SetInt(WATCHED_PILFERER_LEVEL, level);
+            player.Entity.WatchedAttributes.SetInt(WATCHED_PILFERER_BONUS, bonusPercent);
+            player.Entity.WatchedAttributes.SetBool("sitHasVanillaPilferer", hasVanillaPilferer);
+            player.Entity.WatchedAttributes.MarkPathDirty(WATCHED_PILFERER_LEVEL);
+
+            // Update extraTraits
+            UpdateExtraTraitStatic(player.Entity, PILFERER_TRAIT_CODE, level > 0 && !hasVanillaPilferer);
+
+            return bonusPercent;
+        }
+
+        /// <summary>
+        /// Process vessel break (called from OnBlockBroken for vessels).
+        /// </summary>
+        public static void ProcessVesselBreak(IServerPlayer player)
+        {
+            if (player?.Entity == null) return;
+
+            string playerUid = player.PlayerUID;
+            var progress = PilfererProgress.GetOrAdd(playerUid, _ => new PilfererProgressData());
+
+            if (progress.TotalCredits >= MaxPilfererPercent) return;
+
+            int oldCredits = progress.TotalCredits;
+            progress.PointsInIncrement += PILFERER_VESSEL_POINTS;
+
+            while (progress.PointsInIncrement >= progress.CurrentIncrementSize && progress.TotalCredits < MaxPilfererPercent)
+            {
+                progress.TotalCredits++;
+                progress.PointsInIncrement -= progress.CurrentIncrementSize;
+                progress.CurrentIncrementSize += PilfererIncrementStep;
+
+                ServerApi.Logger.Debug($"[SimpleImprovingTraits] Player {player.PlayerName} earned pilferer credit {progress.TotalCredits} from vessel");
+            }
+
+            pendingPilfererProgressSave = true;
+
+            if (progress.TotalCredits > oldCredits)
+            {
+                int bonusPercent = ApplyPilfererBonusStatic(player, progress.TotalCredits);
+                player.SendMessage(GlobalConstants.GeneralChatGroup,
+                    Lang.Get("simpleimprovingtraits:message-pilferer-level-up", progress.TotalCredits, bonusPercent),
+                    EnumChatType.Notification);
+            }
+        }
+
+        /// <summary>
+        /// Process chest opening (called when player opens a chest for the first time).
+        /// </summary>
+        public static void ProcessChestOpening(IServerPlayer player, BlockPos pos)
+        {
+            if (player?.Entity == null || pos == null) return;
+
+            string playerUid = player.PlayerUID;
+            var progress = PilfererProgress.GetOrAdd(playerUid, _ => new PilfererProgressData());
+
+            if (progress.TotalCredits >= MaxPilfererPercent) return;
+
+            // Create a unique key for this chest position
+            string posKey = $"{pos.X},{pos.Y},{pos.Z}";
+            if (!progress.OpenedChestPositions.Add(posKey)) return; // Already opened this chest
+
+            int oldCredits = progress.TotalCredits;
+            progress.PointsInIncrement += PILFERER_CHEST_POINTS;
+
+            while (progress.PointsInIncrement >= progress.CurrentIncrementSize && progress.TotalCredits < MaxPilfererPercent)
+            {
+                progress.TotalCredits++;
+                progress.PointsInIncrement -= progress.CurrentIncrementSize;
+                progress.CurrentIncrementSize += PilfererIncrementStep;
+
+                ServerApi.Logger.Debug($"[SimpleImprovingTraits] Player {player.PlayerName} earned pilferer credit {progress.TotalCredits} from chest");
+            }
+
+            pendingPilfererProgressSave = true;
+
+            if (progress.TotalCredits > oldCredits)
+            {
+                int bonusPercent = ApplyPilfererBonusStatic(player, progress.TotalCredits);
+                player.SendMessage(GlobalConstants.GeneralChatGroup,
+                    Lang.Get("simpleimprovingtraits:message-pilferer-level-up", progress.TotalCredits, bonusPercent),
+                    EnumChatType.Notification);
+            }
+        }
+
+        // =========================================================================
+        // RESOURCEFUL TRAIT IMPLEMENTATION
+        // =========================================================================
+
+        /// <summary>
+        /// Handler for /trait resourceful command.
+        /// </summary>
+        private TextCommandResult OnTraitResourcefulCommand(TextCommandCallingArgs args)
+        {
+            IServerPlayer player = args.Caller.Player as IServerPlayer;
+            if (player?.Entity == null) return TextCommandResult.Error("Player not found.");
+
+            var progress = ResourcefulProgress.GetOrAdd(player.PlayerUID, _ => new ResourcefulProgressData());
+            int lootBonus = CalculateResourcefulLootBonusPercent(progress.TotalCredits, player.Entity);
+            int speedBonus = CalculateResourcefulSpeedBonusPercent(progress.TotalCredits, player.Entity);
+            bool hasVanillaResourceful = PlayerHasVanillaResourcefulStatic(player.Entity);
+
+            var sb = new StringBuilder();
+            sb.AppendLine($"Resourceful progression: Level {progress.TotalCredits} / {MaxResourcefulLootPercent}");
+            sb.AppendLine($"Current bonus: +{lootBonus}% animal loot, +{speedBonus}% harvesting speed");
+            if (hasVanillaResourceful)
+            {
+                sb.AppendLine($"(Has vanilla Resourceful trait)");
+            }
+            if (progress.TotalCredits < MaxResourcefulLootPercent)
+            {
+                int remaining = progress.CurrentIncrementSize - progress.AnimalsInIncrement;
+                sb.AppendLine($"Progress: {progress.AnimalsInIncrement} / {progress.CurrentIncrementSize} animals until next level");
+            }
+            else
+            {
+                sb.AppendLine("Maximum level reached!");
+            }
+
+            return TextCommandResult.Success(sb.ToString());
+        }
+
+        /// <summary>
+        /// Handler for /trait resourcefulbase command.
+        /// </summary>
+        private TextCommandResult OnTraitResourcefulBaseCommand(TextCommandCallingArgs args)
+        {
+            int? newValue = (int?)args[0];
+
+            if (newValue.HasValue)
+            {
+                if (newValue.Value < 1) return TextCommandResult.Error("Base animals must be at least 1.");
+                BaseResourcefulAnimalsPerIncrement = newValue.Value;
+                pendingConfigSave = true;
+                return TextCommandResult.Success($"Resourceful base animals set to {BaseResourcefulAnimalsPerIncrement}.");
+            }
+
+            return TextCommandResult.Success($"Current resourceful base animals: {BaseResourcefulAnimalsPerIncrement}.");
+        }
+
+        /// <summary>
+        /// Handler for /trait resourcefullevel command.
+        /// </summary>
+        private TextCommandResult OnTraitResourcefulLevelCommand(TextCommandCallingArgs args)
+        {
+            IServerPlayer player = args.Caller.Player as IServerPlayer;
+            if (player?.Entity == null) return TextCommandResult.Error("Player not found.");
+
+            int newLevel = (int)args[0];
+            if (newLevel < 0 || newLevel > MaxResourcefulLootPercent)
+                return TextCommandResult.Error($"Level must be between 0 and {MaxResourcefulLootPercent}.");
+
+            var progress = ResourcefulProgress.GetOrAdd(player.PlayerUID, _ => new ResourcefulProgressData());
+            progress.TotalCredits = newLevel;
+            progress.AnimalsInIncrement = 0;
+            progress.CurrentIncrementSize = BaseResourcefulAnimalsPerIncrement;
+
+            for (int i = 0; i < newLevel; i++)
+            {
+                progress.CurrentIncrementSize += ResourcefulIncrementStep;
+            }
+
+            pendingResourcefulProgressSave = true;
+
+            ApplyResourcefulBonusStatic(player, progress.TotalCredits);
+            int lootBonus = CalculateResourcefulLootBonusPercent(progress.TotalCredits, player.Entity);
+            return TextCommandResult.Success($"Resourceful level set to {newLevel} (+{lootBonus}% loot).");
+        }
+
+        /// <summary>
+        /// Handler for /trait resourcefulmax command.
+        /// </summary>
+        private TextCommandResult OnTraitResourcefulMaxCommand(TextCommandCallingArgs args)
+        {
+            int? newValue = (int?)args[0];
+
+            if (newValue.HasValue)
+            {
+                if (newValue.Value < 1) return TextCommandResult.Error("Max percent must be at least 1.");
+                MaxResourcefulLootPercent = newValue.Value;
+                pendingConfigSave = true;
+                return TextCommandResult.Success($"Resourceful max loot bonus set to {MaxResourcefulLootPercent}%.");
+            }
+
+            return TextCommandResult.Success($"Current resourceful max loot bonus: {MaxResourcefulLootPercent}%.");
+        }
+
+        /// <summary>
+        /// Calculate the resourceful loot bonus as an integer percentage.
+        /// </summary>
+        public static int CalculateResourcefulLootBonusPercent(int credits, EntityPlayer entity)
+        {
+            bool hasVanillaResourceful = entity != null && PlayerHasVanillaResourcefulStatic(entity);
+            int vanillaBonus = hasVanillaResourceful ? VANILLA_RESOURCEFUL_LOOT_BONUS : 0;
+            int earnableBonus = Math.Max(0, MaxResourcefulLootPercent - vanillaBonus);
+            return Math.Min(credits, earnableBonus);
+        }
+
+        /// <summary>
+        /// Calculate the resourceful speed bonus as an integer percentage.
+        /// </summary>
+        public static int CalculateResourcefulSpeedBonusPercent(int credits, EntityPlayer entity)
+        {
+            bool hasVanillaResourceful = entity != null && PlayerHasVanillaResourcefulStatic(entity);
+            int vanillaBonus = hasVanillaResourceful ? VANILLA_RESOURCEFUL_SPEED_BONUS : 0;
+            int earnableBonus = Math.Max(0, MaxResourcefulSpeedPercent - vanillaBonus);
+            return Math.Min(credits, earnableBonus);
+        }
+
+        /// <summary>
+        /// Check if player has vanilla Resourceful trait.
+        /// </summary>
+        private static bool PlayerHasVanillaResourcefulStatic(EntityPlayer entity)
+        {
+            string[] classTraits = entity.WatchedAttributes.GetStringArray("characterTraits", null);
+            if (classTraits != null)
+            {
+                foreach (string trait in classTraits)
+                {
+                    if (trait.Equals("resourceful", StringComparison.OrdinalIgnoreCase))
+                    {
+                        return true;
+                    }
+                }
+            }
+            return false;
+        }
+
+        /// <summary>
+        /// Apply resourceful bonus.
+        /// </summary>
+        private static void ApplyResourcefulBonusStatic(IServerPlayer player, int level)
+        {
+            if (player?.Entity == null) return;
+
+            bool hasVanillaResourceful = PlayerHasVanillaResourcefulStatic(player.Entity);
+            int lootBonusPercent = CalculateResourcefulLootBonusPercent(level, player.Entity);
+            int speedBonusPercent = CalculateResourcefulSpeedBonusPercent(level, player.Entity);
+
+            float lootBonus = lootBonusPercent * 0.01f;
+            float speedBonus = speedBonusPercent * 0.01f;
+
+            // Apply to resourceful-related stats
+            player.Entity.Stats.Set("animalLootDropRate", RESOURCEFUL_LOOT_STAT_CODE, 1f + lootBonus, false);
+            player.Entity.Stats.Set("animalHarvestingTime", RESOURCEFUL_SPEED_STAT_CODE, 1f - speedBonus, false);
+
+            // Sync to WatchedAttributes
+            player.Entity.WatchedAttributes.SetInt(WATCHED_RESOURCEFUL_LEVEL, level);
+            player.Entity.WatchedAttributes.SetInt(WATCHED_RESOURCEFUL_LOOT_BONUS, lootBonusPercent);
+            player.Entity.WatchedAttributes.SetInt(WATCHED_RESOURCEFUL_SPEED_BONUS, speedBonusPercent);
+            player.Entity.WatchedAttributes.SetBool("sitHasVanillaResourceful", hasVanillaResourceful);
+            player.Entity.WatchedAttributes.MarkPathDirty(WATCHED_RESOURCEFUL_LEVEL);
+
+            // Update extraTraits
+            UpdateExtraTraitStatic(player.Entity, RESOURCEFUL_TRAIT_CODE, level > 0 && !hasVanillaResourceful);
+        }
+
+        /// <summary>
+        /// Process animal harvested (called from Harmony patch when player harvests an animal).
+        /// </summary>
+        public static void ProcessAnimalHarvested(IServerPlayer player)
+        {
+            if (player?.Entity == null) return;
+
+            string playerUid = player.PlayerUID;
+            var progress = ResourcefulProgress.GetOrAdd(playerUid, _ => new ResourcefulProgressData());
+
+            if (progress.TotalCredits >= MaxResourcefulLootPercent) return;
+
+            int oldCredits = progress.TotalCredits;
+            progress.AnimalsInIncrement++;
+
+            while (progress.AnimalsInIncrement >= progress.CurrentIncrementSize && progress.TotalCredits < MaxResourcefulLootPercent)
+            {
+                progress.TotalCredits++;
+                progress.AnimalsInIncrement -= progress.CurrentIncrementSize;
+                progress.CurrentIncrementSize += ResourcefulIncrementStep;
+
+                ServerApi.Logger.Debug($"[SimpleImprovingTraits] Player {player.PlayerName} earned resourceful credit {progress.TotalCredits}");
+            }
+
+            pendingResourcefulProgressSave = true;
+
+            if (progress.TotalCredits > oldCredits)
+            {
+                ApplyResourcefulBonusStatic(player, progress.TotalCredits);
+                int lootBonus = CalculateResourcefulLootBonusPercent(progress.TotalCredits, player.Entity);
+                player.SendMessage(GlobalConstants.GeneralChatGroup,
+                    Lang.Get("simpleimprovingtraits:message-resourceful-level-up", progress.TotalCredits, lootBonus),
+                    EnumChatType.Notification);
+            }
+        }
+
+        // =========================================================================
+        // FORAGER TRAIT IMPLEMENTATION
+        // =========================================================================
+
+        /// <summary>
+        /// Handler for /trait forager command.
+        /// </summary>
+        private TextCommandResult OnTraitForagerCommand(TextCommandCallingArgs args)
+        {
+            IServerPlayer player = args.Caller.Player as IServerPlayer;
+            if (player?.Entity == null) return TextCommandResult.Error("Player not found.");
+
+            var progress = ForagerProgress.GetOrAdd(player.PlayerUID, _ => new ForagerProgressData());
+            int lootBonus = CalculateForagerLootBonusPercent(progress.TotalCredits, player.Entity);
+            int wildCropBonus = CalculateForagerWildCropBonusPercent(progress.TotalCredits, player.Entity);
+            bool hasVanillaForager = PlayerHasVanillaForagerStatic(player.Entity);
+
+            var sb = new StringBuilder();
+            sb.AppendLine($"Forager progression: Level {progress.TotalCredits} / {MaxForagerLootPercent}");
+            sb.AppendLine($"Current bonus: +{lootBonus}% foraging loot, +{wildCropBonus}% wild crop drops");
+            if (hasVanillaForager)
+            {
+                sb.AppendLine($"(Has vanilla Forager trait)");
+            }
+            if (progress.TotalCredits < MaxForagerLootPercent)
+            {
+                int remaining = progress.CurrentIncrementSize - progress.CropsInIncrement;
+                sb.AppendLine($"Progress: {progress.CropsInIncrement} / {progress.CurrentIncrementSize} crops until next level");
+            }
+            else
+            {
+                sb.AppendLine("Maximum level reached!");
+            }
+
+            return TextCommandResult.Success(sb.ToString());
+        }
+
+        /// <summary>
+        /// Handler for /trait foragerbase command.
+        /// </summary>
+        private TextCommandResult OnTraitForagerBaseCommand(TextCommandCallingArgs args)
+        {
+            int? newValue = (int?)args[0];
+
+            if (newValue.HasValue)
+            {
+                if (newValue.Value < 1) return TextCommandResult.Error("Base crops must be at least 1.");
+                BaseForagerCropsPerIncrement = newValue.Value;
+                pendingConfigSave = true;
+                return TextCommandResult.Success($"Forager base crops set to {BaseForagerCropsPerIncrement}.");
+            }
+
+            return TextCommandResult.Success($"Current forager base crops: {BaseForagerCropsPerIncrement}.");
+        }
+
+        /// <summary>
+        /// Handler for /trait foragerlevel command.
+        /// </summary>
+        private TextCommandResult OnTraitForagerLevelCommand(TextCommandCallingArgs args)
+        {
+            IServerPlayer player = args.Caller.Player as IServerPlayer;
+            if (player?.Entity == null) return TextCommandResult.Error("Player not found.");
+
+            int newLevel = (int)args[0];
+            if (newLevel < 0 || newLevel > MaxForagerLootPercent)
+                return TextCommandResult.Error($"Level must be between 0 and {MaxForagerLootPercent}.");
+
+            var progress = ForagerProgress.GetOrAdd(player.PlayerUID, _ => new ForagerProgressData());
+            progress.TotalCredits = newLevel;
+            progress.CropsInIncrement = 0;
+            progress.CurrentIncrementSize = BaseForagerCropsPerIncrement;
+
+            for (int i = 0; i < newLevel; i++)
+            {
+                progress.CurrentIncrementSize += ForagerIncrementStep;
+            }
+
+            pendingForagerProgressSave = true;
+
+            ApplyForagerBonusStatic(player, progress.TotalCredits);
+            int lootBonus = CalculateForagerLootBonusPercent(progress.TotalCredits, player.Entity);
+            return TextCommandResult.Success($"Forager level set to {newLevel} (+{lootBonus}% loot).");
+        }
+
+        /// <summary>
+        /// Handler for /trait foragermax command.
+        /// </summary>
+        private TextCommandResult OnTraitForagerMaxCommand(TextCommandCallingArgs args)
+        {
+            int? newValue = (int?)args[0];
+
+            if (newValue.HasValue)
+            {
+                if (newValue.Value < 1) return TextCommandResult.Error("Max percent must be at least 1.");
+                MaxForagerLootPercent = newValue.Value;
+                pendingConfigSave = true;
+                return TextCommandResult.Success($"Forager max loot bonus set to {MaxForagerLootPercent}%.");
+            }
+
+            return TextCommandResult.Success($"Current forager max loot bonus: {MaxForagerLootPercent}%.");
+        }
+
+        /// <summary>
+        /// Calculate the forager loot bonus as an integer percentage.
+        /// </summary>
+        public static int CalculateForagerLootBonusPercent(int credits, EntityPlayer entity)
+        {
+            bool hasVanillaForager = entity != null && PlayerHasVanillaForagerStatic(entity);
+            int vanillaBonus = hasVanillaForager ? VANILLA_FORAGER_LOOT_BONUS : 0;
+            int earnableBonus = Math.Max(0, MaxForagerLootPercent - vanillaBonus);
+            return Math.Min(credits, earnableBonus);
+        }
+
+        /// <summary>
+        /// Calculate the forager wild crop bonus as an integer percentage.
+        /// </summary>
+        public static int CalculateForagerWildCropBonusPercent(int credits, EntityPlayer entity)
+        {
+            bool hasVanillaForager = entity != null && PlayerHasVanillaForagerStatic(entity);
+            int vanillaBonus = hasVanillaForager ? VANILLA_FORAGER_WILD_CROP_BONUS : 0;
+            int earnableBonus = Math.Max(0, MaxForagerWildCropPercent - vanillaBonus);
+            return Math.Min(credits, earnableBonus);
+        }
+
+        /// <summary>
+        /// Check if player has vanilla Forager trait.
+        /// </summary>
+        private static bool PlayerHasVanillaForagerStatic(EntityPlayer entity)
+        {
+            string[] classTraits = entity.WatchedAttributes.GetStringArray("characterTraits", null);
+            if (classTraits != null)
+            {
+                foreach (string trait in classTraits)
+                {
+                    if (trait.Equals("forager", StringComparison.OrdinalIgnoreCase))
+                    {
+                        return true;
+                    }
+                }
+            }
+            return false;
+        }
+
+        /// <summary>
+        /// Apply forager bonus.
+        /// </summary>
+        private static void ApplyForagerBonusStatic(IServerPlayer player, int level)
+        {
+            if (player?.Entity == null) return;
+
+            bool hasVanillaForager = PlayerHasVanillaForagerStatic(player.Entity);
+            int lootBonusPercent = CalculateForagerLootBonusPercent(level, player.Entity);
+            int wildCropBonusPercent = CalculateForagerWildCropBonusPercent(level, player.Entity);
+
+            float lootBonus = lootBonusPercent * 0.01f;
+            float wildCropBonus = wildCropBonusPercent * 0.01f;
+
+            // Apply to forager-related stats
+            player.Entity.Stats.Set("forageDropRate", FORAGER_LOOT_STAT_CODE, 1f + lootBonus, false);
+            player.Entity.Stats.Set("wildCropDropRate", FORAGER_WILD_CROP_STAT_CODE, 1f + wildCropBonus, false);
+
+            // Sync to WatchedAttributes
+            player.Entity.WatchedAttributes.SetInt(WATCHED_FORAGER_LEVEL, level);
+            player.Entity.WatchedAttributes.SetInt(WATCHED_FORAGER_LOOT_BONUS, lootBonusPercent);
+            player.Entity.WatchedAttributes.SetInt(WATCHED_FORAGER_WILD_CROP_BONUS, wildCropBonusPercent);
+            player.Entity.WatchedAttributes.SetBool("sitHasVanillaForager", hasVanillaForager);
+            player.Entity.WatchedAttributes.MarkPathDirty(WATCHED_FORAGER_LEVEL);
+
+            // Update extraTraits
+            UpdateExtraTraitStatic(player.Entity, FORAGER_TRAIT_CODE, level > 0 && !hasVanillaForager);
+        }
+
+        /// <summary>
+        /// Process wild crop broken (for Forager progression).
+        /// </summary>
+        public static void ProcessWildCropBroken(IServerPlayer player)
+        {
+            if (player?.Entity == null) return;
+
+            string playerUid = player.PlayerUID;
+            var progress = ForagerProgress.GetOrAdd(playerUid, _ => new ForagerProgressData());
+
+            if (progress.TotalCredits >= MaxForagerLootPercent) return;
+
+            int oldCredits = progress.TotalCredits;
+            progress.CropsInIncrement++;
+
+            while (progress.CropsInIncrement >= progress.CurrentIncrementSize && progress.TotalCredits < MaxForagerLootPercent)
+            {
+                progress.TotalCredits++;
+                progress.CropsInIncrement -= progress.CurrentIncrementSize;
+                progress.CurrentIncrementSize += ForagerIncrementStep;
+
+                ServerApi.Logger.Debug($"[SimpleImprovingTraits] Player {player.PlayerName} earned forager credit {progress.TotalCredits}");
+            }
+
+            pendingForagerProgressSave = true;
+
+            if (progress.TotalCredits > oldCredits)
+            {
+                ApplyForagerBonusStatic(player, progress.TotalCredits);
+                int lootBonus = CalculateForagerLootBonusPercent(progress.TotalCredits, player.Entity);
+                player.SendMessage(GlobalConstants.GeneralChatGroup,
+                    Lang.Get("simpleimprovingtraits:message-forager-level-up", progress.TotalCredits, lootBonus),
+                    EnumChatType.Notification);
+            }
+        }
+
+        /// <summary>
+        /// Check if a block is a wild crop (for Forager progression).
+        /// </summary>
+        private static bool IsWildCropBlock(int blockId)
+        {
+            if (ServerApi == null) return false;
+
+            Block block = ServerApi.World.GetBlock(blockId);
+            if (block == null) return false;
+
+            string blockCode = block.Code?.ToString()?.ToLowerInvariant();
+            if (string.IsNullOrEmpty(blockCode)) return false;
+
+            // Wild crops include various forageable plants
+            if (blockCode.Contains("tallgrass")) return true;
+            if (blockCode.Contains("flower-")) return true;
+            if (blockCode.Contains("mushroom-")) return true;
+            if (blockCode.Contains("berry-")) return true;
+            if (blockCode.Contains("cattail")) return true;
+            if (blockCode.Contains("fern")) return true;
+            if (blockCode.Contains("wildvine")) return true;
+            if (blockCode.Contains("reeds")) return true;
+            if (blockCode.Contains("waterlily")) return true;
+            if (blockCode.Contains("seaweed")) return true;
+            if (blockCode.Contains("crop-") && blockCode.Contains("wild")) return true;
+
+            return false;
+        }
+
+        /// <summary>
+        /// Check if a block is a vessel (for Pilferer progression).
+        /// </summary>
+        private static bool IsVesselBlock(int blockId)
+        {
+            if (ServerApi == null) return false;
+
+            Block block = ServerApi.World.GetBlock(blockId);
+            if (block == null) return false;
+
+            string blockCode = block.Code?.ToString()?.ToLowerInvariant();
+            if (string.IsNullOrEmpty(blockCode)) return false;
+
+            if (blockCode.Contains("vessel-")) return true;
+            if (blockCode.Contains("storagevessel")) return true;
+            if (blockCode.Contains("crackedvessel")) return true;
+            if (blockCode.Contains("urn-")) return true;
+
+            return false;
+        }
+
+        // =========================================================================
+        // PERSISTENCE METHODS FOR NEW TRAITS
+        // =========================================================================
+
+        /// <summary>
+        /// Persist clothier progress to world save data.
+        /// </summary>
+        public static void PersistClothierProgress()
+        {
+            if (ServerApi == null) return;
+
+            lock (persistLock)
+            {
+                if (ClothierProgress.IsEmpty)
+                {
+                    ServerApi.WorldManager.SaveGame.StoreData(CLOTHIER_PROGRESS_SAVE_KEY, null);
+                    return;
+                }
+
+                try
+                {
+                    var snapshot = ClothierProgress.ToArray();
+                    byte[] data;
+                    using (var ms = new MemoryStream())
+                    {
+                        using (var writer = new BinaryWriter(ms))
+                        {
+                            writer.Write((byte)0x43); // 'C'
+                            writer.Write((byte)0x4C); // 'L'
+                            writer.Write((byte)0x54); // 'T'
+                            writer.Write((byte)1);    // Version 1
+
+                            writer.Write(snapshot.Length);
+                            foreach (var playerKvp in snapshot)
+                            {
+                                writer.Write(playerKvp.Key);
+                                var progress = playerKvp.Value;
+                                writer.Write(progress.SewingKitUnlocked);
+                                writer.Write(progress.UniqueClothesWorn.Count);
+                                foreach (string clothCode in progress.UniqueClothesWorn)
+                                {
+                                    writer.Write(clothCode);
+                                }
+                            }
+                        }
+                        data = ms.ToArray();
+                    }
+
+                    ServerApi.WorldManager.SaveGame.StoreData(CLOTHIER_PROGRESS_SAVE_KEY, data);
+                }
+                catch (Exception ex)
+                {
+                    ServerApi.Logger.Error($"[SimpleImprovingTraits] Failed to persist clothier progress: {ex.Message}");
+                }
+            }
+        }
+
+        /// <summary>
+        /// Load clothier progress from world save data.
+        /// </summary>
+        private void LoadClothierProgress()
+        {
+            try
+            {
+                byte[] data = ServerApi.WorldManager.SaveGame.GetData(CLOTHIER_PROGRESS_SAVE_KEY);
+                if (data == null || data.Length == 0)
+                {
+                    ServerApi.Logger.Debug("[SimpleImprovingTraits] No clothier progress data found");
+                    return;
+                }
+
+                using (var ms = new MemoryStream(data))
+                {
+                    using (var reader = new BinaryReader(ms))
+                    {
+                        byte magic1 = reader.ReadByte();
+                        byte magic2 = reader.ReadByte();
+                        byte magic3 = reader.ReadByte();
+                        byte version = reader.ReadByte();
+
+                        if (magic1 != 0x43 || magic2 != 0x4C || magic3 != 0x54)
+                        {
+                            ServerApi.Logger.Warning("[SimpleImprovingTraits] Invalid clothier progress magic bytes");
+                            return;
+                        }
+
+                        int playerCount = reader.ReadInt32();
+                        for (int i = 0; i < playerCount; i++)
+                        {
+                            string playerUid = reader.ReadString();
+                            var progress = new ClothierProgressData();
+                            progress.SewingKitUnlocked = reader.ReadBoolean();
+                            int clothCount = reader.ReadInt32();
+                            for (int j = 0; j < clothCount; j++)
+                            {
+                                progress.UniqueClothesWorn.Add(reader.ReadString());
+                            }
+                            ClothierProgress[playerUid] = progress;
+                        }
+                    }
+                }
+
+                ServerApi.Logger.Notification($"[SimpleImprovingTraits] Loaded clothier progress for {ClothierProgress.Count} players");
+            }
+            catch (Exception ex)
+            {
+                ClothierProgress.Clear();
+                ServerApi.Logger.Error($"[SimpleImprovingTraits] Failed to load clothier progress: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// Persist mender progress to world save data.
+        /// </summary>
+        public static void PersistMenderProgress()
+        {
+            if (ServerApi == null) return;
+
+            lock (persistLock)
+            {
+                if (MenderProgress.IsEmpty)
+                {
+                    ServerApi.WorldManager.SaveGame.StoreData(MENDER_PROGRESS_SAVE_KEY, null);
+                    return;
+                }
+
+                try
+                {
+                    var snapshot = MenderProgress.ToArray();
+                    byte[] data;
+                    using (var ms = new MemoryStream())
+                    {
+                        using (var writer = new BinaryWriter(ms))
+                        {
+                            writer.Write((byte)0x4D); // 'M'
+                            writer.Write((byte)0x4E); // 'N'
+                            writer.Write((byte)0x44); // 'D'
+                            writer.Write((byte)1);    // Version 1
+
+                            writer.Write(snapshot.Length);
+                            foreach (var playerKvp in snapshot)
+                            {
+                                writer.Write(playerKvp.Key);
+                                var progress = playerKvp.Value;
+                                writer.Write(progress.TotalCredits);
+                                writer.Write(progress.RepairsInIncrement);
+                                writer.Write(progress.CurrentIncrementSize);
+                            }
+                        }
+                        data = ms.ToArray();
+                    }
+
+                    ServerApi.WorldManager.SaveGame.StoreData(MENDER_PROGRESS_SAVE_KEY, data);
+                }
+                catch (Exception ex)
+                {
+                    ServerApi.Logger.Error($"[SimpleImprovingTraits] Failed to persist mender progress: {ex.Message}");
+                }
+            }
+        }
+
+        /// <summary>
+        /// Load mender progress from world save data.
+        /// </summary>
+        private void LoadMenderProgress()
+        {
+            try
+            {
+                byte[] data = ServerApi.WorldManager.SaveGame.GetData(MENDER_PROGRESS_SAVE_KEY);
+                if (data == null || data.Length == 0)
+                {
+                    ServerApi.Logger.Debug("[SimpleImprovingTraits] No mender progress data found");
+                    return;
+                }
+
+                using (var ms = new MemoryStream(data))
+                {
+                    using (var reader = new BinaryReader(ms))
+                    {
+                        byte magic1 = reader.ReadByte();
+                        byte magic2 = reader.ReadByte();
+                        byte magic3 = reader.ReadByte();
+                        byte version = reader.ReadByte();
+
+                        if (magic1 != 0x4D || magic2 != 0x4E || magic3 != 0x44)
+                        {
+                            ServerApi.Logger.Warning("[SimpleImprovingTraits] Invalid mender progress magic bytes");
+                            return;
+                        }
+
+                        int playerCount = reader.ReadInt32();
+                        for (int i = 0; i < playerCount; i++)
+                        {
+                            string playerUid = reader.ReadString();
+                            var progress = new MenderProgressData
+                            {
+                                TotalCredits = reader.ReadInt32(),
+                                RepairsInIncrement = reader.ReadInt32(),
+                                CurrentIncrementSize = reader.ReadInt32()
+                            };
+                            MenderProgress[playerUid] = progress;
+                        }
+                    }
+                }
+
+                ServerApi.Logger.Notification($"[SimpleImprovingTraits] Loaded mender progress for {MenderProgress.Count} players");
+            }
+            catch (Exception ex)
+            {
+                MenderProgress.Clear();
+                ServerApi.Logger.Error($"[SimpleImprovingTraits] Failed to load mender progress: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// Persist pilferer progress to world save data.
+        /// </summary>
+        public static void PersistPilfererProgress()
+        {
+            if (ServerApi == null) return;
+
+            lock (persistLock)
+            {
+                if (PilfererProgress.IsEmpty)
+                {
+                    ServerApi.WorldManager.SaveGame.StoreData(PILFERER_PROGRESS_SAVE_KEY, null);
+                    return;
+                }
+
+                try
+                {
+                    var snapshot = PilfererProgress.ToArray();
+                    byte[] data;
+                    using (var ms = new MemoryStream())
+                    {
+                        using (var writer = new BinaryWriter(ms))
+                        {
+                            writer.Write((byte)0x50); // 'P'
+                            writer.Write((byte)0x4C); // 'L'
+                            writer.Write((byte)0x46); // 'F'
+                            writer.Write((byte)1);    // Version 1
+
+                            writer.Write(snapshot.Length);
+                            foreach (var playerKvp in snapshot)
+                            {
+                                writer.Write(playerKvp.Key);
+                                var progress = playerKvp.Value;
+                                writer.Write(progress.TotalCredits);
+                                writer.Write(progress.PointsInIncrement);
+                                writer.Write(progress.CurrentIncrementSize);
+                                writer.Write(progress.OpenedChestPositions.Count);
+                                foreach (string posKey in progress.OpenedChestPositions)
+                                {
+                                    writer.Write(posKey);
+                                }
+                            }
+                        }
+                        data = ms.ToArray();
+                    }
+
+                    ServerApi.WorldManager.SaveGame.StoreData(PILFERER_PROGRESS_SAVE_KEY, data);
+                }
+                catch (Exception ex)
+                {
+                    ServerApi.Logger.Error($"[SimpleImprovingTraits] Failed to persist pilferer progress: {ex.Message}");
+                }
+            }
+        }
+
+        /// <summary>
+        /// Load pilferer progress from world save data.
+        /// </summary>
+        private void LoadPilfererProgress()
+        {
+            try
+            {
+                byte[] data = ServerApi.WorldManager.SaveGame.GetData(PILFERER_PROGRESS_SAVE_KEY);
+                if (data == null || data.Length == 0)
+                {
+                    ServerApi.Logger.Debug("[SimpleImprovingTraits] No pilferer progress data found");
+                    return;
+                }
+
+                using (var ms = new MemoryStream(data))
+                {
+                    using (var reader = new BinaryReader(ms))
+                    {
+                        byte magic1 = reader.ReadByte();
+                        byte magic2 = reader.ReadByte();
+                        byte magic3 = reader.ReadByte();
+                        byte version = reader.ReadByte();
+
+                        if (magic1 != 0x50 || magic2 != 0x4C || magic3 != 0x46)
+                        {
+                            ServerApi.Logger.Warning("[SimpleImprovingTraits] Invalid pilferer progress magic bytes");
+                            return;
+                        }
+
+                        int playerCount = reader.ReadInt32();
+                        for (int i = 0; i < playerCount; i++)
+                        {
+                            string playerUid = reader.ReadString();
+                            var progress = new PilfererProgressData
+                            {
+                                TotalCredits = reader.ReadInt32(),
+                                PointsInIncrement = reader.ReadInt32(),
+                                CurrentIncrementSize = reader.ReadInt32()
+                            };
+                            int chestCount = reader.ReadInt32();
+                            for (int j = 0; j < chestCount; j++)
+                            {
+                                progress.OpenedChestPositions.Add(reader.ReadString());
+                            }
+                            PilfererProgress[playerUid] = progress;
+                        }
+                    }
+                }
+
+                ServerApi.Logger.Notification($"[SimpleImprovingTraits] Loaded pilferer progress for {PilfererProgress.Count} players");
+            }
+            catch (Exception ex)
+            {
+                PilfererProgress.Clear();
+                ServerApi.Logger.Error($"[SimpleImprovingTraits] Failed to load pilferer progress: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// Persist resourceful progress to world save data.
+        /// </summary>
+        public static void PersistResourcefulProgress()
+        {
+            if (ServerApi == null) return;
+
+            lock (persistLock)
+            {
+                if (ResourcefulProgress.IsEmpty)
+                {
+                    ServerApi.WorldManager.SaveGame.StoreData(RESOURCEFUL_PROGRESS_SAVE_KEY, null);
+                    return;
+                }
+
+                try
+                {
+                    var snapshot = ResourcefulProgress.ToArray();
+                    byte[] data;
+                    using (var ms = new MemoryStream())
+                    {
+                        using (var writer = new BinaryWriter(ms))
+                        {
+                            writer.Write((byte)0x52); // 'R'
+                            writer.Write((byte)0x53); // 'S'
+                            writer.Write((byte)0x46); // 'F'
+                            writer.Write((byte)1);    // Version 1
+
+                            writer.Write(snapshot.Length);
+                            foreach (var playerKvp in snapshot)
+                            {
+                                writer.Write(playerKvp.Key);
+                                var progress = playerKvp.Value;
+                                writer.Write(progress.TotalCredits);
+                                writer.Write(progress.AnimalsInIncrement);
+                                writer.Write(progress.CurrentIncrementSize);
+                            }
+                        }
+                        data = ms.ToArray();
+                    }
+
+                    ServerApi.WorldManager.SaveGame.StoreData(RESOURCEFUL_PROGRESS_SAVE_KEY, data);
+                }
+                catch (Exception ex)
+                {
+                    ServerApi.Logger.Error($"[SimpleImprovingTraits] Failed to persist resourceful progress: {ex.Message}");
+                }
+            }
+        }
+
+        /// <summary>
+        /// Load resourceful progress from world save data.
+        /// </summary>
+        private void LoadResourcefulProgress()
+        {
+            try
+            {
+                byte[] data = ServerApi.WorldManager.SaveGame.GetData(RESOURCEFUL_PROGRESS_SAVE_KEY);
+                if (data == null || data.Length == 0)
+                {
+                    ServerApi.Logger.Debug("[SimpleImprovingTraits] No resourceful progress data found");
+                    return;
+                }
+
+                using (var ms = new MemoryStream(data))
+                {
+                    using (var reader = new BinaryReader(ms))
+                    {
+                        byte magic1 = reader.ReadByte();
+                        byte magic2 = reader.ReadByte();
+                        byte magic3 = reader.ReadByte();
+                        byte version = reader.ReadByte();
+
+                        if (magic1 != 0x52 || magic2 != 0x53 || magic3 != 0x46)
+                        {
+                            ServerApi.Logger.Warning("[SimpleImprovingTraits] Invalid resourceful progress magic bytes");
+                            return;
+                        }
+
+                        int playerCount = reader.ReadInt32();
+                        for (int i = 0; i < playerCount; i++)
+                        {
+                            string playerUid = reader.ReadString();
+                            var progress = new ResourcefulProgressData
+                            {
+                                TotalCredits = reader.ReadInt32(),
+                                AnimalsInIncrement = reader.ReadInt32(),
+                                CurrentIncrementSize = reader.ReadInt32()
+                            };
+                            ResourcefulProgress[playerUid] = progress;
+                        }
+                    }
+                }
+
+                ServerApi.Logger.Notification($"[SimpleImprovingTraits] Loaded resourceful progress for {ResourcefulProgress.Count} players");
+            }
+            catch (Exception ex)
+            {
+                ResourcefulProgress.Clear();
+                ServerApi.Logger.Error($"[SimpleImprovingTraits] Failed to load resourceful progress: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// Persist forager progress to world save data.
+        /// </summary>
+        public static void PersistForagerProgress()
+        {
+            if (ServerApi == null) return;
+
+            lock (persistLock)
+            {
+                if (ForagerProgress.IsEmpty)
+                {
+                    ServerApi.WorldManager.SaveGame.StoreData(FORAGER_PROGRESS_SAVE_KEY, null);
+                    return;
+                }
+
+                try
+                {
+                    var snapshot = ForagerProgress.ToArray();
+                    byte[] data;
+                    using (var ms = new MemoryStream())
+                    {
+                        using (var writer = new BinaryWriter(ms))
+                        {
+                            writer.Write((byte)0x46); // 'F'
+                            writer.Write((byte)0x52); // 'R'
+                            writer.Write((byte)0x47); // 'G'
+                            writer.Write((byte)1);    // Version 1
+
+                            writer.Write(snapshot.Length);
+                            foreach (var playerKvp in snapshot)
+                            {
+                                writer.Write(playerKvp.Key);
+                                var progress = playerKvp.Value;
+                                writer.Write(progress.TotalCredits);
+                                writer.Write(progress.CropsInIncrement);
+                                writer.Write(progress.CurrentIncrementSize);
+                            }
+                        }
+                        data = ms.ToArray();
+                    }
+
+                    ServerApi.WorldManager.SaveGame.StoreData(FORAGER_PROGRESS_SAVE_KEY, data);
+                }
+                catch (Exception ex)
+                {
+                    ServerApi.Logger.Error($"[SimpleImprovingTraits] Failed to persist forager progress: {ex.Message}");
+                }
+            }
+        }
+
+        /// <summary>
+        /// Load forager progress from world save data.
+        /// </summary>
+        private void LoadForagerProgress()
+        {
+            try
+            {
+                byte[] data = ServerApi.WorldManager.SaveGame.GetData(FORAGER_PROGRESS_SAVE_KEY);
+                if (data == null || data.Length == 0)
+                {
+                    ServerApi.Logger.Debug("[SimpleImprovingTraits] No forager progress data found");
+                    return;
+                }
+
+                using (var ms = new MemoryStream(data))
+                {
+                    using (var reader = new BinaryReader(ms))
+                    {
+                        byte magic1 = reader.ReadByte();
+                        byte magic2 = reader.ReadByte();
+                        byte magic3 = reader.ReadByte();
+                        byte version = reader.ReadByte();
+
+                        if (magic1 != 0x46 || magic2 != 0x52 || magic3 != 0x47)
+                        {
+                            ServerApi.Logger.Warning("[SimpleImprovingTraits] Invalid forager progress magic bytes");
+                            return;
+                        }
+
+                        int playerCount = reader.ReadInt32();
+                        for (int i = 0; i < playerCount; i++)
+                        {
+                            string playerUid = reader.ReadString();
+                            var progress = new ForagerProgressData
+                            {
+                                TotalCredits = reader.ReadInt32(),
+                                CropsInIncrement = reader.ReadInt32(),
+                                CurrentIncrementSize = reader.ReadInt32()
+                            };
+                            ForagerProgress[playerUid] = progress;
+                        }
+                    }
+                }
+
+                ServerApi.Logger.Notification($"[SimpleImprovingTraits] Loaded forager progress for {ForagerProgress.Count} players");
+            }
+            catch (Exception ex)
+            {
+                ForagerProgress.Clear();
+                ServerApi.Logger.Error($"[SimpleImprovingTraits] Failed to load forager progress: {ex.Message}");
+            }
+        }
     }
 
     /// <summary>
@@ -5240,6 +7434,194 @@ namespace SimpleImprovingTraits
                             __result = __result + "\n" + Lang.Get("simpleimprovingtraits:trait-soldier-armor-dynamic", totalDurabilityBonus, totalWalkSpeedBonus);
                         }
                     }
+                }
+            }
+
+            // Process Clothier trait (unlocked by wearing 20 unique clothes)
+            bool clothierUnlocked = eplr.WatchedAttributes.GetBool(SimpleImprovingTraitsModSystem.WATCHED_CLOTHIER_UNLOCKED, false);
+            if (clothierUnlocked)
+            {
+                string plainClothierTraitName = Lang.Get("simpleimprovingtraits:trait-sitclothiermastery");
+                string dynamicClothierTrait = Lang.Get("simpleimprovingtraits:trait-clothier-dynamic");
+
+                // Re-check hasNoTraits after armor processing
+                hasNoTraits = string.IsNullOrEmpty(__result) ||
+                              __result.Trim() == noTraitsMsg.Trim() ||
+                              __result == noTraitsMsg;
+
+                if (hasNoTraits)
+                {
+                    __result = dynamicClothierTrait;
+                }
+                else if (__result.Contains(plainClothierTraitName))
+                {
+                    __result = __result.Replace(plainClothierTraitName, dynamicClothierTrait);
+                }
+                else
+                {
+                    __result = __result + "\n" + dynamicClothierTrait;
+                }
+            }
+
+            // Process Mender trait (improves armor/clothing durability)
+            int menderLevel = eplr.WatchedAttributes.GetInt(SimpleImprovingTraitsModSystem.WATCHED_MENDER_LEVEL, 0);
+            int menderBonus = eplr.WatchedAttributes.GetInt(SimpleImprovingTraitsModSystem.WATCHED_MENDER_BONUS, 0);
+            bool hasVanillaMender = eplr.WatchedAttributes.GetBool("sitHasVanillaMender", false);
+            if (menderLevel > 0)
+            {
+                string plainMenderTraitName = Lang.Get("simpleimprovingtraits:trait-sitmendermastery");
+                string dynamicMenderTrait = Lang.Get("simpleimprovingtraits:trait-mender-dynamic", menderBonus);
+
+                // Re-check hasNoTraits
+                hasNoTraits = string.IsNullOrEmpty(__result) ||
+                              __result.Trim() == noTraitsMsg.Trim() ||
+                              __result == noTraitsMsg;
+
+                if (hasVanillaMender)
+                {
+                    // Class already has Mender trait - update the existing durability value
+                    int combinedBonus = SimpleImprovingTraitsModSystem.VANILLA_MENDER_ARMOR_DURABILITY_BONUS + menderBonus;
+                    __result = __result.Replace(
+                        $"+{SimpleImprovingTraitsModSystem.VANILLA_MENDER_ARMOR_DURABILITY_BONUS}% armor durability",
+                        $"+{combinedBonus}% armor durability");
+                }
+                else if (hasNoTraits)
+                {
+                    __result = dynamicMenderTrait;
+                }
+                else if (__result.Contains(plainMenderTraitName))
+                {
+                    __result = __result.Replace(plainMenderTraitName, dynamicMenderTrait);
+                }
+                else
+                {
+                    __result = __result + "\n" + dynamicMenderTrait;
+                }
+            }
+
+            // Process Pilferer trait (improves rusty gear, vessel loot, vessel collection)
+            int pilfererLevel = eplr.WatchedAttributes.GetInt(SimpleImprovingTraitsModSystem.WATCHED_PILFERER_LEVEL, 0);
+            int pilfererBonus = eplr.WatchedAttributes.GetInt(SimpleImprovingTraitsModSystem.WATCHED_PILFERER_BONUS, 0);
+            bool hasVanillaPilferer = eplr.WatchedAttributes.GetBool("sitHasVanillaPilferer", false);
+            if (pilfererLevel > 0)
+            {
+                string plainPilfererTraitName = Lang.Get("simpleimprovingtraits:trait-sitpilferermastery");
+                string dynamicPilfererTrait = Lang.Get("simpleimprovingtraits:trait-pilferer-dynamic", pilfererBonus);
+
+                // Re-check hasNoTraits
+                hasNoTraits = string.IsNullOrEmpty(__result) ||
+                              __result.Trim() == noTraitsMsg.Trim() ||
+                              __result == noTraitsMsg;
+
+                if (hasVanillaPilferer)
+                {
+                    // Class already has Pilferer trait - update the existing values
+                    int combinedRusty = SimpleImprovingTraitsModSystem.VANILLA_PILFERER_RUSTY_GEAR_BONUS + pilfererBonus;
+                    int combinedVessel = SimpleImprovingTraitsModSystem.VANILLA_PILFERER_VESSEL_CONTENTS_BONUS + pilfererBonus;
+                    int combinedCollection = SimpleImprovingTraitsModSystem.VANILLA_PILFERER_WHOLE_VESSEL_BONUS + pilfererBonus;
+                    __result = __result.Replace(
+                        $"+{SimpleImprovingTraitsModSystem.VANILLA_PILFERER_RUSTY_GEAR_BONUS}% rusty gear",
+                        $"+{combinedRusty}% rusty gear");
+                    __result = __result.Replace(
+                        $"+{SimpleImprovingTraitsModSystem.VANILLA_PILFERER_VESSEL_CONTENTS_BONUS}% cracked vessel drops",
+                        $"+{combinedVessel}% cracked vessel drops");
+                    __result = __result.Replace(
+                        $"+{SimpleImprovingTraitsModSystem.VANILLA_PILFERER_WHOLE_VESSEL_BONUS}% vessel collection",
+                        $"+{combinedCollection}% vessel collection");
+                }
+                else if (hasNoTraits)
+                {
+                    __result = dynamicPilfererTrait;
+                }
+                else if (__result.Contains(plainPilfererTraitName))
+                {
+                    __result = __result.Replace(plainPilfererTraitName, dynamicPilfererTrait);
+                }
+                else
+                {
+                    __result = __result + "\n" + dynamicPilfererTrait;
+                }
+            }
+
+            // Process Resourceful trait (improves animal loot and harvesting speed)
+            int resourcefulLevel = eplr.WatchedAttributes.GetInt(SimpleImprovingTraitsModSystem.WATCHED_RESOURCEFUL_LEVEL, 0);
+            int resourcefulLootBonus = eplr.WatchedAttributes.GetInt(SimpleImprovingTraitsModSystem.WATCHED_RESOURCEFUL_LOOT_BONUS, 0);
+            int resourcefulSpeedBonus = eplr.WatchedAttributes.GetInt(SimpleImprovingTraitsModSystem.WATCHED_RESOURCEFUL_SPEED_BONUS, 0);
+            bool hasVanillaResourceful = eplr.WatchedAttributes.GetBool("sitHasVanillaResourceful", false);
+            if (resourcefulLevel > 0)
+            {
+                string plainResourcefulTraitName = Lang.Get("simpleimprovingtraits:trait-sitresourcefulmastery");
+                string dynamicResourcefulTrait = Lang.Get("simpleimprovingtraits:trait-resourceful-dynamic", resourcefulLootBonus, resourcefulSpeedBonus);
+
+                // Re-check hasNoTraits
+                hasNoTraits = string.IsNullOrEmpty(__result) ||
+                              __result.Trim() == noTraitsMsg.Trim() ||
+                              __result == noTraitsMsg;
+
+                if (hasVanillaResourceful)
+                {
+                    // Class already has Resourceful trait - update the existing values
+                    int combinedLoot = SimpleImprovingTraitsModSystem.VANILLA_RESOURCEFUL_LOOT_BONUS + resourcefulLootBonus;
+                    int combinedSpeed = SimpleImprovingTraitsModSystem.VANILLA_RESOURCEFUL_SPEED_BONUS + resourcefulSpeedBonus;
+                    __result = __result.Replace(
+                        $"+{SimpleImprovingTraitsModSystem.VANILLA_RESOURCEFUL_LOOT_BONUS}% animal loot",
+                        $"+{combinedLoot}% animal loot");
+                    __result = __result.Replace(
+                        $"+{SimpleImprovingTraitsModSystem.VANILLA_RESOURCEFUL_SPEED_BONUS}% harvesting speed",
+                        $"+{combinedSpeed}% harvesting speed");
+                }
+                else if (hasNoTraits)
+                {
+                    __result = dynamicResourcefulTrait;
+                }
+                else if (__result.Contains(plainResourcefulTraitName))
+                {
+                    __result = __result.Replace(plainResourcefulTraitName, dynamicResourcefulTrait);
+                }
+                else
+                {
+                    __result = __result + "\n" + dynamicResourcefulTrait;
+                }
+            }
+
+            // Process Forager trait (improves foraging loot and wild crop drops)
+            int foragerLevel = eplr.WatchedAttributes.GetInt(SimpleImprovingTraitsModSystem.WATCHED_FORAGER_LEVEL, 0);
+            int foragerLootBonus = eplr.WatchedAttributes.GetInt(SimpleImprovingTraitsModSystem.WATCHED_FORAGER_LOOT_BONUS, 0);
+            int foragerWildCropBonus = eplr.WatchedAttributes.GetInt(SimpleImprovingTraitsModSystem.WATCHED_FORAGER_WILD_CROP_BONUS, 0);
+            bool hasVanillaForager = eplr.WatchedAttributes.GetBool("sitHasVanillaForager", false);
+            if (foragerLevel > 0)
+            {
+                string plainForagerTraitName = Lang.Get("simpleimprovingtraits:trait-sitforagermastery");
+                string dynamicForagerTrait = Lang.Get("simpleimprovingtraits:trait-forager-dynamic", foragerLootBonus, foragerWildCropBonus);
+
+                // Re-check hasNoTraits
+                hasNoTraits = string.IsNullOrEmpty(__result) ||
+                              __result.Trim() == noTraitsMsg.Trim() ||
+                              __result == noTraitsMsg;
+
+                if (hasVanillaForager)
+                {
+                    // Class already has Forager trait - update the existing values
+                    int combinedLoot = SimpleImprovingTraitsModSystem.VANILLA_FORAGER_LOOT_BONUS + foragerLootBonus;
+                    int combinedWildCrop = SimpleImprovingTraitsModSystem.VANILLA_FORAGER_WILD_CROP_BONUS + foragerWildCropBonus;
+                    __result = __result.Replace(
+                        $"+{SimpleImprovingTraitsModSystem.VANILLA_FORAGER_LOOT_BONUS}% foraging loot",
+                        $"+{combinedLoot}% foraging loot");
+                    __result = __result.Replace(
+                        $"+{SimpleImprovingTraitsModSystem.VANILLA_FORAGER_WILD_CROP_BONUS}% wild crop drops",
+                        $"+{combinedWildCrop}% wild crop drops");
+                }
+                else if (hasNoTraits)
+                {
+                    __result = dynamicForagerTrait;
+                }
+                else if (__result.Contains(plainForagerTraitName))
+                {
+                    __result = __result.Replace(plainForagerTraitName, dynamicForagerTrait);
+                }
+                else
+                {
+                    __result = __result + "\n" + dynamicForagerTrait;
                 }
             }
 

@@ -3278,8 +3278,8 @@ namespace SimpleImprovingTraits
         {
             if (byPlayer?.Entity == null) return;
 
-            // Check for Forager progression (wild crops)
-            if (IsWildCropBlock(oldblockId))
+            // Check for Forager progression (wild crops on dirt, not farmland)
+            if (IsWildCropBlock(oldblockId, blockSel?.Position))
             {
                 ProcessWildCropBroken(byPlayer);
             }
@@ -3767,10 +3767,132 @@ namespace SimpleImprovingTraits
 
                 serverHarmony.Patch(receiveDamageMethod, postfix: new HarmonyMethod(postfixMethod));
                 api.Logger.Notification("[SimpleImprovingTraits] Successfully patched Entity.ReceiveDamage for melee tracking");
+
+                // Patch EntityBehaviorHarvestable.SetHarvested for Resourceful trait (animal harvesting)
+                PatchAnimalHarvesting(api);
+
+                // Patch CollectibleObject.OnHeldInteractStep for Mender trait (sewing kit repairs)
+                PatchSewingKitRepairs(api);
             }
             catch (Exception ex)
             {
                 api.Logger.Error($"[SimpleImprovingTraits] Failed to apply server Harmony patches: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// Patch EntityBehaviorHarvestable.SetHarvested to track animal harvesting for Resourceful trait.
+        /// </summary>
+        private void PatchAnimalHarvesting(ICoreServerAPI api)
+        {
+            try
+            {
+                // Find the EntityBehaviorHarvestable type in VSSurvivalMod
+                var harvestableType = AccessTools.TypeByName("Vintagestory.GameContent.EntityBehaviorHarvestable");
+                if (harvestableType == null)
+                {
+                    api.Logger.Warning("[SimpleImprovingTraits] Could not find EntityBehaviorHarvestable type");
+                    return;
+                }
+
+                // Find the SetHarvested method
+                var setHarvestedMethod = AccessTools.Method(harvestableType, "SetHarvested");
+                if (setHarvestedMethod == null)
+                {
+                    // Try alternative method name
+                    setHarvestedMethod = AccessTools.Method(harvestableType, "SetHarvestedBy");
+                }
+                if (setHarvestedMethod == null)
+                {
+                    api.Logger.Warning("[SimpleImprovingTraits] Could not find SetHarvested or SetHarvestedBy method in EntityBehaviorHarvestable");
+                    return;
+                }
+
+                // Get our postfix method
+                var postfixMethod = AccessTools.Method(typeof(HarvestingPatches),
+                    nameof(HarvestingPatches.SetHarvested_Postfix));
+
+                serverHarmony.Patch(setHarvestedMethod, postfix: new HarmonyMethod(postfixMethod));
+                api.Logger.Notification("[SimpleImprovingTraits] Successfully patched EntityBehaviorHarvestable.SetHarvested for Resourceful trait");
+            }
+            catch (Exception ex)
+            {
+                api.Logger.Warning($"[SimpleImprovingTraits] Failed to patch EntityBehaviorHarvestable: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// Patch methods to track sewing kit repairs for Mender trait.
+        /// Tries multiple approaches since sewing kit repairs can happen in different ways.
+        /// </summary>
+        private void PatchSewingKitRepairs(ICoreServerAPI api)
+        {
+            bool anyPatchSucceeded = false;
+
+            // Approach 1: Try to patch ItemSewingKit directly if it exists
+            try
+            {
+                var sewingKitType = AccessTools.TypeByName("Vintagestory.GameContent.ItemSewingKit");
+                if (sewingKitType != null)
+                {
+                    // Try to find repair-related methods
+                    var onHeldInteractStopMethod = AccessTools.Method(sewingKitType, "OnHeldInteractStop");
+                    if (onHeldInteractStopMethod != null)
+                    {
+                        var postfixMethod = AccessTools.Method(typeof(SewingKitPatches),
+                            nameof(SewingKitPatches.OnHeldInteractStop_Postfix));
+                        serverHarmony.Patch(onHeldInteractStopMethod, postfix: new HarmonyMethod(postfixMethod));
+                        api.Logger.Notification("[SimpleImprovingTraits] Successfully patched ItemSewingKit.OnHeldInteractStop for Mender trait");
+                        anyPatchSucceeded = true;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                api.Logger.Debug($"[SimpleImprovingTraits] ItemSewingKit patch attempt: {ex.Message}");
+            }
+
+            // Approach 2: Patch CollectibleObject.OnModifiedInInventorySlot to detect durability restoration
+            try
+            {
+                var collectibleType = typeof(CollectibleObject);
+                var onModifiedMethod = AccessTools.Method(collectibleType, "OnModifiedInInventorySlot");
+                if (onModifiedMethod != null)
+                {
+                    var postfixMethod = AccessTools.Method(typeof(SewingKitPatches),
+                        nameof(SewingKitPatches.OnModifiedInInventorySlot_Postfix));
+                    serverHarmony.Patch(onModifiedMethod, postfix: new HarmonyMethod(postfixMethod));
+                    api.Logger.Notification("[SimpleImprovingTraits] Successfully patched CollectibleObject.OnModifiedInInventorySlot for Mender trait");
+                    anyPatchSucceeded = true;
+                }
+            }
+            catch (Exception ex)
+            {
+                api.Logger.Debug($"[SimpleImprovingTraits] OnModifiedInInventorySlot patch attempt: {ex.Message}");
+            }
+
+            // Approach 3: Patch OnHeldInteractStep as fallback
+            try
+            {
+                var collectibleType = typeof(CollectibleObject);
+                var onHeldInteractStepMethod = AccessTools.Method(collectibleType, "OnHeldInteractStep");
+                if (onHeldInteractStepMethod != null)
+                {
+                    var postfixMethod = AccessTools.Method(typeof(SewingKitPatches),
+                        nameof(SewingKitPatches.OnHeldInteractStep_Postfix));
+                    serverHarmony.Patch(onHeldInteractStepMethod, postfix: new HarmonyMethod(postfixMethod));
+                    api.Logger.Notification("[SimpleImprovingTraits] Successfully patched CollectibleObject.OnHeldInteractStep for Mender trait");
+                    anyPatchSucceeded = true;
+                }
+            }
+            catch (Exception ex)
+            {
+                api.Logger.Debug($"[SimpleImprovingTraits] OnHeldInteractStep patch attempt: {ex.Message}");
+            }
+
+            if (!anyPatchSucceeded)
+            {
+                api.Logger.Warning("[SimpleImprovingTraits] Could not patch any method for Mender trait (sewing kit repairs)");
             }
         }
 
@@ -6203,8 +6325,10 @@ namespace SimpleImprovingTraits
             float speedBonus = speedBonusPercent * 0.01f;
 
             // Apply to resourceful-related stats
+            // animalLootDropRate is additive (1.0 + bonus means +X% more loot)
             player.Entity.Stats.Set("animalLootDropRate", RESOURCEFUL_LOOT_STAT_CODE, 1f + lootBonus, false);
-            player.Entity.Stats.Set("animalHarvestingTime", RESOURCEFUL_SPEED_STAT_CODE, 1f - speedBonus, false);
+            // harvestingSpeedMul is multiplicative (1.25 = 25% faster harvesting)
+            player.Entity.Stats.Set("harvestingSpeedMul", RESOURCEFUL_SPEED_STAT_CODE, 1f + speedBonus, false);
 
             // Sync to WatchedAttributes
             player.Entity.WatchedAttributes.SetInt(WATCHED_RESOURCEFUL_LEVEL, level);
@@ -6463,8 +6587,10 @@ namespace SimpleImprovingTraits
 
         /// <summary>
         /// Check if a block is a wild crop (for Forager progression).
+        /// Wild crops are crops like turnip, flax, spelt that grow on dirt/soil (not farmland).
+        /// Berry bushes are NOT counted since they can be replanted infinitely.
         /// </summary>
-        private static bool IsWildCropBlock(int blockId)
+        private static bool IsWildCropBlock(int blockId, BlockPos blockPos)
         {
             if (ServerApi == null) return false;
 
@@ -6474,18 +6600,60 @@ namespace SimpleImprovingTraits
             string blockCode = block.Code?.ToString()?.ToLowerInvariant();
             if (string.IsNullOrEmpty(blockCode)) return false;
 
-            // Wild crops include various forageable plants
+            // Check if it's a crop block (like crop-turnip-4, crop-flax-7, etc.)
+            if (blockCode.Contains("crop-"))
+            {
+                // Skip if it's explicitly a "wild" block - those are already wild
+                // Regular crops on farmland should NOT count
+                // Wild crops spawn on dirt/soil naturally
+
+                // Check if the block below is farmland - if so, this is a planted crop, not wild
+                if (blockPos != null)
+                {
+                    BlockPos belowPos = blockPos.DownCopy();
+                    Block blockBelow = ServerApi.World.BlockAccessor.GetBlock(belowPos);
+                    string belowCode = blockBelow?.Code?.ToString()?.ToLowerInvariant() ?? "";
+
+                    // If on farmland, this is a cultivated crop - don't count it
+                    if (belowCode.Contains("farmland"))
+                    {
+                        return false;
+                    }
+
+                    // If on dirt, soil, grass, or other natural blocks - this is a wild crop
+                    if (belowCode.Contains("soil") || belowCode.Contains("dirt") ||
+                        belowCode.Contains("grass") || belowCode.Contains("forest") ||
+                        belowCode.Contains("peat") || belowCode.Contains("sand") ||
+                        belowCode.Contains("gravel") || belowCode.Contains("clay"))
+                    {
+                        return true;
+                    }
+                }
+
+                // If position is null or block below couldn't be checked,
+                // only count if explicitly marked as "wild"
+                if (blockCode.Contains("wild"))
+                {
+                    return true;
+                }
+
+                return false;
+            }
+
+            // Forageable ground plants (NOT berry bushes - those are replantable)
+            // Note: Tallgrass, flowers, mushrooms are one-time finds in the wild
             if (blockCode.Contains("tallgrass")) return true;
             if (blockCode.Contains("flower-")) return true;
             if (blockCode.Contains("mushroom-")) return true;
-            if (blockCode.Contains("berry-")) return true;
             if (blockCode.Contains("cattail")) return true;
             if (blockCode.Contains("fern")) return true;
-            if (blockCode.Contains("wildvine")) return true;
             if (blockCode.Contains("reeds")) return true;
             if (blockCode.Contains("waterlily")) return true;
             if (blockCode.Contains("seaweed")) return true;
-            if (blockCode.Contains("crop-") && blockCode.Contains("wild")) return true;
+
+            // NOT included:
+            // - berry- (berry bushes can be replanted)
+            // - wildvine (can be replanted/grown)
 
             return false;
         }
@@ -7789,6 +7957,222 @@ namespace SimpleImprovingTraits
                 {
                     SimpleImprovingTraitsModSystem.ProcessArmorDamageBlocked(player, damageBlocked, itemCode);
                 }
+            }
+        }
+    }
+
+    /// <summary>
+    /// Server-side Harmony patches for animal harvesting (Resourceful trait).
+    /// </summary>
+    public static class HarvestingPatches
+    {
+        /// <summary>
+        /// Postfix for EntityBehaviorHarvestable.SetHarvested - tracks when player harvests an animal.
+        /// </summary>
+        public static void SetHarvested_Postfix(object __instance, IPlayer byPlayer)
+        {
+            try
+            {
+                // Only process on server
+                if (byPlayer == null) return;
+
+                var serverPlayer = byPlayer as IServerPlayer;
+                if (serverPlayer == null) return;
+
+                // Call the Resourceful progression handler
+                SimpleImprovingTraitsModSystem.ProcessAnimalHarvested(serverPlayer);
+            }
+            catch (Exception ex)
+            {
+                // Silently ignore errors to avoid breaking the game
+                System.Diagnostics.Debug.WriteLine($"[SimpleImprovingTraits] Error in SetHarvested_Postfix: {ex.Message}");
+            }
+        }
+    }
+
+    /// <summary>
+    /// Server-side Harmony patches for sewing kit repairs (Mender trait).
+    /// </summary>
+    public static class SewingKitPatches
+    {
+        // Track which players have recently had repairs to avoid duplicate credits
+        private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, long> LastRepairTime =
+            new System.Collections.Concurrent.ConcurrentDictionary<string, long>();
+
+        // Track item durabilities to detect repairs
+        private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, int> ItemDurabilities =
+            new System.Collections.Concurrent.ConcurrentDictionary<string, int>();
+
+        // Minimum interval between repair credits (in ticks, 20 ticks = 1 second)
+        private const long MIN_REPAIR_INTERVAL = 10;
+
+        /// <summary>
+        /// Postfix for ItemSewingKit.OnHeldInteractStop - tracks when sewing kit repair completes.
+        /// </summary>
+        public static void OnHeldInteractStop_Postfix(
+            object __instance,
+            float secondsUsed,
+            ItemSlot slot,
+            EntityAgent byEntity,
+            BlockSelection blockSel,
+            EntitySelection entitySel)
+        {
+            try
+            {
+                // Only count if the repair actually happened (at least some time was spent)
+                if (secondsUsed < 0.25f) return;
+
+                // Get the player
+                var playerEntity = byEntity as EntityPlayer;
+                if (playerEntity == null) return;
+
+                var player = playerEntity.Player as IServerPlayer;
+                if (player == null) return;
+
+                // Check cooldown to avoid duplicate credits
+                long currentTick = playerEntity.World?.ElapsedMilliseconds ?? 0;
+                string playerKey = player.PlayerUID;
+
+                if (LastRepairTime.TryGetValue(playerKey, out long lastTime) &&
+                    currentTick - lastTime < MIN_REPAIR_INTERVAL * 50)
+                {
+                    return; // Too soon since last credit
+                }
+
+                // Update last repair time and give credit
+                LastRepairTime[playerKey] = currentTick;
+                SimpleImprovingTraitsModSystem.ProcessMenderRepair(player);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[SimpleImprovingTraits] Error in OnHeldInteractStop_Postfix: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// Postfix for CollectibleObject.OnModifiedInInventorySlot - tracks durability changes.
+        /// When a wearable item's durability increases, it's likely due to a repair.
+        /// </summary>
+        public static void OnModifiedInInventorySlot_Postfix(
+            CollectibleObject __instance,
+            IWorldAccessor world,
+            ItemSlot slot,
+            ItemStack extractedStack)
+        {
+            try
+            {
+                // Only process server-side
+                if (world?.Side != EnumAppSide.Server) return;
+
+                // Only track wearable items (clothing and armor)
+                string itemCode = __instance.Code?.ToString();
+                if (itemCode == null) return;
+                if (!itemCode.Contains("clothes-") && !itemCode.Contains("armor-")) return;
+
+                // Get the current durability
+                var currentStack = slot?.Itemstack;
+                if (currentStack == null) return;
+
+                int currentDurability = currentStack.Collectible?.GetRemainingDurability(currentStack) ?? 0;
+                int maxDurability = currentStack.Collectible?.GetMaxDurability(currentStack) ?? 1;
+
+                // Create a unique key for this item instance
+                string itemKey = $"{slot.Inventory?.InventoryID}_{slot.Inventory?.GetSlotId(slot)}_{itemCode}";
+
+                // Check if durability increased (repair happened)
+                if (ItemDurabilities.TryGetValue(itemKey, out int previousDurability))
+                {
+                    if (currentDurability > previousDurability)
+                    {
+                        // Durability increased - repair happened!
+                        // Try to find which player owns this inventory
+                        var inventory = slot.Inventory;
+                        if (inventory != null)
+                        {
+                            // Find player by checking if this is a character or backpack inventory
+                            foreach (var player in world.AllOnlinePlayers)
+                            {
+                                var serverPlayer = player as IServerPlayer;
+                                if (serverPlayer?.InventoryManager == null) continue;
+
+                                // Check if this inventory belongs to this player
+                                var characterInv = serverPlayer.InventoryManager.GetOwnInventory(GlobalConstants.characterInvClassName);
+                                var backpackInv = serverPlayer.InventoryManager.GetOwnInventory(GlobalConstants.backpackInvClassName);
+
+                                if (characterInv == inventory || backpackInv == inventory)
+                                {
+                                    // Check cooldown
+                                    long currentTick = world.ElapsedMilliseconds;
+                                    string playerKey = serverPlayer.PlayerUID + "_mod";
+
+                                    if (!LastRepairTime.TryGetValue(playerKey, out long lastTime) ||
+                                        currentTick - lastTime >= MIN_REPAIR_INTERVAL * 50)
+                                    {
+                                        LastRepairTime[playerKey] = currentTick;
+                                        SimpleImprovingTraitsModSystem.ProcessMenderRepair(serverPlayer);
+                                    }
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Update tracked durability
+                ItemDurabilities[itemKey] = currentDurability;
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[SimpleImprovingTraits] Error in OnModifiedInInventorySlot_Postfix: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// Postfix for CollectibleObject.OnHeldInteractStep - tracks sewing kit repairs during use.
+        /// This is a fallback for when the sewing kit is used in a world interaction context.
+        /// </summary>
+        public static void OnHeldInteractStep_Postfix(
+            CollectibleObject __instance,
+            float secondsUsed,
+            ItemSlot slot,
+            EntityAgent byEntity,
+            BlockSelection blockSel,
+            EntitySelection entitySel,
+            bool __result)
+        {
+            try
+            {
+                // Only process if interaction is still ongoing
+                if (!__result) return;
+
+                // Check if this is a sewing kit
+                string itemCode = __instance.Code?.ToString();
+                if (itemCode == null || !itemCode.Contains("sewingkit")) return;
+
+                // Get the player
+                var playerEntity = byEntity as EntityPlayer;
+                if (playerEntity == null) return;
+
+                var player = playerEntity.Player as IServerPlayer;
+                if (player == null) return;
+
+                // Give credit every 0.5 seconds of repair (rate-limited)
+                long currentTick = playerEntity.World?.ElapsedMilliseconds ?? 0;
+                string playerKey = player.PlayerUID + "_step";
+
+                if (LastRepairTime.TryGetValue(playerKey, out long lastTime) &&
+                    currentTick - lastTime < 500) // 500ms cooldown
+                {
+                    return;
+                }
+
+                // Update last repair time and give credit
+                LastRepairTime[playerKey] = currentTick;
+                SimpleImprovingTraitsModSystem.ProcessMenderRepair(player);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[SimpleImprovingTraits] Error in OnHeldInteractStep_Postfix: {ex.Message}");
             }
         }
     }

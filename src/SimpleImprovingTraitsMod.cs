@@ -171,6 +171,133 @@ namespace SimpleImprovingTraits
     }
 
     /// <summary>
+    /// Tracks progress for a specific armor piece (for armor progression).
+    /// Each armor piece tracks time worn, damage blocked, repairs, and first-equip bonus.
+    /// </summary>
+    public class ArmorPieceProgressData
+    {
+        /// <summary>Seconds worn in this armor piece toward next time credit.</summary>
+        public float SecondsWornInIncrement { get; set; }
+
+        /// <summary>Seconds needed for next time credit with this armor piece (86400, 172800, etc.).</summary>
+        public int CurrentTimeIncrementSize { get; set; }
+
+        /// <summary>Time credits earned with this armor piece.</summary>
+        public int TimeCredits { get; set; }
+
+        /// <summary>Damage blocked toward next damage credit with this armor piece.</summary>
+        public float DamageBlockedInIncrement { get; set; }
+
+        /// <summary>Damage needed for next damage credit with this armor piece (100, 200, etc.).</summary>
+        public int CurrentDamageIncrementSize { get; set; }
+
+        /// <summary>Damage credits earned with this armor piece.</summary>
+        public int DamageCredits { get; set; }
+
+        /// <summary>Repairs done toward next repair credit with this armor piece.</summary>
+        public int RepairsInIncrement { get; set; }
+
+        /// <summary>Repairs needed for next repair credit with this armor piece (1, 2, etc.).</summary>
+        public int CurrentRepairIncrementSize { get; set; }
+
+        /// <summary>Repair credits earned with this armor piece.</summary>
+        public int RepairCredits { get; set; }
+
+        /// <summary>Whether this armor piece has been equipped before (for first-equip bonus).</summary>
+        public bool HasBeenEquipped { get; set; }
+
+        public ArmorPieceProgressData()
+        {
+            SecondsWornInIncrement = 0;
+            CurrentTimeIncrementSize = 86400; // 1 day in seconds
+            TimeCredits = 0;
+            DamageBlockedInIncrement = 0;
+            CurrentDamageIncrementSize = 100; // Base damage for first credit
+            DamageCredits = 0;
+            RepairsInIncrement = 0;
+            CurrentRepairIncrementSize = 1; // Base repairs for first credit
+            RepairCredits = 0;
+            HasBeenEquipped = false;
+        }
+
+        public ArmorPieceProgressData Clone()
+        {
+            return new ArmorPieceProgressData
+            {
+                SecondsWornInIncrement = this.SecondsWornInIncrement,
+                CurrentTimeIncrementSize = this.CurrentTimeIncrementSize,
+                TimeCredits = this.TimeCredits,
+                DamageBlockedInIncrement = this.DamageBlockedInIncrement,
+                CurrentDamageIncrementSize = this.CurrentDamageIncrementSize,
+                DamageCredits = this.DamageCredits,
+                RepairsInIncrement = this.RepairsInIncrement,
+                CurrentRepairIncrementSize = this.CurrentRepairIncrementSize,
+                RepairCredits = this.RepairCredits,
+                HasBeenEquipped = this.HasBeenEquipped
+            };
+        }
+    }
+
+    /// <summary>
+    /// Data structure for tracking armor progression with per-piece progress.
+    /// Armor XP comes from: first-equip bonus, time worn, damage blocked, and repairs.
+    /// </summary>
+    public class ArmorProgressData
+    {
+        /// <summary>Total durability credits earned (each = 1% armor durability bonus).</summary>
+        public int TotalDurabilityCredits { get; set; }
+
+        /// <summary>Total walk speed penalty reduction credits earned (each = 1% reduction).</summary>
+        public int TotalWalkSpeedCredits { get; set; }
+
+        /// <summary>Per-armor piece progress tracking. Key is armor code (e.g., "game:armor-body-plate-iron").</summary>
+        public Dictionary<string, ArmorPieceProgressData> ArmorProgress { get; set; }
+
+        public ArmorProgressData()
+        {
+            TotalDurabilityCredits = 0;
+            TotalWalkSpeedCredits = 0;
+            ArmorProgress = new Dictionary<string, ArmorPieceProgressData>();
+        }
+
+        /// <summary>
+        /// Get or create progress data for a specific armor piece.
+        /// </summary>
+        public ArmorPieceProgressData GetArmorProgress(string armorCode)
+        {
+            if (!ArmorProgress.TryGetValue(armorCode, out var progress))
+            {
+                progress = new ArmorPieceProgressData
+                {
+                    CurrentTimeIncrementSize = SimpleImprovingTraitsModSystem.BaseSecondsInArmorPerIncrement,
+                    CurrentDamageIncrementSize = SimpleImprovingTraitsModSystem.BaseDamageBlockedPerIncrement,
+                    CurrentRepairIncrementSize = SimpleImprovingTraitsModSystem.BaseRepairsPerIncrement
+                };
+                ArmorProgress[armorCode] = progress;
+            }
+            return progress;
+        }
+
+        /// <summary>
+        /// Create a copy of this data.
+        /// </summary>
+        public ArmorProgressData Clone()
+        {
+            var clone = new ArmorProgressData
+            {
+                TotalDurabilityCredits = this.TotalDurabilityCredits,
+                TotalWalkSpeedCredits = this.TotalWalkSpeedCredits,
+                ArmorProgress = new Dictionary<string, ArmorPieceProgressData>()
+            };
+            foreach (var kvp in this.ArmorProgress)
+            {
+                clone.ArmorProgress[kvp.Key] = kvp.Value.Clone();
+            }
+            return clone;
+        }
+    }
+
+    /// <summary>
     /// Tracks progress for a specific weapon type (for melee damage progression).
     /// Each weapon type has its own increment counter that persists.
     /// </summary>
@@ -491,6 +618,58 @@ namespace SimpleImprovingTraits
         // Flag to indicate pending hunger progress save
         private static volatile bool pendingHungerProgressSave = false;
 
+        // Keys for armor progression system
+        public const string ARMOR_DURABILITY_STAT_CODE = "sitArmorDurabilityBonus";
+        public const string ARMOR_WALKSPEED_STAT_CODE = "sitArmorWalkSpeedBonus";
+        private const string ARMOR_PROGRESS_SAVE_KEY = "sitArmorProgress";
+
+        // WatchedAttributes keys for client sync (armor)
+        public const string WATCHED_ARMOR_DURABILITY_LEVEL = "sitArmorDurabilityLevel";
+        public const string WATCHED_ARMOR_DURABILITY_BONUS = "sitArmorDurabilityBonusPercent";
+        public const string WATCHED_ARMOR_WALKSPEED_LEVEL = "sitArmorWalkSpeedLevel";
+        public const string WATCHED_ARMOR_WALKSPEED_BONUS = "sitArmorWalkSpeedBonusPercent";
+
+        // Trait code for the armor mastery trait (Soldier)
+        public const string ARMOR_TRAIT_CODE = "sitarmormastery";
+
+        // Armor progression configuration
+        // Time-based progression: 1 day base, +1 day increment per credit (gives -1% walk speed penalty per credit)
+        public static int BaseSecondsInArmorPerIncrement = 86400;  // Base seconds (1 day) for first credit
+        public static int ArmorTimeIncrementStep = 86400;          // How many more seconds each subsequent credit needs (1 day)
+
+        // Damage-based progression: 100 damage base, +100 increment per credit (gives +1% durability per credit)
+        public static int BaseDamageBlockedPerIncrement = 100;     // Base damage blocked for first credit
+        public static int ArmorDamageIncrementStep = 100;          // How much more damage each subsequent credit needs
+
+        // Repair-based progression: 1 repair base, +1 increment per credit (gives +1% durability per credit)
+        public static int BaseRepairsPerIncrement = 1;             // Base repairs for first credit
+        public static int ArmorRepairIncrementStep = 1;            // How many more repairs each subsequent credit needs
+
+        // First-equip bonuses (durability only):
+        // +1% for light armor and chain, +2% for brigandine, +3% for scale and plate
+        public const int FIRST_EQUIP_LIGHT_BONUS = 1;
+        public const int FIRST_EQUIP_CHAIN_BONUS = 1;
+        public const int FIRST_EQUIP_BRIGANDINE_BONUS = 2;
+        public const int FIRST_EQUIP_SCALE_BONUS = 3;
+        public const int FIRST_EQUIP_PLATE_BONUS = 3;
+
+        // Max bonuses
+        public static int MaxArmorDurabilityPercent = 150;         // 150% max armor durability bonus
+        public static int MaxArmorWalkSpeedPercent = 50;           // 50% max walk speed penalty reduction
+
+        // Vanilla Soldier trait armor bonuses (used for cap calculations)
+        public const int VANILLA_SOLDIER_ARMOR_DURABILITY_BONUS = 15;
+        public const int VANILLA_SOLDIER_ARMOR_WALKSPEED_BONUS = 25;
+
+        // Storage for armor progress - keyed by player UID
+        public static ConcurrentDictionary<string, ArmorProgressData> ArmorProgress = new ConcurrentDictionary<string, ArmorProgressData>();
+
+        // Flag to indicate pending armor progress save
+        private static volatile bool pendingArmorProgressSave = false;
+
+        // Tracking currently equipped armor for each player (for time tracking and equip detection)
+        private static ConcurrentDictionary<string, Dictionary<string, string>> playerEquippedArmor = new ConcurrentDictionary<string, Dictionary<string, string>>();
+
         private const string CONFIG_SAVE_KEY = "sitConfig";
 
         // Vanilla Hardy trait mining speed bonus (used for cap calculations)
@@ -685,6 +864,56 @@ namespace SimpleImprovingTraits
                     .WithArgs(api.ChatCommands.Parsers.OptionalInt("step"))
                     .RequiresPrivilege(Privilege.controlserver)
                     .HandleWith(OnTraitHungerIncrementCommand)
+                .EndSubCommand()
+                .BeginSubCommand("armor")
+                    .WithDescription("View your armor progression stats")
+                    .RequiresPrivilege(Privilege.chat)
+                    .RequiresPlayer()
+                    .HandleWith(OnTraitArmorCommand)
+                .EndSubCommand()
+                .BeginSubCommand("armorlevel")
+                    .WithDescription("Set your armor durability level (admin only)")
+                    .WithArgs(api.ChatCommands.Parsers.Int("level"))
+                    .RequiresPrivilege(Privilege.controlserver)
+                    .RequiresPlayer()
+                    .HandleWith(OnTraitArmorLevelCommand)
+                .EndSubCommand()
+                .BeginSubCommand("armorwalkspeedlevel")
+                    .WithDescription("Set your armor walk speed penalty reduction level (admin only)")
+                    .WithArgs(api.ChatCommands.Parsers.Int("level"))
+                    .RequiresPrivilege(Privilege.controlserver)
+                    .RequiresPlayer()
+                    .HandleWith(OnTraitArmorWalkSpeedLevelCommand)
+                .EndSubCommand()
+                .BeginSubCommand("armordurabilitymax")
+                    .WithDescription("Get or set the max armor durability bonus percent (admin only)")
+                    .WithArgs(api.ChatCommands.Parsers.OptionalInt("percent"))
+                    .RequiresPrivilege(Privilege.controlserver)
+                    .HandleWith(OnTraitArmorDurabilityMaxCommand)
+                .EndSubCommand()
+                .BeginSubCommand("armorwalkspeedmax")
+                    .WithDescription("Get or set the max walk speed penalty reduction percent (admin only)")
+                    .WithArgs(api.ChatCommands.Parsers.OptionalInt("percent"))
+                    .RequiresPrivilege(Privilege.controlserver)
+                    .HandleWith(OnTraitArmorWalkSpeedMaxCommand)
+                .EndSubCommand()
+                .BeginSubCommand("armortimebase")
+                    .WithDescription("Get or set the base seconds in armor per increment (admin only)")
+                    .WithArgs(api.ChatCommands.Parsers.OptionalInt("seconds"))
+                    .RequiresPrivilege(Privilege.controlserver)
+                    .HandleWith(OnTraitArmorTimeBaseCommand)
+                .EndSubCommand()
+                .BeginSubCommand("armordamagebase")
+                    .WithDescription("Get or set the base damage blocked per increment (admin only)")
+                    .WithArgs(api.ChatCommands.Parsers.OptionalInt("damage"))
+                    .RequiresPrivilege(Privilege.controlserver)
+                    .HandleWith(OnTraitArmorDamageBaseCommand)
+                .EndSubCommand()
+                .BeginSubCommand("armorrepairbase")
+                    .WithDescription("Get or set the base repairs per increment (admin only)")
+                    .WithArgs(api.ChatCommands.Parsers.OptionalInt("repairs"))
+                    .RequiresPrivilege(Privilege.controlserver)
+                    .HandleWith(OnTraitArmorRepairBaseCommand)
                 .EndSubCommand();
 
             // Hook into block breaking for mining progression
@@ -706,12 +935,16 @@ namespace SimpleImprovingTraits
             api.Event.SaveGameLoaded += LoadRangedProgress;
             api.Event.SaveGameLoaded += LoadWalkingProgress;
             api.Event.SaveGameLoaded += LoadHungerProgress;
+            api.Event.SaveGameLoaded += LoadArmorProgress;
 
             // Register game tick listener for walking distance tracking (every 500ms)
             api.Event.RegisterGameTickListener(OnWalkingTick, 500);
 
             // Register game tick listener for hunger tracking (every 1000ms / 1 second)
             api.Event.RegisterGameTickListener(OnHungerTick, 1000);
+
+            // Register game tick listener for armor time tracking (every 1000ms / 1 second)
+            api.Event.RegisterGameTickListener(OnArmorTick, 1000);
 
             // Hook into player disconnect to clean up position tracking
             api.Event.PlayerDisconnect += OnPlayerDisconnect;
@@ -752,7 +985,12 @@ namespace SimpleImprovingTraits
                 "  /trait hungerbase [value] - Get or set base seconds for first credit (admin)\n" +
                 "  /trait hungerincrement [value] - Get or set hunger increment step per credit (admin)\n" +
                 "  /trait hungerlevel [level] - Set your hunger level (admin)\n" +
-                "  /trait hungermax [percent] - Get or set max hunger rate reduction (admin)");
+                "  /trait hungermax [percent] - Get or set max hunger rate reduction (admin)\n" +
+                "  /trait armor - View your armor progression stats\n" +
+                "  /trait armorlevel [level] - Set your armor durability level (admin)\n" +
+                "  /trait armorwalkspeedlevel [level] - Set walk speed penalty reduction level (admin)\n" +
+                "  /trait armordurabilitymax [percent] - Get or set max durability bonus (admin)\n" +
+                "  /trait armorwalkspeedmax [percent] - Get or set max walk speed reduction (admin)");
         }
 
         /// <summary>
@@ -1766,6 +2004,267 @@ namespace SimpleImprovingTraits
         }
 
         /// <summary>
+        /// Handler for /trait armor command.
+        /// </summary>
+        private TextCommandResult OnTraitArmorCommand(TextCommandCallingArgs args)
+        {
+            var player = args.Caller.Player;
+            if (player?.Entity == null)
+            {
+                return TextCommandResult.Error("Could not find player entity");
+            }
+
+            string playerUid = player.PlayerUID;
+            var progress = ArmorProgress.GetOrAdd(playerUid, _ => new ArmorProgressData());
+
+            int durabilityBonus = CalculateArmorDurabilityBonusPercent(progress.TotalDurabilityCredits, player.Entity as EntityPlayer);
+            int walkSpeedBonus = CalculateArmorWalkSpeedBonusPercent(progress.TotalWalkSpeedCredits, player.Entity as EntityPlayer);
+
+            var sb = new StringBuilder();
+            sb.AppendLine($"Armor progression:");
+            sb.AppendLine($"  Durability: {progress.TotalDurabilityCredits} credits, +{durabilityBonus}% bonus (max {MaxArmorDurabilityPercent}%)");
+            sb.AppendLine($"  Walk Speed Penalty Reduction: {progress.TotalWalkSpeedCredits} credits, -{walkSpeedBonus}% (max {MaxArmorWalkSpeedPercent}%)");
+
+            if (progress.ArmorProgress.Count > 0)
+            {
+                sb.AppendLine("\nPer-armor progress:");
+                foreach (var kvp in progress.ArmorProgress.OrderByDescending(p => p.Value.TimeCredits + p.Value.DamageCredits + p.Value.RepairCredits))
+                {
+                    string armorName = kvp.Key;
+                    if (armorName.StartsWith("game:"))
+                        armorName = armorName.Substring(5);
+
+                    var armorProg = kvp.Value;
+                    sb.AppendLine($"  {armorName}:");
+                    sb.AppendLine($"    Time: {armorProg.TimeCredits} credits ({armorProg.SecondsWornInIncrement:F0}/{armorProg.CurrentTimeIncrementSize}s)");
+                    sb.AppendLine($"    Damage: {armorProg.DamageCredits} credits ({armorProg.DamageBlockedInIncrement:F1}/{armorProg.CurrentDamageIncrementSize})");
+                    sb.AppendLine($"    Repairs: {armorProg.RepairCredits} credits ({armorProg.RepairsInIncrement}/{armorProg.CurrentRepairIncrementSize})");
+                }
+            }
+            else
+            {
+                sb.AppendLine("\nNo armor progress yet. Wear armor to start!");
+            }
+
+            return TextCommandResult.Success(sb.ToString().TrimEnd());
+        }
+
+        /// <summary>
+        /// Handler for /trait armorlevel command.
+        /// Sets the player's armor durability credits (level) directly.
+        /// </summary>
+        private TextCommandResult OnTraitArmorLevelCommand(TextCommandCallingArgs args)
+        {
+            var player = args.Caller.Player as IServerPlayer;
+            if (player?.Entity == null)
+            {
+                return TextCommandResult.Error("Could not find player entity");
+            }
+
+            int newCredits = (int)args[0];
+
+            if (newCredits < 0)
+            {
+                return TextCommandResult.Error("Credits cannot be negative");
+            }
+
+            if (newCredits > MaxArmorDurabilityPercent)
+            {
+                return TextCommandResult.Error($"Credits cannot exceed max ({MaxArmorDurabilityPercent})");
+            }
+
+            string playerUid = player.PlayerUID;
+            var progress = ArmorProgress.GetOrAdd(playerUid, _ => new ArmorProgressData());
+
+            progress.TotalDurabilityCredits = newCredits;
+            pendingArmorProgressSave = true;
+
+            ApplyArmorBonusesStatic(player, progress.TotalDurabilityCredits, progress.TotalWalkSpeedCredits);
+
+            int bonusPercent = CalculateArmorDurabilityBonusPercent(newCredits, player.Entity);
+
+            return TextCommandResult.Success($"Armor durability credits set to {newCredits} (+{bonusPercent}% durability).");
+        }
+
+        /// <summary>
+        /// Handler for /trait armorwalkspeedlevel command.
+        /// Sets the player's armor walk speed penalty reduction credits (level) directly.
+        /// </summary>
+        private TextCommandResult OnTraitArmorWalkSpeedLevelCommand(TextCommandCallingArgs args)
+        {
+            var player = args.Caller.Player as IServerPlayer;
+            if (player?.Entity == null)
+            {
+                return TextCommandResult.Error("Could not find player entity");
+            }
+
+            int newCredits = (int)args[0];
+
+            if (newCredits < 0)
+            {
+                return TextCommandResult.Error("Credits cannot be negative");
+            }
+
+            if (newCredits > MaxArmorWalkSpeedPercent)
+            {
+                return TextCommandResult.Error($"Credits cannot exceed max ({MaxArmorWalkSpeedPercent})");
+            }
+
+            string playerUid = player.PlayerUID;
+            var progress = ArmorProgress.GetOrAdd(playerUid, _ => new ArmorProgressData());
+
+            progress.TotalWalkSpeedCredits = newCredits;
+            pendingArmorProgressSave = true;
+
+            ApplyArmorBonusesStatic(player, progress.TotalDurabilityCredits, progress.TotalWalkSpeedCredits);
+
+            int bonusPercent = CalculateArmorWalkSpeedBonusPercent(newCredits, player.Entity);
+
+            return TextCommandResult.Success($"Armor walk speed penalty reduction credits set to {newCredits} (-{bonusPercent}% penalty).");
+        }
+
+        /// <summary>
+        /// Handler for /trait armordurabilitymax command.
+        /// </summary>
+        private TextCommandResult OnTraitArmorDurabilityMaxCommand(TextCommandCallingArgs args)
+        {
+            int? newValue = (int?)args[0];
+
+            if (newValue.HasValue)
+            {
+                if (newValue.Value < 1)
+                {
+                    return TextCommandResult.Error("Max armor durability percent must be at least 1");
+                }
+
+                MaxArmorDurabilityPercent = newValue.Value;
+                pendingConfigSave = true;
+
+                foreach (IServerPlayer player in ServerApi.World.AllOnlinePlayers)
+                {
+                    if (player?.Entity == null) continue;
+                    string playerUid = player.PlayerUID;
+                    var progress = ArmorProgress.GetOrAdd(playerUid, _ => new ArmorProgressData());
+                    ApplyArmorBonusesStatic(player, progress.TotalDurabilityCredits, progress.TotalWalkSpeedCredits);
+                }
+
+                return TextCommandResult.Success($"Max armor durability bonus set to +{MaxArmorDurabilityPercent}%. All player bonuses recalculated.");
+            }
+            else
+            {
+                return TextCommandResult.Success($"Current max armor durability bonus: +{MaxArmorDurabilityPercent}%");
+            }
+        }
+
+        /// <summary>
+        /// Handler for /trait armorwalkspeedmax command.
+        /// </summary>
+        private TextCommandResult OnTraitArmorWalkSpeedMaxCommand(TextCommandCallingArgs args)
+        {
+            int? newValue = (int?)args[0];
+
+            if (newValue.HasValue)
+            {
+                if (newValue.Value < 1)
+                {
+                    return TextCommandResult.Error("Max armor walk speed penalty reduction percent must be at least 1");
+                }
+
+                MaxArmorWalkSpeedPercent = newValue.Value;
+                pendingConfigSave = true;
+
+                foreach (IServerPlayer player in ServerApi.World.AllOnlinePlayers)
+                {
+                    if (player?.Entity == null) continue;
+                    string playerUid = player.PlayerUID;
+                    var progress = ArmorProgress.GetOrAdd(playerUid, _ => new ArmorProgressData());
+                    ApplyArmorBonusesStatic(player, progress.TotalDurabilityCredits, progress.TotalWalkSpeedCredits);
+                }
+
+                return TextCommandResult.Success($"Max armor walk speed penalty reduction set to -{MaxArmorWalkSpeedPercent}%. All player bonuses recalculated.");
+            }
+            else
+            {
+                return TextCommandResult.Success($"Current max armor walk speed penalty reduction: -{MaxArmorWalkSpeedPercent}%");
+            }
+        }
+
+        /// <summary>
+        /// Handler for /trait armortimebase command.
+        /// </summary>
+        private TextCommandResult OnTraitArmorTimeBaseCommand(TextCommandCallingArgs args)
+        {
+            int? newValue = (int?)args[0];
+
+            if (newValue.HasValue)
+            {
+                if (newValue.Value < 1)
+                {
+                    return TextCommandResult.Error("Base seconds must be at least 1");
+                }
+
+                BaseSecondsInArmorPerIncrement = newValue.Value;
+                pendingConfigSave = true;
+
+                return TextCommandResult.Success($"Base seconds in armor per increment set to {BaseSecondsInArmorPerIncrement} ({BaseSecondsInArmorPerIncrement / 3600f:F1} hours).");
+            }
+            else
+            {
+                return TextCommandResult.Success($"Current base seconds in armor: {BaseSecondsInArmorPerIncrement} ({BaseSecondsInArmorPerIncrement / 3600f:F1} hours)\nIncrement step: +{ArmorTimeIncrementStep} ({ArmorTimeIncrementStep / 3600f:F1} hours)");
+            }
+        }
+
+        /// <summary>
+        /// Handler for /trait armordamagebase command.
+        /// </summary>
+        private TextCommandResult OnTraitArmorDamageBaseCommand(TextCommandCallingArgs args)
+        {
+            int? newValue = (int?)args[0];
+
+            if (newValue.HasValue)
+            {
+                if (newValue.Value < 1)
+                {
+                    return TextCommandResult.Error("Base damage must be at least 1");
+                }
+
+                BaseDamageBlockedPerIncrement = newValue.Value;
+                pendingConfigSave = true;
+
+                return TextCommandResult.Success($"Base damage blocked per increment set to {BaseDamageBlockedPerIncrement}.");
+            }
+            else
+            {
+                return TextCommandResult.Success($"Current base damage blocked: {BaseDamageBlockedPerIncrement}\nIncrement step: +{ArmorDamageIncrementStep}");
+            }
+        }
+
+        /// <summary>
+        /// Handler for /trait armorrepairbase command.
+        /// </summary>
+        private TextCommandResult OnTraitArmorRepairBaseCommand(TextCommandCallingArgs args)
+        {
+            int? newValue = (int?)args[0];
+
+            if (newValue.HasValue)
+            {
+                if (newValue.Value < 1)
+                {
+                    return TextCommandResult.Error("Base repairs must be at least 1");
+                }
+
+                BaseRepairsPerIncrement = newValue.Value;
+                pendingConfigSave = true;
+
+                return TextCommandResult.Success($"Base repairs per increment set to {BaseRepairsPerIncrement}.");
+            }
+            else
+            {
+                return TextCommandResult.Success($"Current base repairs: {BaseRepairsPerIncrement}\nIncrement step: +{ArmorRepairIncrementStep}");
+            }
+        }
+
+        /// <summary>
         /// Calculate the maximum hunger credits a player can earn.
         /// Ravenous players need more credits to reach the same target hunger rate.
         /// Target is (100 - MaxHungerReductionPercent)% = 75% by default.
@@ -1944,6 +2443,373 @@ namespace SimpleImprovingTraits
             string characterClass = entity.WatchedAttributes.GetString("characterClass", "");
             return characterClass.Equals("hunter", StringComparison.OrdinalIgnoreCase) ||
                    characterClass.Equals("clockmaker", StringComparison.OrdinalIgnoreCase);
+        }
+
+        /// <summary>
+        /// Checks if the player's class has the vanilla Soldier trait.
+        /// </summary>
+        private static bool PlayerHasVanillaSoldierForArmor(EntityPlayer entity)
+        {
+            string[] classTraits = entity.WatchedAttributes.GetStringArray("characterTraits", null);
+
+            if (classTraits != null)
+            {
+                foreach (string trait in classTraits)
+                {
+                    if (trait.Equals("soldier", StringComparison.OrdinalIgnoreCase))
+                    {
+                        return true;
+                    }
+                }
+            }
+
+            // Fallback: check known classes that have Soldier (Blackguard)
+            string characterClass = entity.WatchedAttributes.GetString("characterClass", "");
+            return characterClass.Equals("blackguard", StringComparison.OrdinalIgnoreCase);
+        }
+
+        /// <summary>
+        /// Calculate armor durability bonus as an integer percentage.
+        /// Accounts for vanilla Soldier trait (+15% armor durability).
+        /// </summary>
+        public static int CalculateArmorDurabilityBonusPercent(int credits, EntityPlayer entity)
+        {
+            bool hasSoldier = entity != null && PlayerHasVanillaSoldierForArmor(entity);
+            int vanillaBonus = hasSoldier ? VANILLA_SOLDIER_ARMOR_DURABILITY_BONUS : 0;
+            int earnableBonus = Math.Max(0, MaxArmorDurabilityPercent - vanillaBonus);
+            return Math.Min(credits, earnableBonus);
+        }
+
+        /// <summary>
+        /// Calculate armor walk speed penalty reduction bonus as an integer percentage.
+        /// Accounts for vanilla Soldier trait (+25% armor walk speed penalty reduction).
+        /// </summary>
+        public static int CalculateArmorWalkSpeedBonusPercent(int credits, EntityPlayer entity)
+        {
+            bool hasSoldier = entity != null && PlayerHasVanillaSoldierForArmor(entity);
+            int vanillaBonus = hasSoldier ? VANILLA_SOLDIER_ARMOR_WALKSPEED_BONUS : 0;
+            int earnableBonus = Math.Max(0, MaxArmorWalkSpeedPercent - vanillaBonus);
+            return Math.Min(credits, earnableBonus);
+        }
+
+        /// <summary>
+        /// Apply armor bonuses to a player.
+        /// </summary>
+        public static void ApplyArmorBonusesStatic(IServerPlayer player, int durabilityCredits, int walkSpeedCredits)
+        {
+            if (player?.Entity == null) return;
+
+            // Check if player has vanilla Soldier (affects bonus cap)
+            bool hasVanillaSoldier = PlayerHasVanillaSoldierForArmor(player.Entity);
+
+            // Calculate durability bonus (reduces armor damage taken)
+            int durabilityBonus = CalculateArmorDurabilityBonusPercent(durabilityCredits, player.Entity);
+            // armorDurabilityLoss is a multiplier, lower = less durability lost
+            // A bonus of 50% means armor loses 50% less durability, so multiplier = 0.5
+            float durabilityMultiplier = 1f - (durabilityBonus * 0.01f);
+            player.Entity.Stats.Set("armorDurabilityLoss", ARMOR_DURABILITY_STAT_CODE, durabilityMultiplier, false);
+
+            // Calculate walk speed penalty reduction
+            // This reduces the negative walkspeed effect from armor
+            int walkSpeedBonus = CalculateArmorWalkSpeedBonusPercent(walkSpeedCredits, player.Entity);
+            // We add a positive walkspeed bonus to counteract armor penalty
+            float walkSpeedAddition = walkSpeedBonus * 0.01f;
+            player.Entity.Stats.Set("walkspeed", ARMOR_WALKSPEED_STAT_CODE, walkSpeedAddition, false);
+
+            // Sync to WatchedAttributes for client-side display
+            player.Entity.WatchedAttributes.SetInt(WATCHED_ARMOR_DURABILITY_LEVEL, durabilityCredits);
+            player.Entity.WatchedAttributes.SetInt(WATCHED_ARMOR_DURABILITY_BONUS, durabilityBonus);
+            player.Entity.WatchedAttributes.SetInt(WATCHED_ARMOR_WALKSPEED_LEVEL, walkSpeedCredits);
+            player.Entity.WatchedAttributes.SetInt(WATCHED_ARMOR_WALKSPEED_BONUS, walkSpeedBonus);
+            player.Entity.WatchedAttributes.SetBool("sitHasVanillaSoldierArmor", hasVanillaSoldier);
+
+            // Add our trait to extraTraits only if player doesn't already have Soldier
+            UpdateExtraTraitStatic(player.Entity, ARMOR_TRAIT_CODE, (durabilityCredits > 0 || walkSpeedCredits > 0) && !hasVanillaSoldier);
+
+            player.Entity.WatchedAttributes.MarkPathDirty(WATCHED_ARMOR_DURABILITY_LEVEL);
+        }
+
+        /// <summary>
+        /// Determines the armor type from an item code.
+        /// Returns: "light" (leather, gambeson), "chain", "brigandine", "scale", "plate", or null if not armor.
+        /// </summary>
+        public static string GetArmorType(string itemCode)
+        {
+            if (string.IsNullOrEmpty(itemCode)) return null;
+
+            string codeToCheck = itemCode.StartsWith("game:") ? itemCode.Substring(5) : itemCode;
+
+            // Check if it's armor (starts with "armor-")
+            if (!codeToCheck.StartsWith("armor-")) return null;
+
+            // Determine armor type from code
+            if (codeToCheck.Contains("-plate-")) return "plate";
+            if (codeToCheck.Contains("-scale-")) return "scale";
+            if (codeToCheck.Contains("-brigandine-")) return "brigandine";
+            if (codeToCheck.Contains("-chain-")) return "chain";
+            if (codeToCheck.Contains("-lamellar-")) return "chain"; // Treat lamellar as chain for first-equip
+            if (codeToCheck.Contains("-leather-") || codeToCheck.Contains("-gambeson-") ||
+                codeToCheck.Contains("-jerkin-") || codeToCheck.Contains("-improvised-"))
+                return "light";
+
+            // Default to light if unrecognized armor type
+            return "light";
+        }
+
+        /// <summary>
+        /// Gets the first-equip durability bonus for an armor type.
+        /// </summary>
+        public static int GetFirstEquipBonus(string armorType)
+        {
+            switch (armorType?.ToLowerInvariant())
+            {
+                case "plate": return FIRST_EQUIP_PLATE_BONUS;
+                case "scale": return FIRST_EQUIP_SCALE_BONUS;
+                case "brigandine": return FIRST_EQUIP_BRIGANDINE_BONUS;
+                case "chain": return FIRST_EQUIP_CHAIN_BONUS;
+                case "light":
+                default: return FIRST_EQUIP_LIGHT_BONUS;
+            }
+        }
+
+        /// <summary>
+        /// Initialize armor tracking for a player by checking their currently equipped armor.
+        /// </summary>
+        private void InitializePlayerArmorTracking(IServerPlayer player)
+        {
+            if (player?.Entity == null) return;
+
+            string playerUid = player.PlayerUID;
+
+            // Get the player's currently equipped armor
+            var equippedArmor = new Dictionary<string, string>();
+
+            // Check armor slots (head, body, legs) using character inventory
+            var characterInventory = player.InventoryManager?.GetOwnInventory(GlobalConstants.characterInvClassName);
+            if (characterInventory != null)
+            {
+                // Armor slots are typically: 12 = head, 13 = body, 14 = legs (may vary)
+                foreach (var slot in characterInventory)
+                {
+                    if (slot?.Itemstack?.Collectible != null)
+                    {
+                        string itemCode = slot.Itemstack.Collectible.Code?.ToString();
+                        string armorType = GetArmorType(itemCode);
+                        if (armorType != null)
+                        {
+                            string slotId = slot.Inventory?.InventoryID + "_" + slot.Inventory?.GetSlotId(slot);
+                            equippedArmor[slotId] = itemCode;
+
+                            // Check for first-time equip bonus
+                            var armorProgress = ArmorProgress.GetOrAdd(playerUid, _ => new ArmorProgressData());
+                            var pieceProgress = armorProgress.GetArmorProgress(itemCode);
+
+                            if (!pieceProgress.HasBeenEquipped)
+                            {
+                                pieceProgress.HasBeenEquipped = true;
+                                int firstEquipBonus = GetFirstEquipBonus(armorType);
+                                armorProgress.TotalDurabilityCredits += firstEquipBonus;
+                                pendingArmorProgressSave = true;
+
+                                ServerApi.Logger.Debug($"[SimpleImprovingTraits] Player {player.PlayerName} first-time equipped {itemCode}, +{firstEquipBonus}% durability bonus");
+
+                                ApplyArmorBonusesStatic(player, armorProgress.TotalDurabilityCredits, armorProgress.TotalWalkSpeedCredits);
+                            }
+                        }
+                    }
+                }
+            }
+
+            playerEquippedArmor[playerUid] = equippedArmor;
+        }
+
+        /// <summary>
+        /// Game tick handler for armor time tracking.
+        /// Checks each player's equipped armor and accumulates time credits.
+        /// Also detects armor equip/unequip for first-equip bonus.
+        /// </summary>
+        private void OnArmorTick(float dt)
+        {
+            if (ServerApi == null) return;
+
+            foreach (IServerPlayer player in ServerApi.World.AllOnlinePlayers)
+            {
+                if (player?.Entity == null) continue;
+                if (!player.Entity.Alive) continue;
+
+                string playerUid = player.PlayerUID;
+                var armorProgress = ArmorProgress.GetOrAdd(playerUid, _ => new ArmorProgressData());
+                var currentArmor = new Dictionary<string, string>();
+
+                // Get the player's currently equipped armor using character inventory
+                var characterInventory = player.InventoryManager?.GetOwnInventory(GlobalConstants.characterInvClassName);
+                if (characterInventory != null)
+                {
+                    foreach (var slot in characterInventory)
+                    {
+                        if (slot?.Itemstack?.Collectible != null)
+                        {
+                            string itemCode = slot.Itemstack.Collectible.Code?.ToString();
+                            string armorType = GetArmorType(itemCode);
+                            if (armorType != null)
+                            {
+                                string slotId = slot.Inventory?.InventoryID + "_" + slot.Inventory?.GetSlotId(slot);
+                                currentArmor[slotId] = itemCode;
+                            }
+                        }
+                    }
+                }
+
+                // Get previous armor state
+                var previousArmor = playerEquippedArmor.GetOrAdd(playerUid, _ => new Dictionary<string, string>());
+
+                // Check for newly equipped armor (first-equip bonus)
+                foreach (var kvp in currentArmor)
+                {
+                    string slotId = kvp.Key;
+                    string itemCode = kvp.Value;
+
+                    // Check if this is new armor in this slot
+                    if (!previousArmor.TryGetValue(slotId, out string prevArmor) || prevArmor != itemCode)
+                    {
+                        // New armor equipped - check for first-time bonus
+                        var pieceProgress = armorProgress.GetArmorProgress(itemCode);
+
+                        if (!pieceProgress.HasBeenEquipped)
+                        {
+                            pieceProgress.HasBeenEquipped = true;
+                            string armorType = GetArmorType(itemCode);
+                            int firstEquipBonus = GetFirstEquipBonus(armorType);
+                            armorProgress.TotalDurabilityCredits += firstEquipBonus;
+                            pendingArmorProgressSave = true;
+
+                            ApplyArmorBonusesStatic(player, armorProgress.TotalDurabilityCredits, armorProgress.TotalWalkSpeedCredits);
+
+                            player.SendMessage(GlobalConstants.GeneralChatGroup,
+                                Lang.Get("simpleimprovingtraits:message-armor-first-equip", firstEquipBonus),
+                                EnumChatType.Notification);
+                        }
+                    }
+
+                    // Track time worn for this armor piece
+                    var progress = armorProgress.GetArmorProgress(itemCode);
+                    int oldWalkSpeedCredits = armorProgress.TotalWalkSpeedCredits;
+
+                    progress.SecondsWornInIncrement += dt;
+
+                    // Check if we've earned a time credit
+                    while (progress.SecondsWornInIncrement >= progress.CurrentTimeIncrementSize &&
+                           armorProgress.TotalWalkSpeedCredits < MaxArmorWalkSpeedPercent)
+                    {
+                        progress.TimeCredits++;
+                        armorProgress.TotalWalkSpeedCredits++;
+                        progress.SecondsWornInIncrement -= progress.CurrentTimeIncrementSize;
+                        progress.CurrentTimeIncrementSize += ArmorTimeIncrementStep;
+                        pendingArmorProgressSave = true;
+
+                        ServerApi.Logger.Debug($"[SimpleImprovingTraits] Player {player.PlayerName} earned time credit {progress.TimeCredits} with {itemCode}");
+                    }
+
+                    if (armorProgress.TotalWalkSpeedCredits > oldWalkSpeedCredits)
+                    {
+                        ApplyArmorBonusesStatic(player, armorProgress.TotalDurabilityCredits, armorProgress.TotalWalkSpeedCredits);
+
+                        int walkSpeedBonus = CalculateArmorWalkSpeedBonusPercent(armorProgress.TotalWalkSpeedCredits, player.Entity);
+                        player.SendMessage(GlobalConstants.GeneralChatGroup,
+                            Lang.Get("simpleimprovingtraits:message-armor-time-level-up", armorProgress.TotalWalkSpeedCredits, walkSpeedBonus),
+                            EnumChatType.Notification);
+                    }
+                }
+
+                // Update the equipped armor tracking
+                playerEquippedArmor[playerUid] = currentArmor;
+            }
+        }
+
+        /// <summary>
+        /// Process armor damage blocked. Called from Harmony patch when player takes damage.
+        /// </summary>
+        public static void ProcessArmorDamageBlocked(IServerPlayer player, float damageBlocked, string armorCode)
+        {
+            if (player?.Entity == null || string.IsNullOrEmpty(armorCode)) return;
+
+            string playerUid = player.PlayerUID;
+            var armorProgress = ArmorProgress.GetOrAdd(playerUid, _ => new ArmorProgressData());
+
+            // Skip if already at max durability
+            if (armorProgress.TotalDurabilityCredits >= MaxArmorDurabilityPercent) return;
+
+            var pieceProgress = armorProgress.GetArmorProgress(armorCode);
+            int oldDurabilityCredits = armorProgress.TotalDurabilityCredits;
+
+            pieceProgress.DamageBlockedInIncrement += damageBlocked;
+
+            // Check if we've earned any new damage credits
+            while (pieceProgress.DamageBlockedInIncrement >= pieceProgress.CurrentDamageIncrementSize &&
+                   armorProgress.TotalDurabilityCredits < MaxArmorDurabilityPercent)
+            {
+                pieceProgress.DamageCredits++;
+                armorProgress.TotalDurabilityCredits++;
+                pieceProgress.DamageBlockedInIncrement -= pieceProgress.CurrentDamageIncrementSize;
+                pieceProgress.CurrentDamageIncrementSize += ArmorDamageIncrementStep;
+
+                ServerApi.Logger.Debug($"[SimpleImprovingTraits] Player {player.PlayerName} earned damage credit {pieceProgress.DamageCredits} with {armorCode}");
+            }
+
+            pendingArmorProgressSave = true;
+
+            if (armorProgress.TotalDurabilityCredits > oldDurabilityCredits)
+            {
+                ApplyArmorBonusesStatic(player, armorProgress.TotalDurabilityCredits, armorProgress.TotalWalkSpeedCredits);
+
+                int durabilityBonus = CalculateArmorDurabilityBonusPercent(armorProgress.TotalDurabilityCredits, player.Entity);
+                player.SendMessage(GlobalConstants.GeneralChatGroup,
+                    Lang.Get("simpleimprovingtraits:message-armor-damage-level-up", armorProgress.TotalDurabilityCredits, durabilityBonus),
+                    EnumChatType.Notification);
+            }
+        }
+
+        /// <summary>
+        /// Process armor repair. Called from Harmony patch when armor is repaired.
+        /// </summary>
+        public static void ProcessArmorRepair(IServerPlayer player, string armorCode)
+        {
+            if (player?.Entity == null || string.IsNullOrEmpty(armorCode)) return;
+
+            string playerUid = player.PlayerUID;
+            var armorProgress = ArmorProgress.GetOrAdd(playerUid, _ => new ArmorProgressData());
+
+            // Skip if already at max durability
+            if (armorProgress.TotalDurabilityCredits >= MaxArmorDurabilityPercent) return;
+
+            var pieceProgress = armorProgress.GetArmorProgress(armorCode);
+            int oldDurabilityCredits = armorProgress.TotalDurabilityCredits;
+
+            pieceProgress.RepairsInIncrement++;
+
+            // Check if we've earned a repair credit
+            while (pieceProgress.RepairsInIncrement >= pieceProgress.CurrentRepairIncrementSize &&
+                   armorProgress.TotalDurabilityCredits < MaxArmorDurabilityPercent)
+            {
+                pieceProgress.RepairCredits++;
+                armorProgress.TotalDurabilityCredits++;
+                pieceProgress.RepairsInIncrement -= pieceProgress.CurrentRepairIncrementSize;
+                pieceProgress.CurrentRepairIncrementSize += ArmorRepairIncrementStep;
+
+                ServerApi.Logger.Debug($"[SimpleImprovingTraits] Player {player.PlayerName} earned repair credit {pieceProgress.RepairCredits} with {armorCode}");
+            }
+
+            pendingArmorProgressSave = true;
+
+            if (armorProgress.TotalDurabilityCredits > oldDurabilityCredits)
+            {
+                ApplyArmorBonusesStatic(player, armorProgress.TotalDurabilityCredits, armorProgress.TotalWalkSpeedCredits);
+
+                int durabilityBonus = CalculateArmorDurabilityBonusPercent(armorProgress.TotalDurabilityCredits, player.Entity);
+                player.SendMessage(GlobalConstants.GeneralChatGroup,
+                    Lang.Get("simpleimprovingtraits:message-armor-repair-level-up", armorProgress.TotalDurabilityCredits, durabilityBonus),
+                    EnumChatType.Notification);
+            }
         }
 
         /// <summary>
@@ -2190,12 +3056,13 @@ namespace SimpleImprovingTraits
         }
 
         /// <summary>
-        /// Called when a player disconnects. Cleans up their position tracking data.
+        /// Called when a player disconnects. Cleans up their position and armor tracking data.
         /// </summary>
         private void OnPlayerDisconnect(IServerPlayer byPlayer)
         {
             if (byPlayer == null) return;
             lastPlayerPositions.TryRemove(byPlayer.PlayerUID, out _);
+            playerEquippedArmor.TryRemove(byPlayer.PlayerUID, out _);
         }
 
         /// <summary>
@@ -2257,6 +3124,17 @@ namespace SimpleImprovingTraits
             {
                 ServerApi.Logger.Debug($"[SimpleImprovingTraits] Applied hunger bonus -{hungerCredits}% to player {byPlayer.PlayerName}");
             }
+
+            // Apply armor bonuses
+            var armorProg = ArmorProgress.GetOrAdd(playerUid, _ => new ArmorProgressData());
+            ApplyArmorBonusesStatic(byPlayer, armorProg.TotalDurabilityCredits, armorProg.TotalWalkSpeedCredits);
+            if (armorProg.TotalDurabilityCredits > 0 || armorProg.TotalWalkSpeedCredits > 0)
+            {
+                ServerApi.Logger.Debug($"[SimpleImprovingTraits] Applied armor bonuses: +{armorProg.TotalDurabilityCredits}% durability, -{armorProg.TotalWalkSpeedCredits}% walk speed penalty to player {byPlayer.PlayerName}");
+            }
+
+            // Initialize equipped armor tracking for this player
+            InitializePlayerArmorTracking(byPlayer);
         }
 
         /// <summary>
@@ -2835,6 +3713,12 @@ namespace SimpleImprovingTraits
             {
                 PersistHungerProgress();
                 pendingHungerProgressSave = false;
+            }
+
+            if (pendingArmorProgressSave || !ArmorProgress.IsEmpty)
+            {
+                PersistArmorProgress();
+                pendingArmorProgressSave = false;
             }
 
             if (pendingConfigSave)
@@ -3577,8 +4461,162 @@ namespace SimpleImprovingTraits
         }
 
         /// <summary>
+        /// Persist armor progress to world save data.
+        /// Version 1 format stores durability credits, walk speed credits, and per-armor progress.
+        /// </summary>
+        public static void PersistArmorProgress()
+        {
+            if (ServerApi == null) return;
+
+            try
+            {
+                byte[] data;
+                using (var ms = new MemoryStream())
+                {
+                    using (var writer = new BinaryWriter(ms))
+                    {
+                        // Header: "SIA" + version
+                        writer.Write((byte)0x53); // 'S'
+                        writer.Write((byte)0x49); // 'I'
+                        writer.Write((byte)0x41); // 'A' for Armor
+                        writer.Write((byte)1);    // Version 1
+
+                        // Number of players
+                        writer.Write(ArmorProgress.Count);
+
+                        foreach (var kvp in ArmorProgress)
+                        {
+                            string playerUid = kvp.Key;
+                            var progress = kvp.Value;
+
+                            writer.Write(playerUid);
+                            writer.Write(progress.TotalDurabilityCredits);
+                            writer.Write(progress.TotalWalkSpeedCredits);
+
+                            // Write per-armor progress
+                            writer.Write(progress.ArmorProgress.Count);
+                            foreach (var armorKvp in progress.ArmorProgress)
+                            {
+                                string armorCode = armorKvp.Key;
+                                var armorProg = armorKvp.Value;
+
+                                writer.Write(armorCode);
+                                writer.Write(armorProg.SecondsWornInIncrement);
+                                writer.Write(armorProg.CurrentTimeIncrementSize);
+                                writer.Write(armorProg.TimeCredits);
+                                writer.Write(armorProg.DamageBlockedInIncrement);
+                                writer.Write(armorProg.CurrentDamageIncrementSize);
+                                writer.Write(armorProg.DamageCredits);
+                                writer.Write(armorProg.RepairsInIncrement);
+                                writer.Write(armorProg.CurrentRepairIncrementSize);
+                                writer.Write(armorProg.RepairCredits);
+                                writer.Write(armorProg.HasBeenEquipped);
+                            }
+                        }
+                    }
+                    data = ms.ToArray();
+                }
+
+                ServerApi.WorldManager.SaveGame.StoreData(ARMOR_PROGRESS_SAVE_KEY, data);
+                ServerApi.Logger.Debug($"[SimpleImprovingTraits] Saved armor progress for {ArmorProgress.Count} players");
+            }
+            catch (Exception ex)
+            {
+                ServerApi.Logger.Error($"[SimpleImprovingTraits] Failed to persist armor progress: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// Load armor progress from world save data.
+        /// </summary>
+        private void LoadArmorProgress()
+        {
+            if (ServerApi == null) return;
+
+            ArmorProgress.Clear();
+
+            try
+            {
+                byte[] data = ServerApi.WorldManager.SaveGame.GetData(ARMOR_PROGRESS_SAVE_KEY);
+                if (data == null || data.Length == 0)
+                {
+                    ServerApi.Logger.Debug("[SimpleImprovingTraits] No armor progress data found in world save");
+                    return;
+                }
+
+                using (var ms = new MemoryStream(data))
+                {
+                    using (var reader = new BinaryReader(ms))
+                    {
+                        // Check magic bytes
+                        byte b1 = reader.ReadByte();
+                        byte b2 = reader.ReadByte();
+                        byte b3 = reader.ReadByte();
+
+                        if (b1 != 0x53 || b2 != 0x49 || b3 != 0x41) // "SIA"
+                        {
+                            ServerApi.Logger.Warning("[SimpleImprovingTraits] Invalid armor progress data format");
+                            return;
+                        }
+
+                        byte version = reader.ReadByte();
+                        int playerCount = reader.ReadInt32();
+
+                        if (version == 1)
+                        {
+                            for (int i = 0; i < playerCount; i++)
+                            {
+                                string playerUid = reader.ReadString();
+                                var progress = new ArmorProgressData
+                                {
+                                    TotalDurabilityCredits = reader.ReadInt32(),
+                                    TotalWalkSpeedCredits = reader.ReadInt32()
+                                };
+
+                                // Read per-armor progress
+                                int armorCount = reader.ReadInt32();
+                                for (int j = 0; j < armorCount; j++)
+                                {
+                                    string armorCode = reader.ReadString();
+                                    var armorProg = new ArmorPieceProgressData
+                                    {
+                                        SecondsWornInIncrement = reader.ReadSingle(),
+                                        CurrentTimeIncrementSize = reader.ReadInt32(),
+                                        TimeCredits = reader.ReadInt32(),
+                                        DamageBlockedInIncrement = reader.ReadSingle(),
+                                        CurrentDamageIncrementSize = reader.ReadInt32(),
+                                        DamageCredits = reader.ReadInt32(),
+                                        RepairsInIncrement = reader.ReadInt32(),
+                                        CurrentRepairIncrementSize = reader.ReadInt32(),
+                                        RepairCredits = reader.ReadInt32(),
+                                        HasBeenEquipped = reader.ReadBoolean()
+                                    };
+                                    progress.ArmorProgress[armorCode] = armorProg;
+                                }
+
+                                ArmorProgress[playerUid] = progress;
+                            }
+                        }
+                        else
+                        {
+                            ServerApi.Logger.Warning($"[SimpleImprovingTraits] Unknown armor save format version {version}");
+                            return;
+                        }
+                    }
+                }
+
+                ServerApi.Logger.Notification($"[SimpleImprovingTraits] Loaded armor progress for {ArmorProgress.Count} players");
+            }
+            catch (Exception ex)
+            {
+                ArmorProgress.Clear();
+                ServerApi.Logger.Error($"[SimpleImprovingTraits] Failed to load armor progress: {ex.Message}");
+            }
+        }
+
+        /// <summary>
         /// Persist config to world save data.
-        /// Version 7 adds hunger configuration.
+        /// Version 8 adds armor configuration.
         /// </summary>
         private void PersistConfig()
         {
@@ -3591,7 +4629,7 @@ namespace SimpleImprovingTraits
                 {
                     using (var writer = new BinaryWriter(ms))
                     {
-                        writer.Write((byte)7); // Version 7: adds hunger config
+                        writer.Write((byte)8); // Version 8: adds armor config
                         writer.Write(BaseBlocksPerIncrement);
                         writer.Write(IncrementStep);
                         writer.Write(MaxMiningSpeedPercent);
@@ -3614,12 +4652,21 @@ namespace SimpleImprovingTraits
                         writer.Write(BaseSecondsPerIncrement);
                         writer.Write(HungerIncrementStep);
                         writer.Write(MaxHungerReductionPercent);
+                        // Armor config
+                        writer.Write(BaseSecondsInArmorPerIncrement);
+                        writer.Write(ArmorTimeIncrementStep);
+                        writer.Write(BaseDamageBlockedPerIncrement);
+                        writer.Write(ArmorDamageIncrementStep);
+                        writer.Write(BaseRepairsPerIncrement);
+                        writer.Write(ArmorRepairIncrementStep);
+                        writer.Write(MaxArmorDurabilityPercent);
+                        writer.Write(MaxArmorWalkSpeedPercent);
                     }
                     data = ms.ToArray();
                 }
 
                 ServerApi.WorldManager.SaveGame.StoreData(CONFIG_SAVE_KEY, data);
-                ServerApi.Logger.Debug($"[SimpleImprovingTraits] Config saved (Mining: Base={BaseBlocksPerIncrement}, Max={MaxMiningSpeedPercent}% | Melee: Base={BaseDamagePerIncrement}, Max={MaxMeleeDamagePercent}% | Ranged: Base={BaseRangedDamagePerIncrement}, MaxDmg={MaxRangedDamagePercent}% | Walking: Base={BaseBlocksWalkedPerIncrement}, Max={MaxWalkingSpeedPercent}% | Hunger: Base={BaseSecondsPerIncrement}, Max={MaxHungerReductionPercent}%)");
+                ServerApi.Logger.Debug($"[SimpleImprovingTraits] Config saved (Mining: Base={BaseBlocksPerIncrement}, Max={MaxMiningSpeedPercent}% | Melee: Base={BaseDamagePerIncrement}, Max={MaxMeleeDamagePercent}% | Ranged: Base={BaseRangedDamagePerIncrement}, MaxDmg={MaxRangedDamagePercent}% | Walking: Base={BaseBlocksWalkedPerIncrement}, Max={MaxWalkingSpeedPercent}% | Hunger: Base={BaseSecondsPerIncrement}, Max={MaxHungerReductionPercent}% | Armor: MaxDur={MaxArmorDurabilityPercent}%, MaxWalk={MaxArmorWalkSpeedPercent}%)");
             }
             catch (Exception ex)
             {
@@ -3738,7 +4785,7 @@ namespace SimpleImprovingTraits
                         }
                         else if (version == 7)
                         {
-                            // Current format with hunger config
+                            // Version 7: has hunger config but not armor
                             BaseBlocksPerIncrement = reader.ReadInt32();
                             IncrementStep = reader.ReadInt32();
                             MaxMiningSpeedPercent = reader.ReadInt32();
@@ -3757,11 +4804,45 @@ namespace SimpleImprovingTraits
                             BaseSecondsPerIncrement = reader.ReadInt32();
                             HungerIncrementStep = reader.ReadInt32();
                             MaxHungerReductionPercent = reader.ReadInt32();
+                            // Armor uses defaults
+
+                            // Mark for re-save in new format
+                            pendingConfigSave = true;
+                        }
+                        else if (version == 8)
+                        {
+                            // Current format with armor config
+                            BaseBlocksPerIncrement = reader.ReadInt32();
+                            IncrementStep = reader.ReadInt32();
+                            MaxMiningSpeedPercent = reader.ReadInt32();
+                            OreMultiplier = reader.ReadInt32();
+                            BaseDamagePerIncrement = reader.ReadInt32();
+                            MeleeIncrementStep = reader.ReadInt32();
+                            MaxMeleeDamagePercent = reader.ReadInt32();
+                            BaseRangedDamagePerIncrement = reader.ReadInt32();
+                            RangedIncrementStep = reader.ReadInt32();
+                            MaxRangedDamagePercent = reader.ReadInt32();
+                            MaxRangedAccuracyPercent = reader.ReadInt32();
+                            MaxRangedDistancePercent = reader.ReadInt32();
+                            BaseBlocksWalkedPerIncrement = reader.ReadInt32();
+                            WalkingIncrementStep = reader.ReadInt32();
+                            MaxWalkingSpeedPercent = reader.ReadInt32();
+                            BaseSecondsPerIncrement = reader.ReadInt32();
+                            HungerIncrementStep = reader.ReadInt32();
+                            MaxHungerReductionPercent = reader.ReadInt32();
+                            BaseSecondsInArmorPerIncrement = reader.ReadInt32();
+                            ArmorTimeIncrementStep = reader.ReadInt32();
+                            BaseDamageBlockedPerIncrement = reader.ReadInt32();
+                            ArmorDamageIncrementStep = reader.ReadInt32();
+                            BaseRepairsPerIncrement = reader.ReadInt32();
+                            ArmorRepairIncrementStep = reader.ReadInt32();
+                            MaxArmorDurabilityPercent = reader.ReadInt32();
+                            MaxArmorWalkSpeedPercent = reader.ReadInt32();
                         }
                     }
                 }
 
-                ServerApi.Logger.Notification($"[SimpleImprovingTraits] Config loaded (Mining: Base={BaseBlocksPerIncrement}, Max={MaxMiningSpeedPercent}% | Melee: Base={BaseDamagePerIncrement}, Max={MaxMeleeDamagePercent}% | Ranged: Base={BaseRangedDamagePerIncrement}, MaxDmg={MaxRangedDamagePercent}% | Walking: Base={BaseBlocksWalkedPerIncrement}, Max={MaxWalkingSpeedPercent}% | Hunger: Base={BaseSecondsPerIncrement}, Max={MaxHungerReductionPercent}%)");
+                ServerApi.Logger.Notification($"[SimpleImprovingTraits] Config loaded (Mining: Base={BaseBlocksPerIncrement}, Max={MaxMiningSpeedPercent}% | Melee: Base={BaseDamagePerIncrement}, Max={MaxMeleeDamagePercent}% | Ranged: Base={BaseRangedDamagePerIncrement}, MaxDmg={MaxRangedDamagePercent}% | Walking: Base={BaseBlocksWalkedPerIncrement}, Max={MaxWalkingSpeedPercent}% | Hunger: Base={BaseSecondsPerIncrement}, Max={MaxHungerReductionPercent}% | Armor: MaxDur={MaxArmorDurabilityPercent}%, MaxWalk={MaxArmorWalkSpeedPercent}%)");
             }
             catch (Exception ex)
             {
@@ -3897,7 +4978,14 @@ namespace SimpleImprovingTraits
             int walkingBonus = eplr.WatchedAttributes.GetInt(SimpleImprovingTraitsModSystem.WATCHED_WALKING_BONUS, 0);
             bool hasVanillaFleetfooted = eplr.WatchedAttributes.GetBool("sitHasVanillaFleetfooted", false);
 
-            ClientApi.Logger.Debug($"[SimpleImprovingTraits] getClassTraitText postfix called. Mining: Level={miningLevel}, Bonus={miningBonus}%, HasHardy={hasVanillaHardy} | Melee: Level={meleeLevel}, Bonus={meleeBonus}%, HasSoldier={hasVanillaSoldier} | Ranged: Level={rangedLevel}, HasFocused={hasVanillaFocused} | Walking: Level={walkingLevel}, HasFleetfooted={hasVanillaFleetfooted}");
+            // Get armor progression data
+            int armorDurabilityLevel = eplr.WatchedAttributes.GetInt(SimpleImprovingTraitsModSystem.WATCHED_ARMOR_DURABILITY_LEVEL, 0);
+            int armorDurabilityBonus = eplr.WatchedAttributes.GetInt(SimpleImprovingTraitsModSystem.WATCHED_ARMOR_DURABILITY_BONUS, 0);
+            int armorWalkSpeedLevel = eplr.WatchedAttributes.GetInt(SimpleImprovingTraitsModSystem.WATCHED_ARMOR_WALKSPEED_LEVEL, 0);
+            int armorWalkSpeedBonus = eplr.WatchedAttributes.GetInt(SimpleImprovingTraitsModSystem.WATCHED_ARMOR_WALKSPEED_BONUS, 0);
+            bool hasVanillaSoldierArmor = eplr.WatchedAttributes.GetBool("sitHasVanillaSoldierArmor", false);
+
+            ClientApi.Logger.Debug($"[SimpleImprovingTraits] getClassTraitText postfix called. Mining: Level={miningLevel}, Bonus={miningBonus}%, HasHardy={hasVanillaHardy} | Melee: Level={meleeLevel}, Bonus={meleeBonus}%, HasSoldier={hasVanillaSoldier} | Ranged: Level={rangedLevel}, HasFocused={hasVanillaFocused} | Walking: Level={walkingLevel}, HasFleetfooted={hasVanillaFleetfooted} | Armor: Dur={armorDurabilityLevel}, Walk={armorWalkSpeedLevel}");
 
             // Get the "no traits" message
             string noTraitsMsg = Lang.Get("charactersheet-notraits");
@@ -4092,6 +5180,69 @@ namespace SimpleImprovingTraits
                 }
             }
 
+            // Process armor progression (Soldier trait - armor durability and speed penalty)
+            if (armorDurabilityLevel > 0 || armorWalkSpeedLevel > 0)
+            {
+                // Re-check hasNoTraits after walking processing
+                hasNoTraits = string.IsNullOrEmpty(__result) ||
+                              __result.Trim() == noTraitsMsg.Trim() ||
+                              __result == noTraitsMsg;
+
+                // Calculate combined bonuses
+                int totalDurabilityBonus = armorDurabilityBonus;
+                int totalWalkSpeedBonus = armorWalkSpeedBonus;
+
+                if (hasVanillaSoldierArmor)
+                {
+                    // Class already has Soldier - update the existing armor stats
+                    // Vanilla Soldier shows: +15% armor durability, -25% armor speed penalty
+
+                    // Update armor durability if we have bonus
+                    if (armorDurabilityBonus > 0)
+                    {
+                        int combinedDurability = SimpleImprovingTraitsModSystem.VANILLA_SOLDIER_ARMOR_DURABILITY_BONUS + armorDurabilityBonus;
+                        __result = __result.Replace(
+                            $"+{SimpleImprovingTraitsModSystem.VANILLA_SOLDIER_ARMOR_DURABILITY_BONUS}% armor durability",
+                            $"+{combinedDurability}% armor durability");
+                    }
+
+                    // Update armor speed penalty if we have bonus
+                    if (armorWalkSpeedBonus > 0)
+                    {
+                        int combinedSpeedPenalty = SimpleImprovingTraitsModSystem.VANILLA_SOLDIER_ARMOR_WALKSPEED_BONUS + armorWalkSpeedBonus;
+                        __result = __result.Replace(
+                            $"-{SimpleImprovingTraitsModSystem.VANILLA_SOLDIER_ARMOR_WALKSPEED_BONUS}% armor speed penalty",
+                            $"-{combinedSpeedPenalty}% armor speed penalty");
+                    }
+                }
+                else if (hasNoTraits)
+                {
+                    // No traits at all - show our armor progression as a Soldier-like trait
+                    __result = Lang.Get("simpleimprovingtraits:trait-soldier-armor-dynamic", totalDurabilityBonus, totalWalkSpeedBonus);
+                }
+                else
+                {
+                    // Has other traits but no vanilla Soldier - check if we already added melee Soldier
+                    // Only add if we have actual bonuses to show
+                    if (totalDurabilityBonus > 0 || totalWalkSpeedBonus > 0)
+                    {
+                        // Check if melee progression already added a dynamic Soldier entry
+                        string meleeSoldierPattern = Lang.Get("simpleimprovingtraits:trait-soldier-dynamic", meleeBonus);
+                        if (meleeLevel > 0 && __result.Contains(meleeSoldierPattern))
+                        {
+                            // Replace the melee-only Soldier with a combined entry
+                            __result = __result.Replace(meleeSoldierPattern,
+                                Lang.Get("simpleimprovingtraits:trait-soldier-combined-dynamic", meleeBonus, totalDurabilityBonus, totalWalkSpeedBonus));
+                        }
+                        else
+                        {
+                            // No melee Soldier was added, add armor-only entry
+                            __result = __result + "\n" + Lang.Get("simpleimprovingtraits:trait-soldier-armor-dynamic", totalDurabilityBonus, totalWalkSpeedBonus);
+                        }
+                    }
+                }
+            }
+
             // Clean up any double newlines that might have been introduced
             while (__result.Contains("\n\n"))
             {
@@ -4109,12 +5260,16 @@ namespace SimpleImprovingTraits
     public static class EntityDamagePatches
     {
         /// <summary>
-        /// Postfix for Entity.ReceiveDamage - tracks melee and ranged damage dealt by players.
+        /// Postfix for Entity.ReceiveDamage - tracks melee and ranged damage dealt by players,
+        /// and damage blocked by armor when players receive damage.
         /// </summary>
         public static void ReceiveDamage_Postfix(Entity __instance, DamageSource damageSource, float damage, bool __result)
         {
             // Only process if damage was actually dealt
             if (!__result || damage <= 0) return;
+
+            // Track armor damage blocked if the entity taking damage is a player wearing armor
+            TrackArmorDamageBlocked(__instance, damageSource, damage);
 
             // Check if this is ranged damage (projectile with CauseEntity)
             if (SimpleImprovingTraitsModSystem.IsRangedDamage(damageSource))
@@ -4158,6 +5313,100 @@ namespace SimpleImprovingTraits
             if (weaponType != null)
             {
                 SimpleImprovingTraitsModSystem.ProcessMeleeDamage(attackerPlayer, weaponType, damage);
+            }
+        }
+
+        /// <summary>
+        /// Track damage blocked by armor when a player takes damage.
+        /// Uses hit probability (50% body, 30% legs, 20% head) to distribute damage to armor pieces.
+        /// </summary>
+        private static void TrackArmorDamageBlocked(Entity damagedEntity, DamageSource damageSource, float finalDamage)
+        {
+            // Only track actual combat damage - filter out healing and non-combat damage types
+            if (damageSource == null) return;
+
+            // Filter out non-combat damage types (healing, hunger, suffocation, etc.)
+            // Only count damage that armor can actually block: melee attacks and projectiles
+            var damageType = damageSource.Type;
+            if (damageType == EnumDamageType.Heal ||
+                damageType == EnumDamageType.Hunger ||
+                damageType == EnumDamageType.Suffocation ||
+                damageType == EnumDamageType.Poison ||
+                damageType == EnumDamageType.Gravity ||
+                damageType == EnumDamageType.Fire ||
+                damageType == EnumDamageType.Frost ||
+                damageType == EnumDamageType.Heat ||
+                damageType == EnumDamageType.Electricity)
+            {
+                return; // These damage types are not blocked by armor
+            }
+
+            // Only process for players
+            var playerEntity = damagedEntity as EntityPlayer;
+            if (playerEntity == null) return;
+
+            var player = playerEntity.Player as IServerPlayer;
+            if (player == null) return;
+
+            // Get the player's armor using character inventory
+            var characterInventory = player.InventoryManager?.GetOwnInventory(GlobalConstants.characterInvClassName);
+            if (characterInventory == null) return;
+
+            // Find armor pieces and calculate damage blocked per piece
+            // Use hit probability: 50% body, 30% legs, 20% head
+            foreach (var slot in characterInventory)
+            {
+                if (slot?.Itemstack?.Collectible == null) continue;
+
+                string itemCode = slot.Itemstack.Collectible.Code?.ToString();
+                string armorType = SimpleImprovingTraitsModSystem.GetArmorType(itemCode);
+
+                if (armorType == null) continue; // Not armor
+
+                // Get the armor's protection value from item attributes
+                // Vintage Story uses protectionModifiers.relativeProtection (0-1 scale, e.g., 0.2 = 20% reduction)
+                float relativeProtection = 0f;
+                var itemAttributes = slot.Itemstack.Collectible.Attributes;
+                if (itemAttributes != null)
+                {
+                    var protectionModifiers = itemAttributes["protectionModifiers"];
+                    if (protectionModifiers != null && protectionModifiers.Exists)
+                    {
+                        relativeProtection = protectionModifiers["relativeProtection"].AsFloat(0f);
+                    }
+                }
+
+                // If no protection found, give a minimum credit for wearing armor at all
+                // This ensures armor that blocks any damage still gives some XP
+                if (relativeProtection <= 0)
+                {
+                    // Default to a small protection value so armor still grants some XP
+                    relativeProtection = 0.05f; // 5% minimum
+                }
+
+                // Determine hit probability based on armor slot type (from item code)
+                float hitProbability = 0.5f; // Default to body
+                if (itemCode.Contains("-head-") || itemCode.Contains("-helmet-"))
+                    hitProbability = 0.2f;
+                else if (itemCode.Contains("-legs-") || itemCode.Contains("-leggings-"))
+                    hitProbability = 0.3f;
+                else // body
+                    hitProbability = 0.5f;
+
+                // Calculate damage blocked by this armor piece
+                // For a hit that lands on this piece: originalDamage = finalDamage / (1 - protection)
+                // damageBlocked = originalDamage - finalDamage = finalDamage * protection / (1 - protection)
+                // We scale by hit probability since not all hits go to this piece
+                // relativeProtection is already on 0-1 scale (e.g., 0.2 = 20% reduction)
+                float protection = relativeProtection;
+                if (protection >= 1f) protection = 0.99f; // Prevent division by zero
+
+                float damageBlocked = finalDamage * protection / (1f - protection) * hitProbability;
+
+                if (damageBlocked > 0)
+                {
+                    SimpleImprovingTraitsModSystem.ProcessArmorDamageBlocked(player, damageBlocked, itemCode);
+                }
             }
         }
     }

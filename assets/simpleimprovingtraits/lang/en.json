@@ -7,6 +7,7 @@
   "traitname-sitminingmastery": "Hardy",
   "message-melee-level-up": "Melee level up! You are now level {0} with +{1}% melee damage.",
   "trait-soldier-dynamic": "<font color=\"#84ff84\">Soldier</font> (+{0}% melee damage)",
+  "trait-soldier-combined-dynamic": "<font color=\"#84ff84\">Soldier</font> (+{0}% melee damage, +{1}% armor durability, -{2}% armor speed penalty)",
   "trait-sitmeleemastery": "<font color=\"#84ff84\">Soldier</font>",
   "traitname-sitmeleemastery": "Soldier",
   "message-ranged-level-up": "Ranged level up! You are now level {0} with +{1}% ranged damage, +{2}% ranged accuracy, +{3}% draw speed.",
@@ -16,5 +17,15 @@
   "message-walking-level-up": "Walking level up! You are now level {0} with +{1}% walk speed.",
   "trait-fleetfooted-dynamic": "<font color=\"#84ff84\">Fleetfooted</font> (+{0}% walk speed)",
   "trait-sitwalkingmastery": "<font color=\"#84ff84\">Fleetfooted</font>",
-  "traitname-sitwalkingmastery": "Fleetfooted"
+  "traitname-sitwalkingmastery": "Fleetfooted",
+  "message-hunger-level-up": "Hunger level up! You are now level {0} with -{1}% hunger rate.",
+  "trait-sithungermastery": "<font color=\"#84ff84\">Hunger Mastery</font>",
+  "traitname-sithungermastery": "Hunger Mastery",
+  "message-armor-first-equip": "First time equipping this armor! +{0}% armor durability.",
+  "message-armor-time-level-up": "Armor time level up! You are now level {0} with -{1}% walk speed penalty.",
+  "message-armor-damage-level-up": "Armor durability level up! You are now level {0} with +{1}% armor durability.",
+  "message-armor-repair-level-up": "Armor repair level up! You are now level {0} with +{1}% armor durability.",
+  "trait-soldier-armor-dynamic": "<font color=\"#84ff84\">Soldier</font> (+{0}% armor durability, -{1}% armor speed penalty)",
+  "trait-sitarmormastery": "<font color=\"#84ff84\">Soldier</font>",
+  "traitname-sitarmormastery": "Soldier"
 }

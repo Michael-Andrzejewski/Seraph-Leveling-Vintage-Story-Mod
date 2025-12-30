@@ -627,6 +627,293 @@ namespace SimpleImprovingTraits
     }
 
     /// <summary>
+    /// Data structure for tracking Furtive progression.
+    /// Tracks blocks of sneaking for animal detection range reduction.
+    /// </summary>
+    public class FurtiveProgressData
+    {
+        /// <summary>Total credits earned (each credit = -1% animal detection range). Max 35.</summary>
+        public int TotalCredits { get; set; }
+
+        /// <summary>Sneaking blocks accumulated toward the next credit.</summary>
+        public float BlocksInIncrement { get; set; }
+
+        /// <summary>Blocks needed for the next credit (100, 200, 300, etc.).</summary>
+        public int CurrentIncrementSize { get; set; }
+
+        public FurtiveProgressData()
+        {
+            TotalCredits = 0;
+            BlocksInIncrement = 0;
+            CurrentIncrementSize = 100; // Base increment size
+        }
+
+        public FurtiveProgressData Clone()
+        {
+            return new FurtiveProgressData
+            {
+                TotalCredits = this.TotalCredits,
+                BlocksInIncrement = this.BlocksInIncrement,
+                CurrentIncrementSize = this.CurrentIncrementSize
+            };
+        }
+    }
+
+    /// <summary>
+    /// Tracks progress for a specific weapon type (for Precise damage to mechanicals).
+    /// Each weapon type has its own increment counter that persists.
+    /// </summary>
+    public class PreciseWeaponProgressData
+    {
+        /// <summary>Damage accumulated toward the next credit with this weapon type.</summary>
+        public float DamageInIncrement { get; set; }
+
+        /// <summary>Damage needed for the next credit with this weapon type (100, 200, 300, etc.).</summary>
+        public int CurrentIncrementSize { get; set; }
+
+        public PreciseWeaponProgressData()
+        {
+            DamageInIncrement = 0;
+            CurrentIncrementSize = 100; // Base increment size
+        }
+
+        public PreciseWeaponProgressData Clone()
+        {
+            return new PreciseWeaponProgressData
+            {
+                DamageInIncrement = this.DamageInIncrement,
+                CurrentIncrementSize = this.CurrentIncrementSize
+            };
+        }
+    }
+
+    /// <summary>
+    /// Data structure for tracking Precise progression.
+    /// Tracks damage dealt to mechanical creatures for damage bonus.
+    /// </summary>
+    public class PreciseProgressData
+    {
+        /// <summary>Total credits earned (each credit = +1% damage to mechanicals). Max 30.</summary>
+        public int TotalCredits { get; set; }
+
+        /// <summary>Per-weapon progress tracking. Key is weapon type (e.g., "sword-copper", "spear-iron").</summary>
+        public Dictionary<string, PreciseWeaponProgressData> WeaponProgress { get; set; }
+
+        public PreciseProgressData()
+        {
+            TotalCredits = 0;
+            WeaponProgress = new Dictionary<string, PreciseWeaponProgressData>();
+        }
+
+        /// <summary>
+        /// Get or create progress data for a specific weapon type.
+        /// </summary>
+        public PreciseWeaponProgressData GetWeaponProgress(string weaponType)
+        {
+            if (!WeaponProgress.TryGetValue(weaponType, out var progress))
+            {
+                progress = new PreciseWeaponProgressData
+                {
+                    DamageInIncrement = 0,
+                    CurrentIncrementSize = SimpleImprovingTraitsModSystem.BasePreciseDamagePerIncrement
+                };
+                WeaponProgress[weaponType] = progress;
+            }
+            return progress;
+        }
+
+        public PreciseProgressData Clone()
+        {
+            var clone = new PreciseProgressData
+            {
+                TotalCredits = this.TotalCredits,
+                WeaponProgress = new Dictionary<string, PreciseWeaponProgressData>()
+            };
+            foreach (var kvp in this.WeaponProgress)
+            {
+                clone.WeaponProgress[kvp.Key] = kvp.Value.Clone();
+            }
+            return clone;
+        }
+    }
+
+    /// <summary>
+    /// Data structure for tracking Technical progression.
+    /// Binary unlock after repairing translocators.
+    /// </summary>
+    public class TechnicalProgressData
+    {
+        /// <summary>Number of translocators repaired.</summary>
+        public int TranslocatorsRepaired { get; set; }
+
+        /// <summary>Whether the Technical trait has been unlocked.</summary>
+        public bool IsUnlocked { get; set; }
+
+        public TechnicalProgressData()
+        {
+            TranslocatorsRepaired = 0;
+            IsUnlocked = false;
+        }
+
+        public TechnicalProgressData Clone()
+        {
+            return new TechnicalProgressData
+            {
+                TranslocatorsRepaired = this.TranslocatorsRepaired,
+                IsUnlocked = this.IsUnlocked
+            };
+        }
+    }
+
+    /// <summary>
+    /// Data structure for tracking Hardy health unlock progression.
+    /// One-time burst unlock when reaching mining and armor durability thresholds.
+    /// </summary>
+    public class HardyHealthProgressData
+    {
+        /// <summary>Whether the Hardy health bonus has been unlocked.</summary>
+        public bool IsUnlocked { get; set; }
+
+        public HardyHealthProgressData()
+        {
+            IsUnlocked = false;
+        }
+
+        public HardyHealthProgressData Clone()
+        {
+            return new HardyHealthProgressData
+            {
+                IsUnlocked = this.IsUnlocked
+            };
+        }
+    }
+
+    /// <summary>
+    /// Data structure for tracking Bowyer unlock progression.
+    /// Tracks bow damage with simple bow and longbow for unlock.
+    /// </summary>
+    public class BowyerProgressData
+    {
+        /// <summary>Total damage dealt with simple bow or longbow.</summary>
+        public float TotalBowDamage { get; set; }
+
+        /// <summary>Whether the Bowyer trait has been unlocked.</summary>
+        public bool IsUnlocked { get; set; }
+
+        public BowyerProgressData()
+        {
+            TotalBowDamage = 0;
+            IsUnlocked = false;
+        }
+
+        public BowyerProgressData Clone()
+        {
+            return new BowyerProgressData
+            {
+                TotalBowDamage = this.TotalBowDamage,
+                IsUnlocked = this.IsUnlocked
+            };
+        }
+    }
+
+    /// <summary>
+    /// Data structure for tracking Improviser unlock progression.
+    /// Tracks damage dealt with thrown rocks for sling unlock.
+    /// </summary>
+    public class ImproviserProgressData
+    {
+        /// <summary>Total damage dealt with thrown rocks.</summary>
+        public float TotalRockDamage { get; set; }
+
+        /// <summary>Whether the Improviser trait has been unlocked.</summary>
+        public bool IsUnlocked { get; set; }
+
+        public ImproviserProgressData()
+        {
+            TotalRockDamage = 0;
+            IsUnlocked = false;
+        }
+
+        public ImproviserProgressData Clone()
+        {
+            return new ImproviserProgressData
+            {
+                TotalRockDamage = this.TotalRockDamage,
+                IsUnlocked = this.IsUnlocked
+            };
+        }
+    }
+
+    /// <summary>
+    /// Data structure for tracking Tinkerer unlock progression.
+    /// Unlocks after obtaining Technical trait and reaching Precise damage threshold.
+    /// </summary>
+    public class TinkererProgressData
+    {
+        /// <summary>Whether the Tinkerer trait has been unlocked.</summary>
+        public bool IsUnlocked { get; set; }
+
+        public TinkererProgressData()
+        {
+            IsUnlocked = false;
+        }
+
+        public TinkererProgressData Clone()
+        {
+            return new TinkererProgressData
+            {
+                IsUnlocked = this.IsUnlocked
+            };
+        }
+    }
+
+    /// <summary>
+    /// Data structure for tracking Merciless unlock progression.
+    /// Unlocks after reaching armor durability and melee damage thresholds.
+    /// </summary>
+    public class MercilessProgressData
+    {
+        /// <summary>Whether the Merciless trait has been unlocked.</summary>
+        public bool IsUnlocked { get; set; }
+
+        public MercilessProgressData()
+        {
+            IsUnlocked = false;
+        }
+
+        public MercilessProgressData Clone()
+        {
+            return new MercilessProgressData
+            {
+                IsUnlocked = this.IsUnlocked
+            };
+        }
+    }
+
+    /// <summary>
+    /// Data structure for tracking Claustrophobic removal progression (Hunter class).
+    /// Removes the Claustrophobic negative trait after reaching mining threshold.
+    /// </summary>
+    public class ClaustrophobicRemovalProgressData
+    {
+        /// <summary>Whether the Claustrophobic trait has been removed.</summary>
+        public bool IsRemoved { get; set; }
+
+        public ClaustrophobicRemovalProgressData()
+        {
+            IsRemoved = false;
+        }
+
+        public ClaustrophobicRemovalProgressData Clone()
+        {
+            return new ClaustrophobicRemovalProgressData
+            {
+                IsRemoved = this.IsRemoved
+            };
+        }
+    }
+
+    /// <summary>
     /// Main mod system for Simple Improving Traits.
     /// Provides a progression system that improves player traits through gameplay.
     /// Currently implements mining speed progression based on blocks mined.
@@ -960,6 +1247,162 @@ namespace SimpleImprovingTraits
         // Storage for forager progress
         public static ConcurrentDictionary<string, ForagerProgressData> ForagerProgress = new ConcurrentDictionary<string, ForagerProgressData>();
         private static volatile bool pendingForagerProgressSave = false;
+
+        // =========================================================================
+        // FURTIVE TRAIT - Tracks sneaking blocks for animal detection range reduction
+        // =========================================================================
+        public const string FURTIVE_STAT_CODE = "sitFurtiveBonus";
+        private const string FURTIVE_PROGRESS_SAVE_KEY = "sitFurtiveProgress";
+        public const string WATCHED_FURTIVE_LEVEL = "sitFurtiveLevel";
+        public const string WATCHED_FURTIVE_BONUS = "sitFurtiveBonusPercent";
+        public const string FURTIVE_TRAIT_CODE = "sitfurtivemastery";
+
+        // Furtive progression configuration
+        public static int BaseFurtiveSneakBlocksPerIncrement = 100;  // Base sneaking blocks for first credit
+        public static int FurtiveIncrementStep = 100;                 // Increment step per credit
+        public static int MaxFurtivePercent = 35;                     // 35% max animal detection range reduction
+
+        // Vanilla Furtive trait bonus (Malefactor)
+        public const int VANILLA_FURTIVE_DETECTION_REDUCTION = 35;
+
+        // Storage for furtive progress
+        public static ConcurrentDictionary<string, FurtiveProgressData> FurtiveProgress = new ConcurrentDictionary<string, FurtiveProgressData>();
+        private static volatile bool pendingFurtiveProgressSave = false;
+
+        // Tracking last known positions for sneaking distance calculation
+        private static ConcurrentDictionary<string, Vec3d> lastSneakingPositions = new ConcurrentDictionary<string, Vec3d>();
+
+        // =========================================================================
+        // PRECISE TRAIT - Tracks damage to mechanicals for damage bonus
+        // =========================================================================
+        public const string PRECISE_STAT_CODE = "sitPreciseBonus";
+        private const string PRECISE_PROGRESS_SAVE_KEY = "sitPreciseProgress";
+        public const string WATCHED_PRECISE_LEVEL = "sitPreciseLevel";
+        public const string WATCHED_PRECISE_BONUS = "sitPreciseBonusPercent";
+        public const string PRECISE_TRAIT_CODE = "sitprecisemastery";
+
+        // Precise progression configuration
+        public static int BasePreciseDamagePerIncrement = 100;  // Base damage for first credit
+        public static int PreciseIncrementStep = 100;            // Increment step per credit
+        public static int MaxPrecisePercent = 30;                // 30% max damage bonus to mechanicals
+
+        // Vanilla Precise trait bonus (Clockmaker)
+        public const int VANILLA_PRECISE_MECHANICAL_DAMAGE_BONUS = 25;
+
+        // Storage for precise progress
+        public static ConcurrentDictionary<string, PreciseProgressData> PreciseProgress = new ConcurrentDictionary<string, PreciseProgressData>();
+        private static volatile bool pendingPreciseProgressSave = false;
+
+        // =========================================================================
+        // TECHNICAL TRAIT - Unlocks after repairing translocators
+        // =========================================================================
+        public const string TECHNICAL_STAT_CODE = "sitTechnicalBonus";
+        private const string TECHNICAL_PROGRESS_SAVE_KEY = "sitTechnicalProgress";
+        public const string WATCHED_TECHNICAL_UNLOCKED = "sitTechnicalUnlocked";
+        public const string WATCHED_TECHNICAL_REPAIRS = "sitTechnicalRepairs";
+        public const string TECHNICAL_TRAIT_CODE = "sittechnicalmastery";
+
+        // Technical progression configuration
+        public static int TechnicalRequiredTranslocatorRepairs = 5;  // Repairs needed to unlock
+
+        // Storage for technical progress
+        public static ConcurrentDictionary<string, TechnicalProgressData> TechnicalProgress = new ConcurrentDictionary<string, TechnicalProgressData>();
+        private static volatile bool pendingTechnicalProgressSave = false;
+
+        // =========================================================================
+        // HARDY HEALTH TRAIT - Unlocks +5 HP after reaching mining and armor thresholds
+        // =========================================================================
+        public const string HARDY_HEALTH_STAT_CODE = "sitHardyHealthBonus";
+        private const string HARDY_HEALTH_PROGRESS_SAVE_KEY = "sitHardyHealthProgress";
+        public const string WATCHED_HARDY_HEALTH_UNLOCKED = "sitHardyHealthUnlocked";
+        public const string HARDY_HEALTH_TRAIT_CODE = "sithardyhealthmastery";
+
+        // Hardy health unlock thresholds
+        public static int HardyHealthMiningThreshold = 110;          // 110% mining speed bonus required
+        public static int HardyHealthArmorDurabilityThreshold = 10;  // 10% armor durability bonus required
+        public static int HardyHealthBonus = 5;                      // +5 HP bonus
+
+        // Storage for hardy health progress
+        public static ConcurrentDictionary<string, HardyHealthProgressData> HardyHealthProgress = new ConcurrentDictionary<string, HardyHealthProgressData>();
+        private static volatile bool pendingHardyHealthProgressSave = false;
+
+        // =========================================================================
+        // BOWYER TRAIT - Unlocks crude bow/arrows after ranged damage + bow damage
+        // =========================================================================
+        public const string BOWYER_STAT_CODE = "sitBowyerBonus";
+        private const string BOWYER_PROGRESS_SAVE_KEY = "sitBowyerProgress";
+        public const string WATCHED_BOWYER_UNLOCKED = "sitBowyerUnlocked";
+        public const string WATCHED_BOWYER_BOW_DAMAGE = "sitBowyerBowDamage";
+        public const string BOWYER_TRAIT_CODE = "sitbowyermastery";
+
+        // Bowyer unlock thresholds
+        public static int BowyerRangedDamageThreshold = 10;          // 10% ranged damage bonus required
+        public static int BowyerBowDamageThreshold = 300;            // 300 total bow damage required
+
+        // Storage for bowyer progress
+        public static ConcurrentDictionary<string, BowyerProgressData> BowyerProgress = new ConcurrentDictionary<string, BowyerProgressData>();
+        private static volatile bool pendingBowyerProgressSave = false;
+
+        // =========================================================================
+        // IMPROVISER TRAIT - Unlocks sling after thrown rock damage
+        // =========================================================================
+        public const string IMPROVISER_STAT_CODE = "sitImproviserBonus";
+        private const string IMPROVISER_PROGRESS_SAVE_KEY = "sitImproviserProgress";
+        public const string WATCHED_IMPROVISER_UNLOCKED = "sitImproviserUnlocked";
+        public const string WATCHED_IMPROVISER_ROCK_DAMAGE = "sitImproviserRockDamage";
+        public const string IMPROVISER_TRAIT_CODE = "sitimprovisermastery";
+
+        // Improviser unlock threshold
+        public static int ImproviserRockDamageThreshold = 300;       // 300 total thrown rock damage required
+
+        // Storage for improviser progress
+        public static ConcurrentDictionary<string, ImproviserProgressData> ImproviserProgress = new ConcurrentDictionary<string, ImproviserProgressData>();
+        private static volatile bool pendingImproviserProgressSave = false;
+
+        // =========================================================================
+        // TINKERER TRAIT - Unlocks tuning spear after Technical + Precise threshold
+        // =========================================================================
+        public const string TINKERER_STAT_CODE = "sitTinkererBonus";
+        private const string TINKERER_PROGRESS_SAVE_KEY = "sitTinkererProgress";
+        public const string WATCHED_TINKERER_UNLOCKED = "sitTinkererUnlocked";
+        public const string TINKERER_TRAIT_CODE = "sittinkerermastery";
+
+        // Tinkerer unlock threshold
+        public static int TinkererPreciseThreshold = 10;              // 10% Precise damage bonus required (plus Technical)
+
+        // Storage for tinkerer progress
+        public static ConcurrentDictionary<string, TinkererProgressData> TinkererProgress = new ConcurrentDictionary<string, TinkererProgressData>();
+        private static volatile bool pendingTinkererProgressSave = false;
+
+        // =========================================================================
+        // MERCILESS TRAIT - Unlocks shortsword/shield after armor + melee thresholds
+        // =========================================================================
+        public const string MERCILESS_STAT_CODE = "sitMercilessBonus";
+        private const string MERCILESS_PROGRESS_SAVE_KEY = "sitMercilessProgress";
+        public const string WATCHED_MERCILESS_UNLOCKED = "sitMercilessUnlocked";
+        public const string MERCILESS_TRAIT_CODE = "sitmercilessmastery";
+
+        // Merciless unlock thresholds
+        public static int MercilessArmorDurabilityThreshold = 10;    // 10% armor durability bonus required
+        public static int MercilessMeleeDamageThreshold = 15;        // 15% melee damage bonus required
+
+        // Storage for merciless progress
+        public static ConcurrentDictionary<string, MercilessProgressData> MercilessProgress = new ConcurrentDictionary<string, MercilessProgressData>();
+        private static volatile bool pendingMercilessProgressSave = false;
+
+        // =========================================================================
+        // CLAUSTROPHOBIC REMOVAL - Removes trait after reaching mining threshold (Hunter)
+        // =========================================================================
+        private const string CLAUSTROPHOBIC_REMOVAL_PROGRESS_SAVE_KEY = "sitClaustrophobicRemovalProgress";
+        public const string WATCHED_CLAUSTROPHOBIC_REMOVED = "sitClaustrophobicRemoved";
+        public const string CLAUSTROPHOBIC_REMOVED_TRAIT_CODE = "sitclaustrophobicremoved";
+
+        // Claustrophobic removal threshold
+        public static int ClaustrophobicRemovalMiningThreshold = 100;  // 100% mining speed bonus required
+
+        // Storage for claustrophobic removal progress
+        public static ConcurrentDictionary<string, ClaustrophobicRemovalProgressData> ClaustrophobicRemovalProgress = new ConcurrentDictionary<string, ClaustrophobicRemovalProgressData>();
+        private static volatile bool pendingClaustrophobicRemovalProgressSave = false;
 
         private const string CONFIG_SAVE_KEY = "sitConfig";
 
@@ -1329,6 +1772,132 @@ namespace SimpleImprovingTraits
                     .WithArgs(api.ChatCommands.Parsers.OptionalInt("percent"))
                     .RequiresPrivilege(Privilege.controlserver)
                     .HandleWith(OnTraitForagerMaxCommand)
+                .EndSubCommand()
+                // Furtive trait commands
+                .BeginSubCommand("furtive")
+                    .WithDescription("View your furtive (sneaking) progression stats")
+                    .RequiresPrivilege(Privilege.chat)
+                    .RequiresPlayer()
+                    .HandleWith(OnTraitFurtiveCommand)
+                .EndSubCommand()
+                .BeginSubCommand("furtivelevel")
+                    .WithDescription("Set your furtive level (admin only)")
+                    .WithArgs(api.ChatCommands.Parsers.Int("level"))
+                    .RequiresPrivilege(Privilege.controlserver)
+                    .RequiresPlayer()
+                    .HandleWith(OnTraitFurtiveLevelCommand)
+                .EndSubCommand()
+                // Precise trait commands
+                .BeginSubCommand("precise")
+                    .WithDescription("View your precise (mechanical damage) progression stats")
+                    .RequiresPrivilege(Privilege.chat)
+                    .RequiresPlayer()
+                    .HandleWith(OnTraitPreciseCommand)
+                .EndSubCommand()
+                .BeginSubCommand("preciselevel")
+                    .WithDescription("Set your precise level (admin only)")
+                    .WithArgs(api.ChatCommands.Parsers.Int("level"))
+                    .RequiresPrivilege(Privilege.controlserver)
+                    .RequiresPlayer()
+                    .HandleWith(OnTraitPreciseLevelCommand)
+                .EndSubCommand()
+                // Technical trait commands
+                .BeginSubCommand("technical")
+                    .WithDescription("View your technical trait progress")
+                    .RequiresPrivilege(Privilege.chat)
+                    .RequiresPlayer()
+                    .HandleWith(OnTraitTechnicalCommand)
+                .EndSubCommand()
+                .BeginSubCommand("technicalunlock")
+                    .WithDescription("Manually unlock/lock technical trait (admin only)")
+                    .WithArgs(api.ChatCommands.Parsers.Bool("unlock"))
+                    .RequiresPrivilege(Privilege.controlserver)
+                    .RequiresPlayer()
+                    .HandleWith(OnTraitTechnicalUnlockCommand)
+                .EndSubCommand()
+                // Hardy health trait commands
+                .BeginSubCommand("hardyhealth")
+                    .WithDescription("View your hardy health unlock progress")
+                    .RequiresPrivilege(Privilege.chat)
+                    .RequiresPlayer()
+                    .HandleWith(OnTraitHardyHealthCommand)
+                .EndSubCommand()
+                .BeginSubCommand("hardyhealthunlock")
+                    .WithDescription("Manually unlock/lock hardy health trait (admin only)")
+                    .WithArgs(api.ChatCommands.Parsers.Bool("unlock"))
+                    .RequiresPrivilege(Privilege.controlserver)
+                    .RequiresPlayer()
+                    .HandleWith(OnTraitHardyHealthUnlockCommand)
+                .EndSubCommand()
+                // Bowyer trait commands
+                .BeginSubCommand("bowyer")
+                    .WithDescription("View your bowyer unlock progress")
+                    .RequiresPrivilege(Privilege.chat)
+                    .RequiresPlayer()
+                    .HandleWith(OnTraitBowyerCommand)
+                .EndSubCommand()
+                .BeginSubCommand("bowyerunlock")
+                    .WithDescription("Manually unlock/lock bowyer trait (admin only)")
+                    .WithArgs(api.ChatCommands.Parsers.Bool("unlock"))
+                    .RequiresPrivilege(Privilege.controlserver)
+                    .RequiresPlayer()
+                    .HandleWith(OnTraitBowyerUnlockCommand)
+                .EndSubCommand()
+                // Improviser trait commands
+                .BeginSubCommand("improviser")
+                    .WithDescription("View your improviser unlock progress")
+                    .RequiresPrivilege(Privilege.chat)
+                    .RequiresPlayer()
+                    .HandleWith(OnTraitImproviserCommand)
+                .EndSubCommand()
+                .BeginSubCommand("improviserunlock")
+                    .WithDescription("Manually unlock/lock improviser trait (admin only)")
+                    .WithArgs(api.ChatCommands.Parsers.Bool("unlock"))
+                    .RequiresPrivilege(Privilege.controlserver)
+                    .RequiresPlayer()
+                    .HandleWith(OnTraitImproviserUnlockCommand)
+                .EndSubCommand()
+                // Tinkerer trait commands
+                .BeginSubCommand("tinkerer")
+                    .WithDescription("View your tinkerer unlock progress")
+                    .RequiresPrivilege(Privilege.chat)
+                    .RequiresPlayer()
+                    .HandleWith(OnTraitTinkererCommand)
+                .EndSubCommand()
+                .BeginSubCommand("tinkererunlock")
+                    .WithDescription("Manually unlock/lock tinkerer trait (admin only)")
+                    .WithArgs(api.ChatCommands.Parsers.Bool("unlock"))
+                    .RequiresPrivilege(Privilege.controlserver)
+                    .RequiresPlayer()
+                    .HandleWith(OnTraitTinkererUnlockCommand)
+                .EndSubCommand()
+                // Merciless trait commands
+                .BeginSubCommand("merciless")
+                    .WithDescription("View your merciless unlock progress")
+                    .RequiresPrivilege(Privilege.chat)
+                    .RequiresPlayer()
+                    .HandleWith(OnTraitMercilessCommand)
+                .EndSubCommand()
+                .BeginSubCommand("mercilessunlock")
+                    .WithDescription("Manually unlock/lock merciless trait (admin only)")
+                    .WithArgs(api.ChatCommands.Parsers.Bool("unlock"))
+                    .RequiresPrivilege(Privilege.controlserver)
+                    .RequiresPlayer()
+                    .HandleWith(OnTraitMercilessUnlockCommand)
+                .EndSubCommand()
+                // Claustrophobic removal commands
+                .BeginSubCommand("claustrophobic")
+                    .WithDescription("View your claustrophobic removal progress (Hunter only)")
+                    .RequiresPrivilege(Privilege.chat)
+                    .RequiresPlayer()
+                    .HandleWith(OnTraitClaustrophobicCommand)
+                .EndSubCommand()
+                .BeginSubCommand("claustrophobicunlock")
+                    .WithDescription("Manually set claustrophobic removed status (admin only)")
+                    .WithArgs(api.ChatCommands.Parsers.Bool("removed"))
+                    .RequiresPrivilege(Privilege.controlserver)
+                    .RequiresPlayer()
+                    .HandleWith(OnTraitClaustrophobicUnlockCommand)
                 .EndSubCommand();
 
             // Hook into block breaking for mining progression
@@ -1356,6 +1925,15 @@ namespace SimpleImprovingTraits
             api.Event.SaveGameLoaded += LoadPilfererProgress;
             api.Event.SaveGameLoaded += LoadResourcefulProgress;
             api.Event.SaveGameLoaded += LoadForagerProgress;
+            api.Event.SaveGameLoaded += LoadFurtiveProgress;
+            api.Event.SaveGameLoaded += LoadPreciseProgress;
+            api.Event.SaveGameLoaded += LoadTechnicalProgress;
+            api.Event.SaveGameLoaded += LoadHardyHealthProgress;
+            api.Event.SaveGameLoaded += LoadBowyerProgress;
+            api.Event.SaveGameLoaded += LoadImproviserProgress;
+            api.Event.SaveGameLoaded += LoadTinkererProgress;
+            api.Event.SaveGameLoaded += LoadMercilessProgress;
+            api.Event.SaveGameLoaded += LoadClaustrophobicRemovalProgress;
 
             // Register game tick listener for walking distance tracking (every 500ms)
             api.Event.RegisterGameTickListener(OnWalkingTick, 500);
@@ -1371,6 +1949,9 @@ namespace SimpleImprovingTraits
 
             // Register game tick listener for Mender repair tracking (every 500ms for responsive detection)
             api.Event.RegisterGameTickListener(OnMenderRepairTick, 500);
+
+            // Register game tick listener for sneaking distance tracking (every 500ms for Furtive)
+            api.Event.RegisterGameTickListener(OnSneakingTick, 500);
 
             // Hook into player disconnect to clean up position tracking
             api.Event.PlayerDisconnect += OnPlayerDisconnect;
@@ -3192,6 +3773,10 @@ namespace SimpleImprovingTraits
                 player.SendMessage(GlobalConstants.GeneralChatGroup,
                     Lang.Get("simpleimprovingtraits:message-armor-damage-level-up", armorProgress.TotalDurabilityCredits, durabilityBonus),
                     EnumChatType.Notification);
+
+                // Check for trait unlocks that depend on armor durability
+                CheckHardyHealthUnlock(player);
+                CheckMercilessUnlock(player);
             }
         }
 
@@ -3235,6 +3820,10 @@ namespace SimpleImprovingTraits
                 player.SendMessage(GlobalConstants.GeneralChatGroup,
                     Lang.Get("simpleimprovingtraits:message-armor-repair-level-up", armorProgress.TotalDurabilityCredits, durabilityBonus),
                     EnumChatType.Notification);
+
+                // Check for trait unlocks that depend on armor durability
+                CheckHardyHealthUnlock(player);
+                CheckMercilessUnlock(player);
             }
         }
 
@@ -3345,6 +3934,10 @@ namespace SimpleImprovingTraits
                 byPlayer.SendMessage(GlobalConstants.GeneralChatGroup,
                     Lang.Get("simpleimprovingtraits:message-mining-level-up", playerProgress.TotalCredits, actualBonusPercent),
                     EnumChatType.Notification);
+
+                // Check for trait unlocks that depend on mining level
+                CheckHardyHealthUnlock(byPlayer);
+                CheckClaustrophobicRemoval(byPlayer);
             }
         }
 
@@ -3627,6 +4220,83 @@ namespace SimpleImprovingTraits
                 ServerApi.Logger.Debug($"[SimpleImprovingTraits] Applied forager bonus +{foragerCredits}% to player {byPlayer.PlayerName}");
             }
 
+            // Apply furtive bonus
+            var furtiveProg = FurtiveProgress.GetOrAdd(playerUid, _ => new FurtiveProgressData
+            {
+                CurrentIncrementSize = BaseFurtiveSneakBlocksPerIncrement
+            });
+            int furtiveCredits = furtiveProg.TotalCredits;
+            ApplyFurtiveBonusStatic(byPlayer, furtiveCredits);
+            if (furtiveCredits > 0)
+            {
+                ServerApi.Logger.Debug($"[SimpleImprovingTraits] Applied furtive bonus -{furtiveCredits}% detection to player {byPlayer.PlayerName}");
+            }
+
+            // Apply precise bonus
+            var preciseProg = PreciseProgress.GetOrAdd(playerUid, _ => new PreciseProgressData());
+            int preciseCredits = preciseProg.TotalCredits;
+            ApplyPreciseBonusStatic(byPlayer, preciseCredits);
+            if (preciseCredits > 0)
+            {
+                ServerApi.Logger.Debug($"[SimpleImprovingTraits] Applied precise bonus +{preciseCredits}% mechanical damage to player {byPlayer.PlayerName}");
+            }
+
+            // Apply technical unlock
+            var technicalProg = TechnicalProgress.GetOrAdd(playerUid, _ => new TechnicalProgressData());
+            if (technicalProg.IsUnlocked)
+            {
+                ApplyTechnicalBonusStatic(byPlayer, true);
+                ServerApi.Logger.Debug($"[SimpleImprovingTraits] Applied technical unlock to player {byPlayer.PlayerName}");
+            }
+
+            // Apply hardy health unlock
+            var hardyHealthProg = HardyHealthProgress.GetOrAdd(playerUid, _ => new HardyHealthProgressData());
+            if (hardyHealthProg.IsUnlocked)
+            {
+                ApplyHardyHealthBonusStatic(byPlayer, true);
+                ServerApi.Logger.Debug($"[SimpleImprovingTraits] Applied hardy health +{HardyHealthBonus} HP to player {byPlayer.PlayerName}");
+            }
+
+            // Apply bowyer unlock
+            var bowyerProg = BowyerProgress.GetOrAdd(playerUid, _ => new BowyerProgressData());
+            if (bowyerProg.IsUnlocked)
+            {
+                ApplyBowyerBonusStatic(byPlayer, true);
+                ServerApi.Logger.Debug($"[SimpleImprovingTraits] Applied bowyer unlock to player {byPlayer.PlayerName}");
+            }
+
+            // Apply improviser unlock
+            var improviserProg = ImproviserProgress.GetOrAdd(playerUid, _ => new ImproviserProgressData());
+            if (improviserProg.IsUnlocked)
+            {
+                ApplyImproviserBonusStatic(byPlayer, true);
+                ServerApi.Logger.Debug($"[SimpleImprovingTraits] Applied improviser unlock to player {byPlayer.PlayerName}");
+            }
+
+            // Apply tinkerer unlock
+            var tinkererProg = TinkererProgress.GetOrAdd(playerUid, _ => new TinkererProgressData());
+            if (tinkererProg.IsUnlocked)
+            {
+                ApplyTinkererBonusStatic(byPlayer, true);
+                ServerApi.Logger.Debug($"[SimpleImprovingTraits] Applied tinkerer unlock to player {byPlayer.PlayerName}");
+            }
+
+            // Apply merciless unlock
+            var mercilessProg = MercilessProgress.GetOrAdd(playerUid, _ => new MercilessProgressData());
+            if (mercilessProg.IsUnlocked)
+            {
+                ApplyMercilessBonusStatic(byPlayer, true);
+                ServerApi.Logger.Debug($"[SimpleImprovingTraits] Applied merciless unlock to player {byPlayer.PlayerName}");
+            }
+
+            // Apply claustrophobic removal
+            var claustrophobicProg = ClaustrophobicRemovalProgress.GetOrAdd(playerUid, _ => new ClaustrophobicRemovalProgressData());
+            if (claustrophobicProg.IsRemoved)
+            {
+                ApplyClaustrophobicRemovalStatic(byPlayer, true);
+                ServerApi.Logger.Debug($"[SimpleImprovingTraits] Applied claustrophobic removal to player {byPlayer.PlayerName}");
+            }
+
             // Initialize equipped armor tracking for this player
             InitializePlayerArmorTracking(byPlayer);
         }
@@ -3782,6 +4452,9 @@ namespace SimpleImprovingTraits
 
                 // Patch CollectibleObject.OnHeldInteractStep for Mender trait (sewing kit repairs)
                 PatchSewingKitRepairs(api);
+
+                // Patch BlockEntityStaticTranslocator.DoRepair for Technical trait (translocator repairs)
+                PatchTranslocatorRepairs(api);
             }
             catch (Exception ex)
             {
@@ -3906,6 +4579,42 @@ namespace SimpleImprovingTraits
         }
 
         /// <summary>
+        /// Patch BlockEntityStaticTranslocator.DoRepair to track translocator repairs for Technical trait.
+        /// </summary>
+        private void PatchTranslocatorRepairs(ICoreServerAPI api)
+        {
+            try
+            {
+                // Find the BlockEntityStaticTranslocator type
+                var translocatorType = AccessTools.TypeByName("Vintagestory.GameContent.BlockEntityStaticTranslocator");
+                if (translocatorType == null)
+                {
+                    api.Logger.Warning("[SimpleImprovingTraits] Could not find BlockEntityStaticTranslocator type");
+                    return;
+                }
+
+                // Find the DoRepair method
+                var doRepairMethod = AccessTools.Method(translocatorType, "DoRepair");
+                if (doRepairMethod == null)
+                {
+                    api.Logger.Warning("[SimpleImprovingTraits] Could not find DoRepair method in BlockEntityStaticTranslocator");
+                    return;
+                }
+
+                // Get our postfix method
+                var postfixMethod = AccessTools.Method(typeof(TranslocatorPatches),
+                    nameof(TranslocatorPatches.DoRepair_Postfix));
+
+                serverHarmony.Patch(doRepairMethod, postfix: new HarmonyMethod(postfixMethod));
+                api.Logger.Notification("[SimpleImprovingTraits] Successfully patched BlockEntityStaticTranslocator.DoRepair for Technical trait");
+            }
+            catch (Exception ex)
+            {
+                api.Logger.Warning($"[SimpleImprovingTraits] Failed to patch BlockEntityStaticTranslocator.DoRepair: {ex.Message}");
+            }
+        }
+
+        /// <summary>
         /// Process melee damage dealt by a player. Called from Harmony patch.
         /// </summary>
         public static void ProcessMeleeDamage(IServerPlayer attackerPlayer, string weaponType, float damage)
@@ -3950,6 +4659,9 @@ namespace SimpleImprovingTraits
                 attackerPlayer.SendMessage(GlobalConstants.GeneralChatGroup,
                     Lang.Get("simpleimprovingtraits:message-melee-level-up", playerProgress.TotalCredits, actualBonusPercent),
                     EnumChatType.Notification);
+
+                // Check for trait unlocks that depend on melee damage
+                CheckMercilessUnlock(attackerPlayer);
             }
         }
 
@@ -4024,11 +4736,13 @@ namespace SimpleImprovingTraits
             {
                 var newTraits = currentTraits.Append(traitCode).ToArray();
                 entity.WatchedAttributes.SetStringArray("extraTraits", newTraits);
+                entity.WatchedAttributes.MarkPathDirty("extraTraits");
             }
             else if (!shouldHave && hasTrait)
             {
                 var newTraits = currentTraits.Where(t => t != traitCode).ToArray();
                 entity.WatchedAttributes.SetStringArray("extraTraits", newTraits);
+                entity.WatchedAttributes.MarkPathDirty("extraTraits");
             }
         }
 
@@ -4137,7 +4851,89 @@ namespace SimpleImprovingTraits
                 attackerPlayer.SendMessage(GlobalConstants.GeneralChatGroup,
                     Lang.Get("simpleimprovingtraits:message-ranged-level-up", playerProgress.TotalCredits, damageBonus, accuracyBonus, distanceBonus),
                     EnumChatType.Notification);
+
+                // Check for trait unlocks that depend on ranged damage
+                CheckBowyerUnlock(attackerPlayer);
             }
+
+            // Track bow damage for Bowyer unlock (simple bow or longbow)
+            if (IsSimpleBowOrLongbow(weaponCombo))
+            {
+                TrackBowyerBowDamage(attackerPlayer, damage);
+            }
+
+            // Track thrown rock damage for Improviser unlock
+            if (IsThrownRock(weaponCombo))
+            {
+                TrackImproviserRockDamage(attackerPlayer, damage);
+            }
+        }
+
+        /// <summary>
+        /// Check if the weapon combo represents a simple bow or longbow.
+        /// </summary>
+        private static bool IsSimpleBowOrLongbow(string weaponCombo)
+        {
+            if (string.IsNullOrEmpty(weaponCombo)) return false;
+            string lower = weaponCombo.ToLowerInvariant();
+            return lower.Contains("bow-simple") || lower.Contains("bow-long") ||
+                   lower.StartsWith("simple") || lower.StartsWith("long");
+        }
+
+        /// <summary>
+        /// Check if the weapon combo represents a thrown rock.
+        /// </summary>
+        private static bool IsThrownRock(string weaponCombo)
+        {
+            if (string.IsNullOrEmpty(weaponCombo)) return false;
+            string lower = weaponCombo.ToLowerInvariant();
+            return lower.Contains("stone-") || lower.Contains("sling+stone") ||
+                   lower.StartsWith("stone") || lower.Contains("thrownstone") ||
+                   (lower.Contains("stone") && !lower.Contains("whetstone"));
+        }
+
+        /// <summary>
+        /// Track bow damage for Bowyer unlock.
+        /// </summary>
+        private static void TrackBowyerBowDamage(IServerPlayer player, float damage)
+        {
+            if (player?.Entity == null || damage <= 0) return;
+
+            string playerUid = player.PlayerUID;
+            var progress = BowyerProgress.GetOrAdd(playerUid, _ => new BowyerProgressData());
+
+            // Already unlocked
+            if (progress.IsUnlocked) return;
+
+            progress.TotalBowDamage += damage;
+            pendingBowyerProgressSave = true;
+
+            player.Entity.WatchedAttributes.SetFloat(WATCHED_BOWYER_BOW_DAMAGE, progress.TotalBowDamage);
+
+            // Check if unlock threshold is reached
+            CheckBowyerUnlock(player);
+        }
+
+        /// <summary>
+        /// Track thrown rock damage for Improviser unlock.
+        /// </summary>
+        private static void TrackImproviserRockDamage(IServerPlayer player, float damage)
+        {
+            if (player?.Entity == null || damage <= 0) return;
+
+            string playerUid = player.PlayerUID;
+            var progress = ImproviserProgress.GetOrAdd(playerUid, _ => new ImproviserProgressData());
+
+            // Already unlocked
+            if (progress.IsUnlocked) return;
+
+            progress.TotalRockDamage += damage;
+            pendingImproviserProgressSave = true;
+
+            player.Entity.WatchedAttributes.SetFloat(WATCHED_IMPROVISER_ROCK_DAMAGE, progress.TotalRockDamage);
+
+            // Check if unlock threshold is reached
+            CheckImproviserUnlock(player);
         }
 
         /// <summary>
@@ -4315,6 +5111,42 @@ namespace SimpleImprovingTraits
                 {
                     PersistForagerProgress();
                 }
+                if (pendingFurtiveProgressSave || !FurtiveProgress.IsEmpty)
+                {
+                    PersistFurtiveProgress();
+                }
+                if (pendingPreciseProgressSave || !PreciseProgress.IsEmpty)
+                {
+                    PersistPreciseProgress();
+                }
+                if (pendingTechnicalProgressSave || !TechnicalProgress.IsEmpty)
+                {
+                    PersistTechnicalProgress();
+                }
+                if (pendingHardyHealthProgressSave || !HardyHealthProgress.IsEmpty)
+                {
+                    PersistHardyHealthProgress();
+                }
+                if (pendingBowyerProgressSave || !BowyerProgress.IsEmpty)
+                {
+                    PersistBowyerProgress();
+                }
+                if (pendingImproviserProgressSave || !ImproviserProgress.IsEmpty)
+                {
+                    PersistImproviserProgress();
+                }
+                if (pendingTinkererProgressSave || !TinkererProgress.IsEmpty)
+                {
+                    PersistTinkererProgress();
+                }
+                if (pendingMercilessProgressSave || !MercilessProgress.IsEmpty)
+                {
+                    PersistMercilessProgress();
+                }
+                if (pendingClaustrophobicRemovalProgressSave || !ClaustrophobicRemovalProgress.IsEmpty)
+                {
+                    PersistClaustrophobicRemovalProgress();
+                }
 
                 ServerApi.Event.DidBreakBlock -= OnBlockBroken;
                 ServerApi.Event.PlayerJoin -= OnPlayerJoin;
@@ -4332,6 +5164,15 @@ namespace SimpleImprovingTraits
                 ServerApi.Event.SaveGameLoaded -= LoadPilfererProgress;
                 ServerApi.Event.SaveGameLoaded -= LoadResourcefulProgress;
                 ServerApi.Event.SaveGameLoaded -= LoadForagerProgress;
+                ServerApi.Event.SaveGameLoaded -= LoadFurtiveProgress;
+                ServerApi.Event.SaveGameLoaded -= LoadPreciseProgress;
+                ServerApi.Event.SaveGameLoaded -= LoadTechnicalProgress;
+                ServerApi.Event.SaveGameLoaded -= LoadHardyHealthProgress;
+                ServerApi.Event.SaveGameLoaded -= LoadBowyerProgress;
+                ServerApi.Event.SaveGameLoaded -= LoadImproviserProgress;
+                ServerApi.Event.SaveGameLoaded -= LoadTinkererProgress;
+                ServerApi.Event.SaveGameLoaded -= LoadMercilessProgress;
+                ServerApi.Event.SaveGameLoaded -= LoadClaustrophobicRemovalProgress;
             }
 
             // Unpatch server-side Harmony patches
@@ -4348,7 +5189,17 @@ namespace SimpleImprovingTraits
             PilfererProgress.Clear();
             ResourcefulProgress.Clear();
             ForagerProgress.Clear();
+            FurtiveProgress.Clear();
+            PreciseProgress.Clear();
+            TechnicalProgress.Clear();
+            HardyHealthProgress.Clear();
+            BowyerProgress.Clear();
+            ImproviserProgress.Clear();
+            TinkererProgress.Clear();
+            MercilessProgress.Clear();
+            ClaustrophobicRemovalProgress.Clear();
             lastPlayerPositions.Clear();
+            lastSneakingPositions.Clear();
             pendingMiningProgressSave = false;
             pendingMeleeProgressSave = false;
             pendingRangedProgressSave = false;
@@ -4360,6 +5211,15 @@ namespace SimpleImprovingTraits
             pendingPilfererProgressSave = false;
             pendingResourcefulProgressSave = false;
             pendingForagerProgressSave = false;
+            pendingFurtiveProgressSave = false;
+            pendingPreciseProgressSave = false;
+            pendingTechnicalProgressSave = false;
+            pendingHardyHealthProgressSave = false;
+            pendingBowyerProgressSave = false;
+            pendingImproviserProgressSave = false;
+            pendingTinkererProgressSave = false;
+            pendingMercilessProgressSave = false;
+            pendingClaustrophobicRemovalProgressSave = false;
             base.Dispose();
         }
 
@@ -4432,6 +5292,60 @@ namespace SimpleImprovingTraits
             {
                 PersistForagerProgress();
                 pendingForagerProgressSave = false;
+            }
+
+            if (pendingFurtiveProgressSave || !FurtiveProgress.IsEmpty)
+            {
+                PersistFurtiveProgress();
+                pendingFurtiveProgressSave = false;
+            }
+
+            if (pendingPreciseProgressSave || !PreciseProgress.IsEmpty)
+            {
+                PersistPreciseProgress();
+                pendingPreciseProgressSave = false;
+            }
+
+            if (pendingTechnicalProgressSave || !TechnicalProgress.IsEmpty)
+            {
+                PersistTechnicalProgress();
+                pendingTechnicalProgressSave = false;
+            }
+
+            if (pendingHardyHealthProgressSave || !HardyHealthProgress.IsEmpty)
+            {
+                PersistHardyHealthProgress();
+                pendingHardyHealthProgressSave = false;
+            }
+
+            if (pendingBowyerProgressSave || !BowyerProgress.IsEmpty)
+            {
+                PersistBowyerProgress();
+                pendingBowyerProgressSave = false;
+            }
+
+            if (pendingImproviserProgressSave || !ImproviserProgress.IsEmpty)
+            {
+                PersistImproviserProgress();
+                pendingImproviserProgressSave = false;
+            }
+
+            if (pendingTinkererProgressSave || !TinkererProgress.IsEmpty)
+            {
+                PersistTinkererProgress();
+                pendingTinkererProgressSave = false;
+            }
+
+            if (pendingMercilessProgressSave || !MercilessProgress.IsEmpty)
+            {
+                PersistMercilessProgress();
+                pendingMercilessProgressSave = false;
+            }
+
+            if (pendingClaustrophobicRemovalProgressSave || !ClaustrophobicRemovalProgress.IsEmpty)
+            {
+                PersistClaustrophobicRemovalProgress();
+                pendingClaustrophobicRemovalProgressSave = false;
             }
 
             if (pendingConfigSave)
@@ -5874,6 +6788,628 @@ namespace SimpleImprovingTraits
         }
 
         // =========================================================================
+        // FURTIVE TRAIT IMPLEMENTATION
+        // =========================================================================
+
+        /// <summary>
+        /// Called every 500ms to track sneaking distance for all online players.
+        /// Calculates 2D horizontal distance moved while sneaking (ignoring Y-axis).
+        /// </summary>
+        private void OnSneakingTick(float dt)
+        {
+            foreach (IServerPlayer player in ServerApi.World.AllOnlinePlayers)
+            {
+                if (player?.Entity == null) continue;
+
+                string playerUid = player.PlayerUID;
+
+                // Check if player is sneaking
+                bool isSneaking = player.Entity.Controls?.Sneak ?? false;
+
+                if (!isSneaking)
+                {
+                    // Not sneaking, clear last position so movement doesn't count
+                    lastSneakingPositions.TryRemove(playerUid, out _);
+                    continue;
+                }
+
+                Vec3d currentPos = player.Entity.Pos.XYZ;
+
+                // Get or initialize last sneaking position
+                if (!lastSneakingPositions.TryGetValue(playerUid, out Vec3d lastPos))
+                {
+                    lastSneakingPositions[playerUid] = currentPos.Clone();
+                    continue;
+                }
+
+                // Calculate 2D horizontal distance (ignore Y axis to avoid counting climbing/falling)
+                double dx = currentPos.X - lastPos.X;
+                double dz = currentPos.Z - lastPos.Z;
+                float distance = (float)Math.Sqrt(dx * dx + dz * dz);
+
+                // Update last position
+                lastSneakingPositions[playerUid] = currentPos.Clone();
+
+                // Skip if no movement or teleportation (too far)
+                if (distance < 0.01f || distance > MAX_DISTANCE_PER_TICK) continue;
+
+                // Get or create player progress data
+                var playerProgress = FurtiveProgress.GetOrAdd(playerUid, _ => new FurtiveProgressData
+                {
+                    CurrentIncrementSize = BaseFurtiveSneakBlocksPerIncrement
+                });
+
+                // Skip all processing if already at max
+                if (playerProgress.TotalCredits >= MaxFurtivePercent) continue;
+
+                int oldCredits = playerProgress.TotalCredits;
+
+                // Add distance to progress
+                playerProgress.BlocksInIncrement += distance;
+
+                // Check if we've earned any new credits
+                while (playerProgress.BlocksInIncrement >= playerProgress.CurrentIncrementSize && playerProgress.TotalCredits < MaxFurtivePercent)
+                {
+                    // Earn a credit
+                    playerProgress.TotalCredits++;
+                    playerProgress.BlocksInIncrement -= playerProgress.CurrentIncrementSize;
+                    playerProgress.CurrentIncrementSize += FurtiveIncrementStep;
+
+                    ServerApi.Logger.Debug($"[SimpleImprovingTraits] Player {player.PlayerName} earned furtive credit {playerProgress.TotalCredits}, next requires {playerProgress.CurrentIncrementSize} blocks");
+                }
+
+                // Mark for saving if any progress was made
+                if (playerProgress.BlocksInIncrement > 0 || playerProgress.TotalCredits > oldCredits)
+                {
+                    pendingFurtiveProgressSave = true;
+                }
+
+                // If credits increased, update the stat and notify player
+                if (playerProgress.TotalCredits > oldCredits)
+                {
+                    int actualBonusPercent = ApplyFurtiveBonusStatic(player, playerProgress.TotalCredits);
+
+                    // Notify player of level up with actual applied bonus
+                    player.SendMessage(GlobalConstants.GeneralChatGroup,
+                        Lang.Get("simpleimprovingtraits:message-furtive-level-up", playerProgress.TotalCredits, actualBonusPercent),
+                        EnumChatType.Notification);
+                }
+            }
+        }
+
+        /// <summary>
+        /// Apply the Furtive bonus to a player based on their earned credits.
+        /// The bonus reduces animal detection range.
+        /// </summary>
+        private static int ApplyFurtiveBonusStatic(IServerPlayer player, int credits)
+        {
+            // Check if player has vanilla Furtive trait (Malefactor)
+            bool hasVanillaFurtive = PlayerHasVanillaFurtiveStatic(player.Entity);
+
+            // Calculate effective cap (vanilla trait already gives max, so no additional bonus possible)
+            int effectiveMax = hasVanillaFurtive ? 0 : MaxFurtivePercent;
+
+            // Clamp credits to effective max
+            int effectiveCredits = Math.Min(credits, effectiveMax);
+
+            // Calculate bonus percent (reduction in detection range)
+            int bonusPercent = effectiveCredits;
+
+            // Apply the stat (negative value to reduce detection range)
+            // The animalSeekingRange stat is a multiplier, so 0.65 means 65% of original range (-35%)
+            if (bonusPercent > 0)
+            {
+                float statValue = 1f - (bonusPercent / 100f);
+                player.Entity.Stats.Set("animalSeekingRange", FURTIVE_STAT_CODE, statValue, false);
+            }
+            else
+            {
+                player.Entity.Stats.Remove(FURTIVE_STAT_CODE, "animalSeekingRange");
+            }
+
+            // Update WatchedAttributes for client sync
+            player.Entity.WatchedAttributes.SetInt(WATCHED_FURTIVE_LEVEL, credits);
+            player.Entity.WatchedAttributes.SetInt(WATCHED_FURTIVE_BONUS, bonusPercent);
+            player.Entity.WatchedAttributes.SetBool("sitHasVanillaFurtive", hasVanillaFurtive);
+
+            // Update extraTraits for character sheet display
+            UpdateExtraTraitStatic(player.Entity, FURTIVE_TRAIT_CODE, credits > 0 && !hasVanillaFurtive);
+
+            return bonusPercent;
+        }
+
+        /// <summary>
+        /// Check if player has the vanilla Furtive trait (Malefactor).
+        /// </summary>
+        private static bool PlayerHasVanillaFurtiveStatic(EntityPlayer entity)
+        {
+            if (entity == null) return false;
+
+            // Check if player class is Malefactor
+            var classTree = entity.WatchedAttributes.GetTreeAttribute("charClass");
+            if (classTree != null)
+            {
+                string classCode = classTree.GetString("code", "").ToLowerInvariant();
+                return classCode == "malefactor";
+            }
+
+            return false;
+        }
+
+        // =========================================================================
+        // PRECISE TRAIT IMPLEMENTATION
+        // =========================================================================
+
+        /// <summary>
+        /// Check if an entity is a mechanical creature (e.g., locust, bell, etc.).
+        /// </summary>
+        public static bool IsMechanicalCreature(Entity entity)
+        {
+            if (entity == null) return false;
+
+            string entityCode = entity.Code?.ToString()?.ToLowerInvariant() ?? "";
+
+            // Check for known mechanical creatures
+            // Locusts are the main mechanical enemies in Vintage Story
+            if (entityCode.Contains("locust")) return true;
+            if (entityCode.Contains("bell")) return true;
+            if (entityCode.Contains("mechanical")) return true;
+            if (entityCode.Contains("automaton")) return true;
+            if (entityCode.Contains("construct")) return true;
+
+            // Also check the entity class
+            string entityClass = entity.GetType().Name.ToLowerInvariant();
+            if (entityClass.Contains("locust")) return true;
+
+            return false;
+        }
+
+        /// <summary>
+        /// Process damage dealt to a mechanical creature by a player.
+        /// Adds progress toward the Precise trait.
+        /// </summary>
+        public static void ProcessPreciseDamage(IServerPlayer attackerPlayer, string weaponType, float damage)
+        {
+            if (attackerPlayer?.Entity == null || damage <= 0) return;
+            if (string.IsNullOrEmpty(weaponType)) return;
+
+            string playerUid = attackerPlayer.PlayerUID;
+
+            // Get or create player progress data
+            var playerProgress = PreciseProgress.GetOrAdd(playerUid, _ => new PreciseProgressData());
+
+            // Check if already at max
+            int effectiveMax = GetPreciseEffectiveMax(attackerPlayer.Entity);
+            if (playerProgress.TotalCredits >= effectiveMax) return;
+
+            int oldCredits = playerProgress.TotalCredits;
+
+            // Get or create weapon progress
+            var weaponProgress = playerProgress.GetWeaponProgress(weaponType);
+
+            // Add damage to progress
+            weaponProgress.DamageInIncrement += damage;
+
+            // Check if we've earned any new credits
+            while (weaponProgress.DamageInIncrement >= weaponProgress.CurrentIncrementSize && playerProgress.TotalCredits < effectiveMax)
+            {
+                // Earn a credit
+                playerProgress.TotalCredits++;
+                weaponProgress.DamageInIncrement -= weaponProgress.CurrentIncrementSize;
+                weaponProgress.CurrentIncrementSize += PreciseIncrementStep;
+
+                ServerApi.Logger.Debug($"[SimpleImprovingTraits] Player {attackerPlayer.PlayerName} earned precise credit {playerProgress.TotalCredits} with {weaponType}, next requires {weaponProgress.CurrentIncrementSize} damage");
+            }
+
+            // Mark for saving if any progress was made
+            if (damage > 0)
+            {
+                pendingPreciseProgressSave = true;
+            }
+
+            // If credits increased, update the stat and notify player
+            if (playerProgress.TotalCredits > oldCredits)
+            {
+                int actualBonusPercent = ApplyPreciseBonusStatic(attackerPlayer, playerProgress.TotalCredits);
+
+                // Notify player of level up
+                attackerPlayer.SendMessage(GlobalConstants.GeneralChatGroup,
+                    Lang.Get("simpleimprovingtraits:message-precise-level-up", playerProgress.TotalCredits, actualBonusPercent),
+                    EnumChatType.Notification);
+
+                // Check if Tinkerer should be unlocked
+                CheckTinkererUnlock(attackerPlayer);
+            }
+        }
+
+        /// <summary>
+        /// Get the effective maximum for Precise based on player class.
+        /// Clockmaker has vanilla +25%, so they can only earn 5 more levels.
+        /// </summary>
+        private static int GetPreciseEffectiveMax(EntityPlayer entity)
+        {
+            if (PlayerHasVanillaPreciseStatic(entity))
+            {
+                // Clockmaker already has +25%, cap at +5 more to reach 30% total
+                return MaxPrecisePercent - VANILLA_PRECISE_MECHANICAL_DAMAGE_BONUS;
+            }
+            return MaxPrecisePercent;
+        }
+
+        /// <summary>
+        /// Apply the Precise bonus to a player based on their earned credits.
+        /// The bonus increases damage to mechanical creatures.
+        /// </summary>
+        private static int ApplyPreciseBonusStatic(IServerPlayer player, int credits)
+        {
+            // Check if player has vanilla Precise trait (Clockmaker)
+            bool hasVanillaPrecise = PlayerHasVanillaPreciseStatic(player.Entity);
+
+            // Calculate effective cap
+            int effectiveMax = hasVanillaPrecise ? (MaxPrecisePercent - VANILLA_PRECISE_MECHANICAL_DAMAGE_BONUS) : MaxPrecisePercent;
+
+            // Clamp credits to effective max
+            int effectiveCredits = Math.Min(credits, effectiveMax);
+
+            // Calculate bonus percent
+            int bonusPercent = effectiveCredits;
+
+            // Apply the stat (mechanical damage is typically via mechanicalsDamage stat)
+            if (bonusPercent > 0)
+            {
+                float statValue = 1f + (bonusPercent / 100f);
+                player.Entity.Stats.Set("mechanicalsDamage", PRECISE_STAT_CODE, statValue, false);
+            }
+            else
+            {
+                player.Entity.Stats.Remove(PRECISE_STAT_CODE, "mechanicalsDamage");
+            }
+
+            // Update WatchedAttributes for client sync
+            player.Entity.WatchedAttributes.SetInt(WATCHED_PRECISE_LEVEL, credits);
+            player.Entity.WatchedAttributes.SetInt(WATCHED_PRECISE_BONUS, bonusPercent);
+            player.Entity.WatchedAttributes.SetBool("sitHasVanillaPrecise", hasVanillaPrecise);
+
+            // Update extraTraits for character sheet display
+            UpdateExtraTraitStatic(player.Entity, PRECISE_TRAIT_CODE, credits > 0 && !hasVanillaPrecise);
+
+            return bonusPercent;
+        }
+
+        /// <summary>
+        /// Check if player has the vanilla Precise trait (Clockmaker).
+        /// </summary>
+        private static bool PlayerHasVanillaPreciseStatic(EntityPlayer entity)
+        {
+            if (entity == null) return false;
+
+            // Check if player class is Clockmaker
+            var classTree = entity.WatchedAttributes.GetTreeAttribute("charClass");
+            if (classTree != null)
+            {
+                string classCode = classTree.GetString("code", "").ToLowerInvariant();
+                return classCode == "clockmaker";
+            }
+
+            return false;
+        }
+
+        // =========================================================================
+        // UNLOCK CHECKING METHODS
+        // =========================================================================
+
+        /// <summary>
+        /// Check and apply Hardy health unlock if thresholds are met.
+        /// Requires 110% mining speed and 10% armor durability.
+        /// </summary>
+        private static void CheckHardyHealthUnlock(IServerPlayer player)
+        {
+            if (player?.Entity == null) return;
+
+            string playerUid = player.PlayerUID;
+            var progress = HardyHealthProgress.GetOrAdd(playerUid, _ => new HardyHealthProgressData());
+
+            // Already unlocked
+            if (progress.IsUnlocked) return;
+
+            // Check mining speed threshold
+            var miningProgress = MiningProgress.GetOrAdd(playerUid, _ => new MiningProgressData());
+            if (miningProgress.TotalCredits < HardyHealthMiningThreshold) return;
+
+            // Check armor durability threshold
+            var armorProgress = ArmorProgress.GetOrAdd(playerUid, _ => new ArmorProgressData());
+            if (armorProgress.TotalDurabilityCredits < HardyHealthArmorDurabilityThreshold) return;
+
+            // Both thresholds met - unlock Hardy health!
+            progress.IsUnlocked = true;
+            pendingHardyHealthProgressSave = true;
+
+            // Apply the health bonus
+            ApplyHardyHealthBonusStatic(player, true);
+
+            // Notify player
+            player.SendMessage(GlobalConstants.GeneralChatGroup,
+                Lang.Get("simpleimprovingtraits:message-hardy-health-unlock", HardyHealthBonus),
+                EnumChatType.Notification);
+        }
+
+        /// <summary>
+        /// Apply Hardy health bonus (+5 HP).
+        /// </summary>
+        private static void ApplyHardyHealthBonusStatic(IServerPlayer player, bool unlocked)
+        {
+            if (unlocked)
+            {
+                player.Entity.Stats.Set("maxhealthExtraPoints", HARDY_HEALTH_STAT_CODE, HardyHealthBonus, false);
+            }
+            else
+            {
+                player.Entity.Stats.Remove(HARDY_HEALTH_STAT_CODE, "maxhealthExtraPoints");
+            }
+
+            player.Entity.WatchedAttributes.SetBool(WATCHED_HARDY_HEALTH_UNLOCKED, unlocked);
+            UpdateExtraTraitStatic(player.Entity, HARDY_HEALTH_TRAIT_CODE, unlocked);
+        }
+
+        /// <summary>
+        /// Check and apply Tinkerer unlock if thresholds are met.
+        /// Requires Technical trait AND 10% Precise damage bonus.
+        /// </summary>
+        private static void CheckTinkererUnlock(IServerPlayer player)
+        {
+            if (player?.Entity == null) return;
+
+            string playerUid = player.PlayerUID;
+            var progress = TinkererProgress.GetOrAdd(playerUid, _ => new TinkererProgressData());
+
+            // Already unlocked
+            if (progress.IsUnlocked) return;
+
+            // Check Technical trait
+            var technicalProgress = TechnicalProgress.GetOrAdd(playerUid, _ => new TechnicalProgressData());
+            if (!technicalProgress.IsUnlocked) return;
+
+            // Check Precise threshold
+            var preciseProgress = PreciseProgress.GetOrAdd(playerUid, _ => new PreciseProgressData());
+            if (preciseProgress.TotalCredits < TinkererPreciseThreshold) return;
+
+            // Both conditions met - unlock Tinkerer!
+            progress.IsUnlocked = true;
+            pendingTinkererProgressSave = true;
+
+            // Apply the trait
+            ApplyTinkererBonusStatic(player, true);
+
+            // Notify player
+            player.SendMessage(GlobalConstants.GeneralChatGroup,
+                Lang.Get("simpleimprovingtraits:message-tinkerer-unlock"),
+                EnumChatType.Notification);
+        }
+
+        /// <summary>
+        /// Apply Technical trait (unlocks translocator gear cost reduction).
+        /// Sets the temporalGearTLRepairCost stat to -1 when unlocked, reducing gear cost by 1.
+        /// </summary>
+        private static void ApplyTechnicalBonusStatic(IServerPlayer player, bool unlocked)
+        {
+            player.Entity.WatchedAttributes.SetBool(WATCHED_TECHNICAL_UNLOCKED, unlocked);
+            UpdateExtraTraitStatic(player.Entity, TECHNICAL_TRAIT_CODE, unlocked);
+
+            // Set the temporal gear repair cost reduction stat
+            // -1 means one fewer temporal gear needed to repair translocators
+            float gearCostReduction = unlocked ? -1f : 0f;
+            player.Entity.Stats.Set("temporalGearTLRepairCost", TECHNICAL_STAT_CODE, gearCostReduction, false);
+        }
+
+        /// <summary>
+        /// Apply Tinkerer trait (unlocks tuning spear crafting).
+        /// </summary>
+        private static void ApplyTinkererBonusStatic(IServerPlayer player, bool unlocked)
+        {
+            player.Entity.WatchedAttributes.SetBool(WATCHED_TINKERER_UNLOCKED, unlocked);
+            UpdateExtraTraitStatic(player.Entity, TINKERER_TRAIT_CODE, unlocked);
+        }
+
+        /// <summary>
+        /// Check and apply Merciless unlock if thresholds are met.
+        /// Requires 10% armor durability AND 15% melee damage.
+        /// </summary>
+        private static void CheckMercilessUnlock(IServerPlayer player)
+        {
+            if (player?.Entity == null) return;
+
+            string playerUid = player.PlayerUID;
+            var progress = MercilessProgress.GetOrAdd(playerUid, _ => new MercilessProgressData());
+
+            // Already unlocked
+            if (progress.IsUnlocked) return;
+
+            // Check armor durability threshold
+            var armorProgress = ArmorProgress.GetOrAdd(playerUid, _ => new ArmorProgressData());
+            if (armorProgress.TotalDurabilityCredits < MercilessArmorDurabilityThreshold) return;
+
+            // Check melee damage threshold
+            var meleeProgress = MeleeProgress.GetOrAdd(playerUid, _ => new MeleeProgressData());
+            if (meleeProgress.TotalCredits < MercilessMeleeDamageThreshold) return;
+
+            // Both thresholds met - unlock Merciless!
+            progress.IsUnlocked = true;
+            pendingMercilessProgressSave = true;
+
+            // Apply the trait
+            ApplyMercilessBonusStatic(player, true);
+
+            // Notify player
+            player.SendMessage(GlobalConstants.GeneralChatGroup,
+                Lang.Get("simpleimprovingtraits:message-merciless-unlock"),
+                EnumChatType.Notification);
+        }
+
+        /// <summary>
+        /// Apply Merciless trait (unlocks shortsword/shield crafting).
+        /// </summary>
+        private static void ApplyMercilessBonusStatic(IServerPlayer player, bool unlocked)
+        {
+            player.Entity.WatchedAttributes.SetBool(WATCHED_MERCILESS_UNLOCKED, unlocked);
+            UpdateExtraTraitStatic(player.Entity, MERCILESS_TRAIT_CODE, unlocked);
+        }
+
+        /// <summary>
+        /// Check and apply Bowyer unlock if thresholds are met.
+        /// Requires 10% ranged damage AND 300 damage with simple bow/longbow.
+        /// </summary>
+        private static void CheckBowyerUnlock(IServerPlayer player)
+        {
+            if (player?.Entity == null) return;
+
+            string playerUid = player.PlayerUID;
+            var progress = BowyerProgress.GetOrAdd(playerUid, _ => new BowyerProgressData());
+
+            // Already unlocked
+            if (progress.IsUnlocked) return;
+
+            // Check ranged damage threshold
+            var rangedProgress = RangedProgress.GetOrAdd(playerUid, _ => new RangedProgressData());
+            if (rangedProgress.TotalCredits < BowyerRangedDamageThreshold) return;
+
+            // Check bow damage threshold
+            if (progress.TotalBowDamage < BowyerBowDamageThreshold) return;
+
+            // Both thresholds met - unlock Bowyer!
+            progress.IsUnlocked = true;
+            pendingBowyerProgressSave = true;
+
+            // Apply the trait
+            ApplyBowyerBonusStatic(player, true);
+
+            // Notify player
+            player.SendMessage(GlobalConstants.GeneralChatGroup,
+                Lang.Get("simpleimprovingtraits:message-bowyer-unlock"),
+                EnumChatType.Notification);
+        }
+
+        /// <summary>
+        /// Apply Bowyer trait (unlocks crude bow/arrows crafting).
+        /// </summary>
+        private static void ApplyBowyerBonusStatic(IServerPlayer player, bool unlocked)
+        {
+            player.Entity.WatchedAttributes.SetBool(WATCHED_BOWYER_UNLOCKED, unlocked);
+            UpdateExtraTraitStatic(player.Entity, BOWYER_TRAIT_CODE, unlocked);
+        }
+
+        /// <summary>
+        /// Check and apply Improviser unlock if threshold is met.
+        /// Requires 300 damage with thrown rocks.
+        /// </summary>
+        private static void CheckImproviserUnlock(IServerPlayer player)
+        {
+            if (player?.Entity == null) return;
+
+            string playerUid = player.PlayerUID;
+            var progress = ImproviserProgress.GetOrAdd(playerUid, _ => new ImproviserProgressData());
+
+            // Already unlocked
+            if (progress.IsUnlocked) return;
+
+            // Check rock damage threshold
+            if (progress.TotalRockDamage < ImproviserRockDamageThreshold) return;
+
+            // Threshold met - unlock Improviser!
+            progress.IsUnlocked = true;
+            pendingImproviserProgressSave = true;
+
+            // Apply the trait
+            ApplyImproviserBonusStatic(player, true);
+
+            // Notify player
+            player.SendMessage(GlobalConstants.GeneralChatGroup,
+                Lang.Get("simpleimprovingtraits:message-improviser-unlock"),
+                EnumChatType.Notification);
+        }
+
+        /// <summary>
+        /// Apply Improviser trait (unlocks sling crafting).
+        /// </summary>
+        private static void ApplyImproviserBonusStatic(IServerPlayer player, bool unlocked)
+        {
+            player.Entity.WatchedAttributes.SetBool(WATCHED_IMPROVISER_UNLOCKED, unlocked);
+            UpdateExtraTraitStatic(player.Entity, IMPROVISER_TRAIT_CODE, unlocked);
+        }
+
+        /// <summary>
+        /// Check and apply Claustrophobic removal if threshold is met (Hunter only).
+        /// Requires 100% mining speed.
+        /// </summary>
+        private static void CheckClaustrophobicRemoval(IServerPlayer player)
+        {
+            if (player?.Entity == null) return;
+
+            // Only applies to Hunter class
+            if (!PlayerIsHunterStatic(player.Entity)) return;
+
+            string playerUid = player.PlayerUID;
+            var progress = ClaustrophobicRemovalProgress.GetOrAdd(playerUid, _ => new ClaustrophobicRemovalProgressData());
+
+            // Already removed
+            if (progress.IsRemoved) return;
+
+            // Check mining speed threshold
+            var miningProgress = MiningProgress.GetOrAdd(playerUid, _ => new MiningProgressData());
+            if (miningProgress.TotalCredits < ClaustrophobicRemovalMiningThreshold) return;
+
+            // Threshold met - remove Claustrophobic!
+            progress.IsRemoved = true;
+            pendingClaustrophobicRemovalProgressSave = true;
+
+            // Apply the removal (negate the Claustrophobic penalties)
+            ApplyClaustrophobicRemovalStatic(player, true);
+
+            // Notify player
+            player.SendMessage(GlobalConstants.GeneralChatGroup,
+                Lang.Get("simpleimprovingtraits:message-claustrophobic-removed"),
+                EnumChatType.Notification);
+        }
+
+        /// <summary>
+        /// Apply Claustrophobic removal (negates ore drop and mining speed penalties).
+        /// </summary>
+        private static void ApplyClaustrophobicRemovalStatic(IServerPlayer player, bool removed)
+        {
+            if (removed)
+            {
+                // Negate Claustrophobic penalties: -15% ore drop, -10% mining speed
+                // By adding positive stats to counteract them
+                player.Entity.Stats.Set("oreDropRate", "sitClaustrophobicRemoval", 1.15f, false); // +15% to negate -15%
+                player.Entity.Stats.Set("miningSpeedMul", "sitClaustrophobicRemoval", 1.10f, false); // +10% to negate -10%
+            }
+            else
+            {
+                player.Entity.Stats.Remove("sitClaustrophobicRemoval", "oreDropRate");
+                player.Entity.Stats.Remove("sitClaustrophobicRemoval", "miningSpeedMul");
+            }
+
+            player.Entity.WatchedAttributes.SetBool(WATCHED_CLAUSTROPHOBIC_REMOVED, removed);
+            UpdateExtraTraitStatic(player.Entity, CLAUSTROPHOBIC_REMOVED_TRAIT_CODE, removed);
+        }
+
+        /// <summary>
+        /// Check if player is the Hunter class.
+        /// </summary>
+        private static bool PlayerIsHunterStatic(EntityPlayer entity)
+        {
+            if (entity == null) return false;
+
+            var classTree = entity.WatchedAttributes.GetTreeAttribute("charClass");
+            if (classTree != null)
+            {
+                string classCode = classTree.GetString("code", "").ToLowerInvariant();
+                return classCode == "hunter";
+            }
+
+            return false;
+        }
+
+        // =========================================================================
         // MENDER TRAIT IMPLEMENTATION
         // =========================================================================
 
@@ -6812,6 +8348,470 @@ namespace SimpleImprovingTraits
         }
 
         // =========================================================================
+        // NEW TRAIT COMMAND HANDLERS
+        // =========================================================================
+
+        /// <summary>
+        /// Handler for /trait furtive command.
+        /// </summary>
+        private TextCommandResult OnTraitFurtiveCommand(TextCommandCallingArgs args)
+        {
+            IServerPlayer player = args.Caller.Player as IServerPlayer;
+            if (player?.Entity == null) return TextCommandResult.Error("Player not found.");
+
+            string playerUid = player.PlayerUID;
+            var progress = FurtiveProgress.GetOrAdd(playerUid, _ => new FurtiveProgressData());
+
+            bool hasVanillaFurtive = PlayerHasVanillaFurtiveStatic(player.Entity);
+            int bonusPercent = hasVanillaFurtive ? 0 : progress.TotalCredits;
+
+            var sb = new StringBuilder();
+            sb.AppendLine($"Furtive progression: Level {progress.TotalCredits} / {MaxFurtivePercent}");
+            sb.AppendLine($"Current bonus: -{bonusPercent}% animal detection range");
+            if (hasVanillaFurtive)
+            {
+                sb.AppendLine($"Vanilla Furtive trait active: -{VANILLA_FURTIVE_DETECTION_REDUCTION}% detection (max reached)");
+            }
+            else if (progress.TotalCredits < MaxFurtivePercent)
+            {
+                float remaining = progress.CurrentIncrementSize - progress.BlocksInIncrement;
+                sb.AppendLine($"Progress: {progress.BlocksInIncrement:F1} / {progress.CurrentIncrementSize} blocks sneaked");
+            }
+            else
+            {
+                sb.AppendLine("Maximum level reached!");
+            }
+
+            return TextCommandResult.Success(sb.ToString());
+        }
+
+        /// <summary>
+        /// Handler for /trait furtivelevel command.
+        /// </summary>
+        private TextCommandResult OnTraitFurtiveLevelCommand(TextCommandCallingArgs args)
+        {
+            IServerPlayer player = args.Caller.Player as IServerPlayer;
+            if (player?.Entity == null) return TextCommandResult.Error("Player not found.");
+
+            int newLevel = (int)args[0];
+            if (newLevel < 0 || newLevel > MaxFurtivePercent)
+                return TextCommandResult.Error($"Level must be between 0 and {MaxFurtivePercent}.");
+
+            string playerUid = player.PlayerUID;
+            var progress = FurtiveProgress.GetOrAdd(playerUid, _ => new FurtiveProgressData());
+            progress.TotalCredits = newLevel;
+            progress.BlocksInIncrement = 0;
+            progress.CurrentIncrementSize = BaseFurtiveSneakBlocksPerIncrement + (newLevel * FurtiveIncrementStep);
+
+            pendingFurtiveProgressSave = true;
+            int bonusPercent = ApplyFurtiveBonusStatic(player, newLevel);
+
+            return TextCommandResult.Success($"Furtive level set to {newLevel} (-{bonusPercent}% detection).");
+        }
+
+        /// <summary>
+        /// Handler for /trait precise command.
+        /// </summary>
+        private TextCommandResult OnTraitPreciseCommand(TextCommandCallingArgs args)
+        {
+            IServerPlayer player = args.Caller.Player as IServerPlayer;
+            if (player?.Entity == null) return TextCommandResult.Error("Player not found.");
+
+            string playerUid = player.PlayerUID;
+            var progress = PreciseProgress.GetOrAdd(playerUid, _ => new PreciseProgressData());
+
+            bool hasVanillaPrecise = PlayerHasVanillaPreciseStatic(player.Entity);
+            int effectiveMax = GetPreciseEffectiveMax(player.Entity);
+            int bonusPercent = Math.Min(progress.TotalCredits, effectiveMax);
+
+            var sb = new StringBuilder();
+            sb.AppendLine($"Precise progression: Level {progress.TotalCredits} / {effectiveMax}");
+            sb.AppendLine($"Current bonus: +{bonusPercent}% damage to mechanicals");
+            if (hasVanillaPrecise)
+            {
+                int totalBonus = VANILLA_PRECISE_MECHANICAL_DAMAGE_BONUS + bonusPercent;
+                sb.AppendLine($"Combined with Clockmaker trait: +{totalBonus}% total");
+            }
+            if (progress.TotalCredits < effectiveMax)
+            {
+                sb.AppendLine($"Per-weapon progress:");
+                foreach (var kvp in progress.WeaponProgress)
+                {
+                    sb.AppendLine($"  {kvp.Key}: {kvp.Value.DamageInIncrement:F0} / {kvp.Value.CurrentIncrementSize} damage");
+                }
+            }
+            else
+            {
+                sb.AppendLine("Maximum level reached!");
+            }
+
+            return TextCommandResult.Success(sb.ToString());
+        }
+
+        /// <summary>
+        /// Handler for /trait preciselevel command.
+        /// </summary>
+        private TextCommandResult OnTraitPreciseLevelCommand(TextCommandCallingArgs args)
+        {
+            IServerPlayer player = args.Caller.Player as IServerPlayer;
+            if (player?.Entity == null) return TextCommandResult.Error("Player not found.");
+
+            int newLevel = (int)args[0];
+            if (newLevel < 0 || newLevel > MaxPrecisePercent)
+                return TextCommandResult.Error($"Level must be between 0 and {MaxPrecisePercent}.");
+
+            string playerUid = player.PlayerUID;
+            var progress = PreciseProgress.GetOrAdd(playerUid, _ => new PreciseProgressData());
+            progress.TotalCredits = newLevel;
+            progress.WeaponProgress.Clear();
+
+            pendingPreciseProgressSave = true;
+            int bonusPercent = ApplyPreciseBonusStatic(player, newLevel);
+
+            return TextCommandResult.Success($"Precise level set to {newLevel} (+{bonusPercent}% mechanical damage).");
+        }
+
+        /// <summary>
+        /// Handler for /trait technical command.
+        /// </summary>
+        private TextCommandResult OnTraitTechnicalCommand(TextCommandCallingArgs args)
+        {
+            IServerPlayer player = args.Caller.Player as IServerPlayer;
+            if (player?.Entity == null) return TextCommandResult.Error("Player not found.");
+
+            string playerUid = player.PlayerUID;
+            var progress = TechnicalProgress.GetOrAdd(playerUid, _ => new TechnicalProgressData());
+
+            var sb = new StringBuilder();
+            sb.AppendLine($"Technical trait: {(progress.IsUnlocked ? "UNLOCKED" : "Locked")}");
+            sb.AppendLine($"Translocators repaired: {progress.TranslocatorsRepaired} / {TechnicalRequiredTranslocatorRepairs}");
+            if (!progress.IsUnlocked)
+            {
+                int remaining = TechnicalRequiredTranslocatorRepairs - progress.TranslocatorsRepaired;
+                sb.AppendLine($"Repair {remaining} more translocators to unlock!");
+            }
+
+            return TextCommandResult.Success(sb.ToString());
+        }
+
+        /// <summary>
+        /// Handler for /trait technicalunlock command.
+        /// </summary>
+        private TextCommandResult OnTraitTechnicalUnlockCommand(TextCommandCallingArgs args)
+        {
+            IServerPlayer player = args.Caller.Player as IServerPlayer;
+            if (player?.Entity == null) return TextCommandResult.Error("Player not found.");
+
+            bool unlock = (bool)args[0];
+
+            string playerUid = player.PlayerUID;
+            var progress = TechnicalProgress.GetOrAdd(playerUid, _ => new TechnicalProgressData());
+            progress.IsUnlocked = unlock;
+
+            pendingTechnicalProgressSave = true;
+            ApplyTechnicalBonusStatic(player, unlock);
+
+            // Check if Tinkerer should be unlocked
+            if (unlock)
+            {
+                CheckTinkererUnlock(player);
+            }
+
+            return TextCommandResult.Success($"Technical trait {(unlock ? "unlocked" : "locked")}.");
+        }
+
+        /// <summary>
+        /// Process a translocator repair (called from Harmony patch).
+        /// Gives progress toward Technical trait unlock.
+        /// </summary>
+        public static void ProcessTranslocatorRepair(IServerPlayer player)
+        {
+            if (player?.Entity == null) return;
+
+            string playerUid = player.PlayerUID;
+            var progress = TechnicalProgress.GetOrAdd(playerUid, _ => new TechnicalProgressData());
+
+            // Already unlocked - no more progress needed
+            if (progress.IsUnlocked) return;
+
+            // Increment translocator repairs
+            progress.TranslocatorsRepaired++;
+            pendingTechnicalProgressSave = true;
+
+            ServerApi.Logger.Debug($"[SimpleImprovingTraits] Player {player.PlayerName} repaired translocator ({progress.TranslocatorsRepaired} / {TechnicalRequiredTranslocatorRepairs})");
+
+            // Check if we've reached the unlock threshold
+            if (progress.TranslocatorsRepaired >= TechnicalRequiredTranslocatorRepairs)
+            {
+                progress.IsUnlocked = true;
+                ApplyTechnicalBonusStatic(player, true);
+
+                // Notify player
+                player.SendMessage(GlobalConstants.GeneralChatGroup,
+                    Lang.Get("simpleimprovingtraits:message-technical-unlock"),
+                    EnumChatType.Notification);
+
+                // Check if Tinkerer should now be unlocked
+                CheckTinkererUnlock(player);
+            }
+        }
+
+        /// <summary>
+        /// Handler for /trait hardyhealth command.
+        /// </summary>
+        private TextCommandResult OnTraitHardyHealthCommand(TextCommandCallingArgs args)
+        {
+            IServerPlayer player = args.Caller.Player as IServerPlayer;
+            if (player?.Entity == null) return TextCommandResult.Error("Player not found.");
+
+            string playerUid = player.PlayerUID;
+            var progress = HardyHealthProgress.GetOrAdd(playerUid, _ => new HardyHealthProgressData());
+            var miningProgress = MiningProgress.GetOrAdd(playerUid, _ => new MiningProgressData());
+            var armorProgress = ArmorProgress.GetOrAdd(playerUid, _ => new ArmorProgressData());
+
+            var sb = new StringBuilder();
+            sb.AppendLine($"Hardy Health trait: {(progress.IsUnlocked ? $"UNLOCKED (+{HardyHealthBonus} HP)" : "Locked")}");
+            sb.AppendLine($"Requirements:");
+            sb.AppendLine($"  Mining level: {miningProgress.TotalCredits} / {HardyHealthMiningThreshold} ({(miningProgress.TotalCredits >= HardyHealthMiningThreshold ? "✓" : "✗")})");
+            sb.AppendLine($"  Armor durability: {armorProgress.TotalDurabilityCredits} / {HardyHealthArmorDurabilityThreshold} ({(armorProgress.TotalDurabilityCredits >= HardyHealthArmorDurabilityThreshold ? "✓" : "✗")})");
+
+            return TextCommandResult.Success(sb.ToString());
+        }
+
+        /// <summary>
+        /// Handler for /trait bowyer command.
+        /// </summary>
+        private TextCommandResult OnTraitBowyerCommand(TextCommandCallingArgs args)
+        {
+            IServerPlayer player = args.Caller.Player as IServerPlayer;
+            if (player?.Entity == null) return TextCommandResult.Error("Player not found.");
+
+            string playerUid = player.PlayerUID;
+            var progress = BowyerProgress.GetOrAdd(playerUid, _ => new BowyerProgressData());
+            var rangedProgress = RangedProgress.GetOrAdd(playerUid, _ => new RangedProgressData());
+
+            var sb = new StringBuilder();
+            sb.AppendLine($"Bowyer trait: {(progress.IsUnlocked ? "UNLOCKED" : "Locked")}");
+            sb.AppendLine($"Requirements:");
+            sb.AppendLine($"  Ranged level: {rangedProgress.TotalCredits} / {BowyerRangedDamageThreshold} ({(rangedProgress.TotalCredits >= BowyerRangedDamageThreshold ? "✓" : "✗")})");
+            sb.AppendLine($"  Bow damage: {progress.TotalBowDamage:F0} / {BowyerBowDamageThreshold} ({(progress.TotalBowDamage >= BowyerBowDamageThreshold ? "✓" : "✗")})");
+
+            return TextCommandResult.Success(sb.ToString());
+        }
+
+        /// <summary>
+        /// Handler for /trait improviser command.
+        /// </summary>
+        private TextCommandResult OnTraitImproviserCommand(TextCommandCallingArgs args)
+        {
+            IServerPlayer player = args.Caller.Player as IServerPlayer;
+            if (player?.Entity == null) return TextCommandResult.Error("Player not found.");
+
+            string playerUid = player.PlayerUID;
+            var progress = ImproviserProgress.GetOrAdd(playerUid, _ => new ImproviserProgressData());
+
+            var sb = new StringBuilder();
+            sb.AppendLine($"Improviser trait: {(progress.IsUnlocked ? "UNLOCKED" : "Locked")}");
+            sb.AppendLine($"Rock damage: {progress.TotalRockDamage:F0} / {ImproviserRockDamageThreshold} ({(progress.TotalRockDamage >= ImproviserRockDamageThreshold ? "✓" : "✗")})");
+
+            return TextCommandResult.Success(sb.ToString());
+        }
+
+        /// <summary>
+        /// Handler for /trait tinkerer command.
+        /// </summary>
+        private TextCommandResult OnTraitTinkererCommand(TextCommandCallingArgs args)
+        {
+            IServerPlayer player = args.Caller.Player as IServerPlayer;
+            if (player?.Entity == null) return TextCommandResult.Error("Player not found.");
+
+            string playerUid = player.PlayerUID;
+            var progress = TinkererProgress.GetOrAdd(playerUid, _ => new TinkererProgressData());
+            var technicalProgress = TechnicalProgress.GetOrAdd(playerUid, _ => new TechnicalProgressData());
+            var preciseProgress = PreciseProgress.GetOrAdd(playerUid, _ => new PreciseProgressData());
+
+            var sb = new StringBuilder();
+            sb.AppendLine($"Tinkerer trait: {(progress.IsUnlocked ? "UNLOCKED" : "Locked")}");
+            sb.AppendLine($"Requirements:");
+            sb.AppendLine($"  Technical trait: {(technicalProgress.IsUnlocked ? "UNLOCKED ✓" : "Locked ✗")}");
+            sb.AppendLine($"  Precise level: {preciseProgress.TotalCredits} / {TinkererPreciseThreshold} ({(preciseProgress.TotalCredits >= TinkererPreciseThreshold ? "✓" : "✗")})");
+
+            return TextCommandResult.Success(sb.ToString());
+        }
+
+        /// <summary>
+        /// Handler for /trait merciless command.
+        /// </summary>
+        private TextCommandResult OnTraitMercilessCommand(TextCommandCallingArgs args)
+        {
+            IServerPlayer player = args.Caller.Player as IServerPlayer;
+            if (player?.Entity == null) return TextCommandResult.Error("Player not found.");
+
+            string playerUid = player.PlayerUID;
+            var progress = MercilessProgress.GetOrAdd(playerUid, _ => new MercilessProgressData());
+            var armorProgress = ArmorProgress.GetOrAdd(playerUid, _ => new ArmorProgressData());
+            var meleeProgress = MeleeProgress.GetOrAdd(playerUid, _ => new MeleeProgressData());
+
+            var sb = new StringBuilder();
+            sb.AppendLine($"Merciless trait: {(progress.IsUnlocked ? "UNLOCKED" : "Locked")}");
+            sb.AppendLine($"Requirements:");
+            sb.AppendLine($"  Armor durability: {armorProgress.TotalDurabilityCredits} / {MercilessArmorDurabilityThreshold} ({(armorProgress.TotalDurabilityCredits >= MercilessArmorDurabilityThreshold ? "✓" : "✗")})");
+            sb.AppendLine($"  Melee level: {meleeProgress.TotalCredits} / {MercilessMeleeDamageThreshold} ({(meleeProgress.TotalCredits >= MercilessMeleeDamageThreshold ? "✓" : "✗")})");
+
+            return TextCommandResult.Success(sb.ToString());
+        }
+
+        /// <summary>
+        /// Handler for /trait claustrophobic command.
+        /// </summary>
+        private TextCommandResult OnTraitClaustrophobicCommand(TextCommandCallingArgs args)
+        {
+            IServerPlayer player = args.Caller.Player as IServerPlayer;
+            if (player?.Entity == null) return TextCommandResult.Error("Player not found.");
+
+            // Check if player is Hunter
+            if (!PlayerIsHunterStatic(player.Entity))
+            {
+                return TextCommandResult.Success("Claustrophobic removal is only available for the Hunter class.");
+            }
+
+            string playerUid = player.PlayerUID;
+            var progress = ClaustrophobicRemovalProgress.GetOrAdd(playerUid, _ => new ClaustrophobicRemovalProgressData());
+            var miningProgress = MiningProgress.GetOrAdd(playerUid, _ => new MiningProgressData());
+
+            var sb = new StringBuilder();
+            sb.AppendLine($"Claustrophobic trait: {(progress.IsRemoved ? "REMOVED" : "Active")}");
+            sb.AppendLine($"Mining level: {miningProgress.TotalCredits} / {ClaustrophobicRemovalMiningThreshold} ({(miningProgress.TotalCredits >= ClaustrophobicRemovalMiningThreshold ? "✓" : "✗")})");
+            if (!progress.IsRemoved)
+            {
+                int remaining = ClaustrophobicRemovalMiningThreshold - miningProgress.TotalCredits;
+                sb.AppendLine($"Reach {remaining}% more mining level to remove Claustrophobic!");
+            }
+
+            return TextCommandResult.Success(sb.ToString());
+        }
+
+        /// <summary>
+        /// Handler for /trait hardyhealthunlock command.
+        /// </summary>
+        private TextCommandResult OnTraitHardyHealthUnlockCommand(TextCommandCallingArgs args)
+        {
+            IServerPlayer player = args.Caller.Player as IServerPlayer;
+            if (player?.Entity == null) return TextCommandResult.Error("Player not found.");
+
+            bool unlock = (bool)args[0];
+
+            string playerUid = player.PlayerUID;
+            var progress = HardyHealthProgress.GetOrAdd(playerUid, _ => new HardyHealthProgressData());
+            progress.IsUnlocked = unlock;
+
+            pendingHardyHealthProgressSave = true;
+            ApplyHardyHealthBonusStatic(player, unlock);
+
+            return TextCommandResult.Success($"Hardy Health trait {(unlock ? "unlocked" : "locked")}.");
+        }
+
+        /// <summary>
+        /// Handler for /trait bowyerunlock command.
+        /// </summary>
+        private TextCommandResult OnTraitBowyerUnlockCommand(TextCommandCallingArgs args)
+        {
+            IServerPlayer player = args.Caller.Player as IServerPlayer;
+            if (player?.Entity == null) return TextCommandResult.Error("Player not found.");
+
+            bool unlock = (bool)args[0];
+
+            string playerUid = player.PlayerUID;
+            var progress = BowyerProgress.GetOrAdd(playerUid, _ => new BowyerProgressData());
+            progress.IsUnlocked = unlock;
+
+            pendingBowyerProgressSave = true;
+            ApplyBowyerBonusStatic(player, unlock);
+
+            return TextCommandResult.Success($"Bowyer trait {(unlock ? "unlocked" : "locked")}.");
+        }
+
+        /// <summary>
+        /// Handler for /trait improviserunlock command.
+        /// </summary>
+        private TextCommandResult OnTraitImproviserUnlockCommand(TextCommandCallingArgs args)
+        {
+            IServerPlayer player = args.Caller.Player as IServerPlayer;
+            if (player?.Entity == null) return TextCommandResult.Error("Player not found.");
+
+            bool unlock = (bool)args[0];
+
+            string playerUid = player.PlayerUID;
+            var progress = ImproviserProgress.GetOrAdd(playerUid, _ => new ImproviserProgressData());
+            progress.IsUnlocked = unlock;
+
+            pendingImproviserProgressSave = true;
+            ApplyImproviserBonusStatic(player, unlock);
+
+            return TextCommandResult.Success($"Improviser trait {(unlock ? "unlocked" : "locked")}.");
+        }
+
+        /// <summary>
+        /// Handler for /trait tinkererunlock command.
+        /// </summary>
+        private TextCommandResult OnTraitTinkererUnlockCommand(TextCommandCallingArgs args)
+        {
+            IServerPlayer player = args.Caller.Player as IServerPlayer;
+            if (player?.Entity == null) return TextCommandResult.Error("Player not found.");
+
+            bool unlock = (bool)args[0];
+
+            string playerUid = player.PlayerUID;
+            var progress = TinkererProgress.GetOrAdd(playerUid, _ => new TinkererProgressData());
+            progress.IsUnlocked = unlock;
+
+            pendingTinkererProgressSave = true;
+            ApplyTinkererBonusStatic(player, unlock);
+
+            return TextCommandResult.Success($"Tinkerer trait {(unlock ? "unlocked" : "locked")}.");
+        }
+
+        /// <summary>
+        /// Handler for /trait mercilessunlock command.
+        /// </summary>
+        private TextCommandResult OnTraitMercilessUnlockCommand(TextCommandCallingArgs args)
+        {
+            IServerPlayer player = args.Caller.Player as IServerPlayer;
+            if (player?.Entity == null) return TextCommandResult.Error("Player not found.");
+
+            bool unlock = (bool)args[0];
+
+            string playerUid = player.PlayerUID;
+            var progress = MercilessProgress.GetOrAdd(playerUid, _ => new MercilessProgressData());
+            progress.IsUnlocked = unlock;
+
+            pendingMercilessProgressSave = true;
+            ApplyMercilessBonusStatic(player, unlock);
+
+            return TextCommandResult.Success($"Merciless trait {(unlock ? "unlocked" : "locked")}.");
+        }
+
+        /// <summary>
+        /// Handler for /trait claustrophobicunlock command.
+        /// </summary>
+        private TextCommandResult OnTraitClaustrophobicUnlockCommand(TextCommandCallingArgs args)
+        {
+            IServerPlayer player = args.Caller.Player as IServerPlayer;
+            if (player?.Entity == null) return TextCommandResult.Error("Player not found.");
+
+            bool removed = (bool)args[0];
+
+            string playerUid = player.PlayerUID;
+            var progress = ClaustrophobicRemovalProgress.GetOrAdd(playerUid, _ => new ClaustrophobicRemovalProgressData());
+            progress.IsRemoved = removed;
+
+            pendingClaustrophobicRemovalProgressSave = true;
+            ApplyClaustrophobicRemovalStatic(player, removed);
+
+            return TextCommandResult.Success($"Claustrophobic trait {(removed ? "removed" : "restored")}.");
+        }
+
+        // =========================================================================
         // PERSISTENCE METHODS FOR NEW TRAITS
         // =========================================================================
 
@@ -7341,6 +9341,965 @@ namespace SimpleImprovingTraits
             {
                 ForagerProgress.Clear();
                 ServerApi.Logger.Error($"[SimpleImprovingTraits] Failed to load forager progress: {ex.Message}");
+            }
+        }
+
+        // =========================================================================
+        // FURTIVE TRAIT PERSISTENCE
+        // =========================================================================
+
+        /// <summary>
+        /// Persist furtive progress to world save data.
+        /// </summary>
+        public static void PersistFurtiveProgress()
+        {
+            if (ServerApi == null) return;
+
+            lock (persistLock)
+            {
+                if (FurtiveProgress.IsEmpty)
+                {
+                    ServerApi.WorldManager.SaveGame.StoreData(FURTIVE_PROGRESS_SAVE_KEY, null);
+                    return;
+                }
+
+                try
+                {
+                    var snapshot = FurtiveProgress.ToArray();
+                    byte[] data;
+                    using (var ms = new MemoryStream())
+                    {
+                        using (var writer = new BinaryWriter(ms))
+                        {
+                            writer.Write((byte)0x46); // 'F'
+                            writer.Write((byte)0x55); // 'U'
+                            writer.Write((byte)0x52); // 'R'
+                            writer.Write((byte)1);    // Version 1
+
+                            writer.Write(snapshot.Length);
+                            foreach (var playerKvp in snapshot)
+                            {
+                                writer.Write(playerKvp.Key);
+                                var progress = playerKvp.Value;
+                                writer.Write(progress.TotalCredits);
+                                writer.Write(progress.BlocksInIncrement);
+                                writer.Write(progress.CurrentIncrementSize);
+                            }
+                        }
+                        data = ms.ToArray();
+                    }
+
+                    ServerApi.WorldManager.SaveGame.StoreData(FURTIVE_PROGRESS_SAVE_KEY, data);
+                }
+                catch (Exception ex)
+                {
+                    ServerApi.Logger.Error($"[SimpleImprovingTraits] Failed to persist furtive progress: {ex.Message}");
+                }
+            }
+        }
+
+        /// <summary>
+        /// Load furtive progress from world save data.
+        /// </summary>
+        private void LoadFurtiveProgress()
+        {
+            try
+            {
+                byte[] data = ServerApi.WorldManager.SaveGame.GetData(FURTIVE_PROGRESS_SAVE_KEY);
+                if (data == null || data.Length == 0)
+                {
+                    ServerApi.Logger.Debug("[SimpleImprovingTraits] No furtive progress data found");
+                    return;
+                }
+
+                using (var ms = new MemoryStream(data))
+                {
+                    using (var reader = new BinaryReader(ms))
+                    {
+                        byte magic1 = reader.ReadByte();
+                        byte magic2 = reader.ReadByte();
+                        byte magic3 = reader.ReadByte();
+                        byte version = reader.ReadByte();
+
+                        if (magic1 != 0x46 || magic2 != 0x55 || magic3 != 0x52)
+                        {
+                            ServerApi.Logger.Warning("[SimpleImprovingTraits] Invalid furtive progress magic bytes");
+                            return;
+                        }
+
+                        int playerCount = reader.ReadInt32();
+                        for (int i = 0; i < playerCount; i++)
+                        {
+                            string playerUid = reader.ReadString();
+                            var progress = new FurtiveProgressData
+                            {
+                                TotalCredits = reader.ReadInt32(),
+                                BlocksInIncrement = reader.ReadSingle(),
+                                CurrentIncrementSize = reader.ReadInt32()
+                            };
+                            FurtiveProgress[playerUid] = progress;
+                        }
+                    }
+                }
+
+                ServerApi.Logger.Notification($"[SimpleImprovingTraits] Loaded furtive progress for {FurtiveProgress.Count} players");
+            }
+            catch (Exception ex)
+            {
+                FurtiveProgress.Clear();
+                ServerApi.Logger.Error($"[SimpleImprovingTraits] Failed to load furtive progress: {ex.Message}");
+            }
+        }
+
+        // =========================================================================
+        // PRECISE TRAIT PERSISTENCE
+        // =========================================================================
+
+        /// <summary>
+        /// Persist precise progress to world save data.
+        /// </summary>
+        public static void PersistPreciseProgress()
+        {
+            if (ServerApi == null) return;
+
+            lock (persistLock)
+            {
+                if (PreciseProgress.IsEmpty)
+                {
+                    ServerApi.WorldManager.SaveGame.StoreData(PRECISE_PROGRESS_SAVE_KEY, null);
+                    return;
+                }
+
+                try
+                {
+                    var snapshot = PreciseProgress.ToArray();
+                    byte[] data;
+                    using (var ms = new MemoryStream())
+                    {
+                        using (var writer = new BinaryWriter(ms))
+                        {
+                            writer.Write((byte)0x50); // 'P'
+                            writer.Write((byte)0x52); // 'R'
+                            writer.Write((byte)0x43); // 'C'
+                            writer.Write((byte)1);    // Version 1
+
+                            writer.Write(snapshot.Length);
+                            foreach (var playerKvp in snapshot)
+                            {
+                                writer.Write(playerKvp.Key);
+                                var progress = playerKvp.Value;
+                                writer.Write(progress.TotalCredits);
+
+                                // Write weapon progress
+                                writer.Write(progress.WeaponProgress.Count);
+                                foreach (var weaponKvp in progress.WeaponProgress)
+                                {
+                                    writer.Write(weaponKvp.Key);
+                                    writer.Write(weaponKvp.Value.DamageInIncrement);
+                                    writer.Write(weaponKvp.Value.CurrentIncrementSize);
+                                }
+                            }
+                        }
+                        data = ms.ToArray();
+                    }
+
+                    ServerApi.WorldManager.SaveGame.StoreData(PRECISE_PROGRESS_SAVE_KEY, data);
+                }
+                catch (Exception ex)
+                {
+                    ServerApi.Logger.Error($"[SimpleImprovingTraits] Failed to persist precise progress: {ex.Message}");
+                }
+            }
+        }
+
+        /// <summary>
+        /// Load precise progress from world save data.
+        /// </summary>
+        private void LoadPreciseProgress()
+        {
+            try
+            {
+                byte[] data = ServerApi.WorldManager.SaveGame.GetData(PRECISE_PROGRESS_SAVE_KEY);
+                if (data == null || data.Length == 0)
+                {
+                    ServerApi.Logger.Debug("[SimpleImprovingTraits] No precise progress data found");
+                    return;
+                }
+
+                using (var ms = new MemoryStream(data))
+                {
+                    using (var reader = new BinaryReader(ms))
+                    {
+                        byte magic1 = reader.ReadByte();
+                        byte magic2 = reader.ReadByte();
+                        byte magic3 = reader.ReadByte();
+                        byte version = reader.ReadByte();
+
+                        if (magic1 != 0x50 || magic2 != 0x52 || magic3 != 0x43)
+                        {
+                            ServerApi.Logger.Warning("[SimpleImprovingTraits] Invalid precise progress magic bytes");
+                            return;
+                        }
+
+                        int playerCount = reader.ReadInt32();
+                        for (int i = 0; i < playerCount; i++)
+                        {
+                            string playerUid = reader.ReadString();
+                            var progress = new PreciseProgressData
+                            {
+                                TotalCredits = reader.ReadInt32()
+                            };
+
+                            int weaponCount = reader.ReadInt32();
+                            for (int j = 0; j < weaponCount; j++)
+                            {
+                                string weaponKey = reader.ReadString();
+                                var weaponProgress = new PreciseWeaponProgressData
+                                {
+                                    DamageInIncrement = reader.ReadSingle(),
+                                    CurrentIncrementSize = reader.ReadInt32()
+                                };
+                                progress.WeaponProgress[weaponKey] = weaponProgress;
+                            }
+
+                            PreciseProgress[playerUid] = progress;
+                        }
+                    }
+                }
+
+                ServerApi.Logger.Notification($"[SimpleImprovingTraits] Loaded precise progress for {PreciseProgress.Count} players");
+            }
+            catch (Exception ex)
+            {
+                PreciseProgress.Clear();
+                ServerApi.Logger.Error($"[SimpleImprovingTraits] Failed to load precise progress: {ex.Message}");
+            }
+        }
+
+        // =========================================================================
+        // TECHNICAL TRAIT PERSISTENCE
+        // =========================================================================
+
+        /// <summary>
+        /// Persist technical progress to world save data.
+        /// </summary>
+        public static void PersistTechnicalProgress()
+        {
+            if (ServerApi == null) return;
+
+            lock (persistLock)
+            {
+                if (TechnicalProgress.IsEmpty)
+                {
+                    ServerApi.WorldManager.SaveGame.StoreData(TECHNICAL_PROGRESS_SAVE_KEY, null);
+                    return;
+                }
+
+                try
+                {
+                    var snapshot = TechnicalProgress.ToArray();
+                    byte[] data;
+                    using (var ms = new MemoryStream())
+                    {
+                        using (var writer = new BinaryWriter(ms))
+                        {
+                            writer.Write((byte)0x54); // 'T'
+                            writer.Write((byte)0x45); // 'E'
+                            writer.Write((byte)0x43); // 'C'
+                            writer.Write((byte)1);    // Version 1
+
+                            writer.Write(snapshot.Length);
+                            foreach (var playerKvp in snapshot)
+                            {
+                                writer.Write(playerKvp.Key);
+                                var progress = playerKvp.Value;
+                                writer.Write(progress.TranslocatorsRepaired);
+                                writer.Write(progress.IsUnlocked);
+                            }
+                        }
+                        data = ms.ToArray();
+                    }
+
+                    ServerApi.WorldManager.SaveGame.StoreData(TECHNICAL_PROGRESS_SAVE_KEY, data);
+                }
+                catch (Exception ex)
+                {
+                    ServerApi.Logger.Error($"[SimpleImprovingTraits] Failed to persist technical progress: {ex.Message}");
+                }
+            }
+        }
+
+        /// <summary>
+        /// Load technical progress from world save data.
+        /// </summary>
+        private void LoadTechnicalProgress()
+        {
+            try
+            {
+                byte[] data = ServerApi.WorldManager.SaveGame.GetData(TECHNICAL_PROGRESS_SAVE_KEY);
+                if (data == null || data.Length == 0)
+                {
+                    ServerApi.Logger.Debug("[SimpleImprovingTraits] No technical progress data found");
+                    return;
+                }
+
+                using (var ms = new MemoryStream(data))
+                {
+                    using (var reader = new BinaryReader(ms))
+                    {
+                        byte magic1 = reader.ReadByte();
+                        byte magic2 = reader.ReadByte();
+                        byte magic3 = reader.ReadByte();
+                        byte version = reader.ReadByte();
+
+                        if (magic1 != 0x54 || magic2 != 0x45 || magic3 != 0x43)
+                        {
+                            ServerApi.Logger.Warning("[SimpleImprovingTraits] Invalid technical progress magic bytes");
+                            return;
+                        }
+
+                        int playerCount = reader.ReadInt32();
+                        for (int i = 0; i < playerCount; i++)
+                        {
+                            string playerUid = reader.ReadString();
+                            var progress = new TechnicalProgressData
+                            {
+                                TranslocatorsRepaired = reader.ReadInt32(),
+                                IsUnlocked = reader.ReadBoolean()
+                            };
+                            TechnicalProgress[playerUid] = progress;
+                        }
+                    }
+                }
+
+                ServerApi.Logger.Notification($"[SimpleImprovingTraits] Loaded technical progress for {TechnicalProgress.Count} players");
+            }
+            catch (Exception ex)
+            {
+                TechnicalProgress.Clear();
+                ServerApi.Logger.Error($"[SimpleImprovingTraits] Failed to load technical progress: {ex.Message}");
+            }
+        }
+
+        // =========================================================================
+        // HARDY HEALTH TRAIT PERSISTENCE
+        // =========================================================================
+
+        /// <summary>
+        /// Persist hardy health progress to world save data.
+        /// </summary>
+        public static void PersistHardyHealthProgress()
+        {
+            if (ServerApi == null) return;
+
+            lock (persistLock)
+            {
+                if (HardyHealthProgress.IsEmpty)
+                {
+                    ServerApi.WorldManager.SaveGame.StoreData(HARDY_HEALTH_PROGRESS_SAVE_KEY, null);
+                    return;
+                }
+
+                try
+                {
+                    var snapshot = HardyHealthProgress.ToArray();
+                    byte[] data;
+                    using (var ms = new MemoryStream())
+                    {
+                        using (var writer = new BinaryWriter(ms))
+                        {
+                            writer.Write((byte)0x48); // 'H'
+                            writer.Write((byte)0x44); // 'D'
+                            writer.Write((byte)0x48); // 'H'
+                            writer.Write((byte)1);    // Version 1
+
+                            writer.Write(snapshot.Length);
+                            foreach (var playerKvp in snapshot)
+                            {
+                                writer.Write(playerKvp.Key);
+                                var progress = playerKvp.Value;
+                                writer.Write(progress.IsUnlocked);
+                            }
+                        }
+                        data = ms.ToArray();
+                    }
+
+                    ServerApi.WorldManager.SaveGame.StoreData(HARDY_HEALTH_PROGRESS_SAVE_KEY, data);
+                }
+                catch (Exception ex)
+                {
+                    ServerApi.Logger.Error($"[SimpleImprovingTraits] Failed to persist hardy health progress: {ex.Message}");
+                }
+            }
+        }
+
+        /// <summary>
+        /// Load hardy health progress from world save data.
+        /// </summary>
+        private void LoadHardyHealthProgress()
+        {
+            try
+            {
+                byte[] data = ServerApi.WorldManager.SaveGame.GetData(HARDY_HEALTH_PROGRESS_SAVE_KEY);
+                if (data == null || data.Length == 0)
+                {
+                    ServerApi.Logger.Debug("[SimpleImprovingTraits] No hardy health progress data found");
+                    return;
+                }
+
+                using (var ms = new MemoryStream(data))
+                {
+                    using (var reader = new BinaryReader(ms))
+                    {
+                        byte magic1 = reader.ReadByte();
+                        byte magic2 = reader.ReadByte();
+                        byte magic3 = reader.ReadByte();
+                        byte version = reader.ReadByte();
+
+                        if (magic1 != 0x48 || magic2 != 0x44 || magic3 != 0x48)
+                        {
+                            ServerApi.Logger.Warning("[SimpleImprovingTraits] Invalid hardy health progress magic bytes");
+                            return;
+                        }
+
+                        int playerCount = reader.ReadInt32();
+                        for (int i = 0; i < playerCount; i++)
+                        {
+                            string playerUid = reader.ReadString();
+                            var progress = new HardyHealthProgressData
+                            {
+                                IsUnlocked = reader.ReadBoolean()
+                            };
+                            HardyHealthProgress[playerUid] = progress;
+                        }
+                    }
+                }
+
+                ServerApi.Logger.Notification($"[SimpleImprovingTraits] Loaded hardy health progress for {HardyHealthProgress.Count} players");
+            }
+            catch (Exception ex)
+            {
+                HardyHealthProgress.Clear();
+                ServerApi.Logger.Error($"[SimpleImprovingTraits] Failed to load hardy health progress: {ex.Message}");
+            }
+        }
+
+        // =========================================================================
+        // BOWYER TRAIT PERSISTENCE
+        // =========================================================================
+
+        /// <summary>
+        /// Persist bowyer progress to world save data.
+        /// </summary>
+        public static void PersistBowyerProgress()
+        {
+            if (ServerApi == null) return;
+
+            lock (persistLock)
+            {
+                if (BowyerProgress.IsEmpty)
+                {
+                    ServerApi.WorldManager.SaveGame.StoreData(BOWYER_PROGRESS_SAVE_KEY, null);
+                    return;
+                }
+
+                try
+                {
+                    var snapshot = BowyerProgress.ToArray();
+                    byte[] data;
+                    using (var ms = new MemoryStream())
+                    {
+                        using (var writer = new BinaryWriter(ms))
+                        {
+                            writer.Write((byte)0x42); // 'B'
+                            writer.Write((byte)0x57); // 'W'
+                            writer.Write((byte)0x59); // 'Y'
+                            writer.Write((byte)1);    // Version 1
+
+                            writer.Write(snapshot.Length);
+                            foreach (var playerKvp in snapshot)
+                            {
+                                writer.Write(playerKvp.Key);
+                                var progress = playerKvp.Value;
+                                writer.Write(progress.TotalBowDamage);
+                                writer.Write(progress.IsUnlocked);
+                            }
+                        }
+                        data = ms.ToArray();
+                    }
+
+                    ServerApi.WorldManager.SaveGame.StoreData(BOWYER_PROGRESS_SAVE_KEY, data);
+                }
+                catch (Exception ex)
+                {
+                    ServerApi.Logger.Error($"[SimpleImprovingTraits] Failed to persist bowyer progress: {ex.Message}");
+                }
+            }
+        }
+
+        /// <summary>
+        /// Load bowyer progress from world save data.
+        /// </summary>
+        private void LoadBowyerProgress()
+        {
+            try
+            {
+                byte[] data = ServerApi.WorldManager.SaveGame.GetData(BOWYER_PROGRESS_SAVE_KEY);
+                if (data == null || data.Length == 0)
+                {
+                    ServerApi.Logger.Debug("[SimpleImprovingTraits] No bowyer progress data found");
+                    return;
+                }
+
+                using (var ms = new MemoryStream(data))
+                {
+                    using (var reader = new BinaryReader(ms))
+                    {
+                        byte magic1 = reader.ReadByte();
+                        byte magic2 = reader.ReadByte();
+                        byte magic3 = reader.ReadByte();
+                        byte version = reader.ReadByte();
+
+                        if (magic1 != 0x42 || magic2 != 0x57 || magic3 != 0x59)
+                        {
+                            ServerApi.Logger.Warning("[SimpleImprovingTraits] Invalid bowyer progress magic bytes");
+                            return;
+                        }
+
+                        int playerCount = reader.ReadInt32();
+                        for (int i = 0; i < playerCount; i++)
+                        {
+                            string playerUid = reader.ReadString();
+                            var progress = new BowyerProgressData
+                            {
+                                TotalBowDamage = reader.ReadSingle(),
+                                IsUnlocked = reader.ReadBoolean()
+                            };
+                            BowyerProgress[playerUid] = progress;
+                        }
+                    }
+                }
+
+                ServerApi.Logger.Notification($"[SimpleImprovingTraits] Loaded bowyer progress for {BowyerProgress.Count} players");
+            }
+            catch (Exception ex)
+            {
+                BowyerProgress.Clear();
+                ServerApi.Logger.Error($"[SimpleImprovingTraits] Failed to load bowyer progress: {ex.Message}");
+            }
+        }
+
+        // =========================================================================
+        // IMPROVISER TRAIT PERSISTENCE
+        // =========================================================================
+
+        /// <summary>
+        /// Persist improviser progress to world save data.
+        /// </summary>
+        public static void PersistImproviserProgress()
+        {
+            if (ServerApi == null) return;
+
+            lock (persistLock)
+            {
+                if (ImproviserProgress.IsEmpty)
+                {
+                    ServerApi.WorldManager.SaveGame.StoreData(IMPROVISER_PROGRESS_SAVE_KEY, null);
+                    return;
+                }
+
+                try
+                {
+                    var snapshot = ImproviserProgress.ToArray();
+                    byte[] data;
+                    using (var ms = new MemoryStream())
+                    {
+                        using (var writer = new BinaryWriter(ms))
+                        {
+                            writer.Write((byte)0x49); // 'I'
+                            writer.Write((byte)0x4D); // 'M'
+                            writer.Write((byte)0x50); // 'P'
+                            writer.Write((byte)1);    // Version 1
+
+                            writer.Write(snapshot.Length);
+                            foreach (var playerKvp in snapshot)
+                            {
+                                writer.Write(playerKvp.Key);
+                                var progress = playerKvp.Value;
+                                writer.Write(progress.TotalRockDamage);
+                                writer.Write(progress.IsUnlocked);
+                            }
+                        }
+                        data = ms.ToArray();
+                    }
+
+                    ServerApi.WorldManager.SaveGame.StoreData(IMPROVISER_PROGRESS_SAVE_KEY, data);
+                }
+                catch (Exception ex)
+                {
+                    ServerApi.Logger.Error($"[SimpleImprovingTraits] Failed to persist improviser progress: {ex.Message}");
+                }
+            }
+        }
+
+        /// <summary>
+        /// Load improviser progress from world save data.
+        /// </summary>
+        private void LoadImproviserProgress()
+        {
+            try
+            {
+                byte[] data = ServerApi.WorldManager.SaveGame.GetData(IMPROVISER_PROGRESS_SAVE_KEY);
+                if (data == null || data.Length == 0)
+                {
+                    ServerApi.Logger.Debug("[SimpleImprovingTraits] No improviser progress data found");
+                    return;
+                }
+
+                using (var ms = new MemoryStream(data))
+                {
+                    using (var reader = new BinaryReader(ms))
+                    {
+                        byte magic1 = reader.ReadByte();
+                        byte magic2 = reader.ReadByte();
+                        byte magic3 = reader.ReadByte();
+                        byte version = reader.ReadByte();
+
+                        if (magic1 != 0x49 || magic2 != 0x4D || magic3 != 0x50)
+                        {
+                            ServerApi.Logger.Warning("[SimpleImprovingTraits] Invalid improviser progress magic bytes");
+                            return;
+                        }
+
+                        int playerCount = reader.ReadInt32();
+                        for (int i = 0; i < playerCount; i++)
+                        {
+                            string playerUid = reader.ReadString();
+                            var progress = new ImproviserProgressData
+                            {
+                                TotalRockDamage = reader.ReadSingle(),
+                                IsUnlocked = reader.ReadBoolean()
+                            };
+                            ImproviserProgress[playerUid] = progress;
+                        }
+                    }
+                }
+
+                ServerApi.Logger.Notification($"[SimpleImprovingTraits] Loaded improviser progress for {ImproviserProgress.Count} players");
+            }
+            catch (Exception ex)
+            {
+                ImproviserProgress.Clear();
+                ServerApi.Logger.Error($"[SimpleImprovingTraits] Failed to load improviser progress: {ex.Message}");
+            }
+        }
+
+        // =========================================================================
+        // TINKERER TRAIT PERSISTENCE
+        // =========================================================================
+
+        /// <summary>
+        /// Persist tinkerer progress to world save data.
+        /// </summary>
+        public static void PersistTinkererProgress()
+        {
+            if (ServerApi == null) return;
+
+            lock (persistLock)
+            {
+                if (TinkererProgress.IsEmpty)
+                {
+                    ServerApi.WorldManager.SaveGame.StoreData(TINKERER_PROGRESS_SAVE_KEY, null);
+                    return;
+                }
+
+                try
+                {
+                    var snapshot = TinkererProgress.ToArray();
+                    byte[] data;
+                    using (var ms = new MemoryStream())
+                    {
+                        using (var writer = new BinaryWriter(ms))
+                        {
+                            writer.Write((byte)0x54); // 'T'
+                            writer.Write((byte)0x4E); // 'N'
+                            writer.Write((byte)0x4B); // 'K'
+                            writer.Write((byte)1);    // Version 1
+
+                            writer.Write(snapshot.Length);
+                            foreach (var playerKvp in snapshot)
+                            {
+                                writer.Write(playerKvp.Key);
+                                var progress = playerKvp.Value;
+                                writer.Write(progress.IsUnlocked);
+                            }
+                        }
+                        data = ms.ToArray();
+                    }
+
+                    ServerApi.WorldManager.SaveGame.StoreData(TINKERER_PROGRESS_SAVE_KEY, data);
+                }
+                catch (Exception ex)
+                {
+                    ServerApi.Logger.Error($"[SimpleImprovingTraits] Failed to persist tinkerer progress: {ex.Message}");
+                }
+            }
+        }
+
+        /// <summary>
+        /// Load tinkerer progress from world save data.
+        /// </summary>
+        private void LoadTinkererProgress()
+        {
+            try
+            {
+                byte[] data = ServerApi.WorldManager.SaveGame.GetData(TINKERER_PROGRESS_SAVE_KEY);
+                if (data == null || data.Length == 0)
+                {
+                    ServerApi.Logger.Debug("[SimpleImprovingTraits] No tinkerer progress data found");
+                    return;
+                }
+
+                using (var ms = new MemoryStream(data))
+                {
+                    using (var reader = new BinaryReader(ms))
+                    {
+                        byte magic1 = reader.ReadByte();
+                        byte magic2 = reader.ReadByte();
+                        byte magic3 = reader.ReadByte();
+                        byte version = reader.ReadByte();
+
+                        if (magic1 != 0x54 || magic2 != 0x4E || magic3 != 0x4B)
+                        {
+                            ServerApi.Logger.Warning("[SimpleImprovingTraits] Invalid tinkerer progress magic bytes");
+                            return;
+                        }
+
+                        int playerCount = reader.ReadInt32();
+                        for (int i = 0; i < playerCount; i++)
+                        {
+                            string playerUid = reader.ReadString();
+                            var progress = new TinkererProgressData
+                            {
+                                IsUnlocked = reader.ReadBoolean()
+                            };
+                            TinkererProgress[playerUid] = progress;
+                        }
+                    }
+                }
+
+                ServerApi.Logger.Notification($"[SimpleImprovingTraits] Loaded tinkerer progress for {TinkererProgress.Count} players");
+            }
+            catch (Exception ex)
+            {
+                TinkererProgress.Clear();
+                ServerApi.Logger.Error($"[SimpleImprovingTraits] Failed to load tinkerer progress: {ex.Message}");
+            }
+        }
+
+        // =========================================================================
+        // MERCILESS TRAIT PERSISTENCE
+        // =========================================================================
+
+        /// <summary>
+        /// Persist merciless progress to world save data.
+        /// </summary>
+        public static void PersistMercilessProgress()
+        {
+            if (ServerApi == null) return;
+
+            lock (persistLock)
+            {
+                if (MercilessProgress.IsEmpty)
+                {
+                    ServerApi.WorldManager.SaveGame.StoreData(MERCILESS_PROGRESS_SAVE_KEY, null);
+                    return;
+                }
+
+                try
+                {
+                    var snapshot = MercilessProgress.ToArray();
+                    byte[] data;
+                    using (var ms = new MemoryStream())
+                    {
+                        using (var writer = new BinaryWriter(ms))
+                        {
+                            writer.Write((byte)0x4D); // 'M'
+                            writer.Write((byte)0x52); // 'R'
+                            writer.Write((byte)0x43); // 'C'
+                            writer.Write((byte)1);    // Version 1
+
+                            writer.Write(snapshot.Length);
+                            foreach (var playerKvp in snapshot)
+                            {
+                                writer.Write(playerKvp.Key);
+                                var progress = playerKvp.Value;
+                                writer.Write(progress.IsUnlocked);
+                            }
+                        }
+                        data = ms.ToArray();
+                    }
+
+                    ServerApi.WorldManager.SaveGame.StoreData(MERCILESS_PROGRESS_SAVE_KEY, data);
+                }
+                catch (Exception ex)
+                {
+                    ServerApi.Logger.Error($"[SimpleImprovingTraits] Failed to persist merciless progress: {ex.Message}");
+                }
+            }
+        }
+
+        /// <summary>
+        /// Load merciless progress from world save data.
+        /// </summary>
+        private void LoadMercilessProgress()
+        {
+            try
+            {
+                byte[] data = ServerApi.WorldManager.SaveGame.GetData(MERCILESS_PROGRESS_SAVE_KEY);
+                if (data == null || data.Length == 0)
+                {
+                    ServerApi.Logger.Debug("[SimpleImprovingTraits] No merciless progress data found");
+                    return;
+                }
+
+                using (var ms = new MemoryStream(data))
+                {
+                    using (var reader = new BinaryReader(ms))
+                    {
+                        byte magic1 = reader.ReadByte();
+                        byte magic2 = reader.ReadByte();
+                        byte magic3 = reader.ReadByte();
+                        byte version = reader.ReadByte();
+
+                        if (magic1 != 0x4D || magic2 != 0x52 || magic3 != 0x43)
+                        {
+                            ServerApi.Logger.Warning("[SimpleImprovingTraits] Invalid merciless progress magic bytes");
+                            return;
+                        }
+
+                        int playerCount = reader.ReadInt32();
+                        for (int i = 0; i < playerCount; i++)
+                        {
+                            string playerUid = reader.ReadString();
+                            var progress = new MercilessProgressData
+                            {
+                                IsUnlocked = reader.ReadBoolean()
+                            };
+                            MercilessProgress[playerUid] = progress;
+                        }
+                    }
+                }
+
+                ServerApi.Logger.Notification($"[SimpleImprovingTraits] Loaded merciless progress for {MercilessProgress.Count} players");
+            }
+            catch (Exception ex)
+            {
+                MercilessProgress.Clear();
+                ServerApi.Logger.Error($"[SimpleImprovingTraits] Failed to load merciless progress: {ex.Message}");
+            }
+        }
+
+        // =========================================================================
+        // CLAUSTROPHOBIC REMOVAL TRAIT PERSISTENCE
+        // =========================================================================
+
+        /// <summary>
+        /// Persist claustrophobic removal progress to world save data.
+        /// </summary>
+        public static void PersistClaustrophobicRemovalProgress()
+        {
+            if (ServerApi == null) return;
+
+            lock (persistLock)
+            {
+                if (ClaustrophobicRemovalProgress.IsEmpty)
+                {
+                    ServerApi.WorldManager.SaveGame.StoreData(CLAUSTROPHOBIC_REMOVAL_PROGRESS_SAVE_KEY, null);
+                    return;
+                }
+
+                try
+                {
+                    var snapshot = ClaustrophobicRemovalProgress.ToArray();
+                    byte[] data;
+                    using (var ms = new MemoryStream())
+                    {
+                        using (var writer = new BinaryWriter(ms))
+                        {
+                            writer.Write((byte)0x43); // 'C'
+                            writer.Write((byte)0x4C); // 'L'
+                            writer.Write((byte)0x52); // 'R'
+                            writer.Write((byte)1);    // Version 1
+
+                            writer.Write(snapshot.Length);
+                            foreach (var playerKvp in snapshot)
+                            {
+                                writer.Write(playerKvp.Key);
+                                var progress = playerKvp.Value;
+                                writer.Write(progress.IsRemoved);
+                            }
+                        }
+                        data = ms.ToArray();
+                    }
+
+                    ServerApi.WorldManager.SaveGame.StoreData(CLAUSTROPHOBIC_REMOVAL_PROGRESS_SAVE_KEY, data);
+                }
+                catch (Exception ex)
+                {
+                    ServerApi.Logger.Error($"[SimpleImprovingTraits] Failed to persist claustrophobic removal progress: {ex.Message}");
+                }
+            }
+        }
+
+        /// <summary>
+        /// Load claustrophobic removal progress from world save data.
+        /// </summary>
+        private void LoadClaustrophobicRemovalProgress()
+        {
+            try
+            {
+                byte[] data = ServerApi.WorldManager.SaveGame.GetData(CLAUSTROPHOBIC_REMOVAL_PROGRESS_SAVE_KEY);
+                if (data == null || data.Length == 0)
+                {
+                    ServerApi.Logger.Debug("[SimpleImprovingTraits] No claustrophobic removal progress data found");
+                    return;
+                }
+
+                using (var ms = new MemoryStream(data))
+                {
+                    using (var reader = new BinaryReader(ms))
+                    {
+                        byte magic1 = reader.ReadByte();
+                        byte magic2 = reader.ReadByte();
+                        byte magic3 = reader.ReadByte();
+                        byte version = reader.ReadByte();
+
+                        if (magic1 != 0x43 || magic2 != 0x4C || magic3 != 0x52)
+                        {
+                            ServerApi.Logger.Warning("[SimpleImprovingTraits] Invalid claustrophobic removal progress magic bytes");
+                            return;
+                        }
+
+                        int playerCount = reader.ReadInt32();
+                        for (int i = 0; i < playerCount; i++)
+                        {
+                            string playerUid = reader.ReadString();
+                            var progress = new ClaustrophobicRemovalProgressData
+                            {
+                                IsRemoved = reader.ReadBoolean()
+                            };
+                            ClaustrophobicRemovalProgress[playerUid] = progress;
+                        }
+                    }
+                }
+
+                ServerApi.Logger.Notification($"[SimpleImprovingTraits] Loaded claustrophobic removal progress for {ClaustrophobicRemovalProgress.Count} players");
+            }
+            catch (Exception ex)
+            {
+                ClaustrophobicRemovalProgress.Clear();
+                ServerApi.Logger.Error($"[SimpleImprovingTraits] Failed to load claustrophobic removal progress: {ex.Message}");
             }
         }
     }
@@ -7925,6 +10884,287 @@ namespace SimpleImprovingTraits
                 }
             }
 
+            // Process Furtive trait (reduces animal detection range)
+            int furtiveLevel = eplr.WatchedAttributes.GetInt(SimpleImprovingTraitsModSystem.WATCHED_FURTIVE_LEVEL, 0);
+            int furtiveBonus = eplr.WatchedAttributes.GetInt(SimpleImprovingTraitsModSystem.WATCHED_FURTIVE_BONUS, 0);
+            bool hasVanillaFurtive = eplr.WatchedAttributes.GetBool("sitHasVanillaFurtive", false);
+            if (furtiveLevel > 0)
+            {
+                string plainFurtiveTraitName = Lang.Get("simpleimprovingtraits:trait-sitfurtivemastery");
+                string dynamicFurtiveTrait = Lang.Get("simpleimprovingtraits:trait-furtive-dynamic", furtiveBonus);
+
+                // Re-check hasNoTraits
+                hasNoTraits = string.IsNullOrEmpty(__result) ||
+                              __result.Trim() == noTraitsMsg.Trim() ||
+                              __result == noTraitsMsg;
+
+                if (hasVanillaFurtive)
+                {
+                    // Class already has Furtive trait - update the existing values
+                    int combinedBonus = SimpleImprovingTraitsModSystem.VANILLA_FURTIVE_DETECTION_REDUCTION + furtiveBonus;
+                    __result = __result.Replace(
+                        $"-{SimpleImprovingTraitsModSystem.VANILLA_FURTIVE_DETECTION_REDUCTION}% animal seeking range",
+                        $"-{combinedBonus}% animal detection range");
+                }
+                else if (hasNoTraits)
+                {
+                    __result = dynamicFurtiveTrait;
+                }
+                else if (__result.Contains(plainFurtiveTraitName))
+                {
+                    __result = __result.Replace(plainFurtiveTraitName, dynamicFurtiveTrait);
+                }
+                else
+                {
+                    __result = __result + "\n" + dynamicFurtiveTrait;
+                }
+            }
+
+            // Process Precise trait (improves damage to mechanicals)
+            int preciseLevel = eplr.WatchedAttributes.GetInt(SimpleImprovingTraitsModSystem.WATCHED_PRECISE_LEVEL, 0);
+            int preciseBonus = eplr.WatchedAttributes.GetInt(SimpleImprovingTraitsModSystem.WATCHED_PRECISE_BONUS, 0);
+            bool hasVanillaPrecise = eplr.WatchedAttributes.GetBool("sitHasVanillaPrecise", false);
+            if (preciseLevel > 0)
+            {
+                string plainPreciseTraitName = Lang.Get("simpleimprovingtraits:trait-sitprecisemastery");
+                string dynamicPreciseTrait = Lang.Get("simpleimprovingtraits:trait-precise-dynamic", preciseBonus);
+
+                // Re-check hasNoTraits
+                hasNoTraits = string.IsNullOrEmpty(__result) ||
+                              __result.Trim() == noTraitsMsg.Trim() ||
+                              __result == noTraitsMsg;
+
+                if (hasVanillaPrecise)
+                {
+                    // Class already has Precise trait - update the existing values
+                    int combinedBonus = SimpleImprovingTraitsModSystem.VANILLA_PRECISE_MECHANICAL_DAMAGE_BONUS + preciseBonus;
+                    __result = __result.Replace(
+                        $"+{SimpleImprovingTraitsModSystem.VANILLA_PRECISE_MECHANICAL_DAMAGE_BONUS}% damage vs mechanicals",
+                        $"+{combinedBonus}% damage to mechanicals");
+                }
+                else if (hasNoTraits)
+                {
+                    __result = dynamicPreciseTrait;
+                }
+                else if (__result.Contains(plainPreciseTraitName))
+                {
+                    __result = __result.Replace(plainPreciseTraitName, dynamicPreciseTrait);
+                }
+                else
+                {
+                    __result = __result + "\n" + dynamicPreciseTrait;
+                }
+            }
+
+            // Process Hunger trait (reduces hunger rate)
+            int hungerLevel = eplr.WatchedAttributes.GetInt(SimpleImprovingTraitsModSystem.WATCHED_HUNGER_LEVEL, 0);
+            int hungerBonus = eplr.WatchedAttributes.GetInt(SimpleImprovingTraitsModSystem.WATCHED_HUNGER_BONUS, 0);
+            if (hungerLevel > 0)
+            {
+                string plainHungerTraitName = Lang.Get("simpleimprovingtraits:trait-sithungermastery");
+                string dynamicHungerTrait = Lang.Get("simpleimprovingtraits:trait-hunger-dynamic", hungerBonus);
+
+                // Re-check hasNoTraits
+                hasNoTraits = string.IsNullOrEmpty(__result) ||
+                              __result.Trim() == noTraitsMsg.Trim() ||
+                              __result == noTraitsMsg;
+
+                if (hasNoTraits)
+                {
+                    __result = dynamicHungerTrait;
+                }
+                else if (__result.Contains(plainHungerTraitName))
+                {
+                    __result = __result.Replace(plainHungerTraitName, dynamicHungerTrait);
+                }
+                else
+                {
+                    __result = __result + "\n" + dynamicHungerTrait;
+                }
+            }
+
+            // Process Technical unlock trait (translocator gear cost reduction)
+            bool technicalUnlocked = eplr.WatchedAttributes.GetBool(SimpleImprovingTraitsModSystem.WATCHED_TECHNICAL_UNLOCKED, false);
+            if (technicalUnlocked)
+            {
+                string plainTechnicalTraitName = Lang.Get("simpleimprovingtraits:trait-sittechnicalmastery");
+                string dynamicTechnicalTrait = Lang.Get("simpleimprovingtraits:trait-technical-dynamic");
+
+                // Re-check hasNoTraits
+                hasNoTraits = string.IsNullOrEmpty(__result) ||
+                              __result.Trim() == noTraitsMsg.Trim() ||
+                              __result == noTraitsMsg;
+
+                if (hasNoTraits)
+                {
+                    __result = dynamicTechnicalTrait;
+                }
+                else if (__result.Contains(plainTechnicalTraitName))
+                {
+                    __result = __result.Replace(plainTechnicalTraitName, dynamicTechnicalTrait);
+                }
+                else
+                {
+                    __result = __result + "\n" + dynamicTechnicalTrait;
+                }
+            }
+
+            // Process Hardy Health unlock trait (+5 HP)
+            bool hardyHealthUnlocked = eplr.WatchedAttributes.GetBool(SimpleImprovingTraitsModSystem.WATCHED_HARDY_HEALTH_UNLOCKED, false);
+            if (hardyHealthUnlocked)
+            {
+                string plainHardyHealthTraitName = Lang.Get("simpleimprovingtraits:trait-sithardyhealthmastery");
+                string dynamicHardyHealthTrait = Lang.Get("simpleimprovingtraits:trait-hardyhealth-dynamic", SimpleImprovingTraitsModSystem.HardyHealthBonus);
+
+                // Re-check hasNoTraits
+                hasNoTraits = string.IsNullOrEmpty(__result) ||
+                              __result.Trim() == noTraitsMsg.Trim() ||
+                              __result == noTraitsMsg;
+
+                if (hasNoTraits)
+                {
+                    __result = dynamicHardyHealthTrait;
+                }
+                else if (__result.Contains(plainHardyHealthTraitName))
+                {
+                    __result = __result.Replace(plainHardyHealthTraitName, dynamicHardyHealthTrait);
+                }
+                else
+                {
+                    __result = __result + "\n" + dynamicHardyHealthTrait;
+                }
+            }
+
+            // Process Bowyer unlock trait (crude bow crafting)
+            bool bowyerUnlocked = eplr.WatchedAttributes.GetBool(SimpleImprovingTraitsModSystem.WATCHED_BOWYER_UNLOCKED, false);
+            if (bowyerUnlocked)
+            {
+                string plainBowyerTraitName = Lang.Get("simpleimprovingtraits:trait-sitbowyermastery");
+                string dynamicBowyerTrait = Lang.Get("simpleimprovingtraits:trait-bowyer-dynamic");
+
+                // Re-check hasNoTraits
+                hasNoTraits = string.IsNullOrEmpty(__result) ||
+                              __result.Trim() == noTraitsMsg.Trim() ||
+                              __result == noTraitsMsg;
+
+                if (hasNoTraits)
+                {
+                    __result = dynamicBowyerTrait;
+                }
+                else if (__result.Contains(plainBowyerTraitName))
+                {
+                    __result = __result.Replace(plainBowyerTraitName, dynamicBowyerTrait);
+                }
+                else
+                {
+                    __result = __result + "\n" + dynamicBowyerTrait;
+                }
+            }
+
+            // Process Improviser unlock trait (sling crafting)
+            bool improviserUnlocked = eplr.WatchedAttributes.GetBool(SimpleImprovingTraitsModSystem.WATCHED_IMPROVISER_UNLOCKED, false);
+            if (improviserUnlocked)
+            {
+                string plainImproviserTraitName = Lang.Get("simpleimprovingtraits:trait-sitimprovisermastery");
+                string dynamicImproviserTrait = Lang.Get("simpleimprovingtraits:trait-improviser-dynamic");
+
+                // Re-check hasNoTraits
+                hasNoTraits = string.IsNullOrEmpty(__result) ||
+                              __result.Trim() == noTraitsMsg.Trim() ||
+                              __result == noTraitsMsg;
+
+                if (hasNoTraits)
+                {
+                    __result = dynamicImproviserTrait;
+                }
+                else if (__result.Contains(plainImproviserTraitName))
+                {
+                    __result = __result.Replace(plainImproviserTraitName, dynamicImproviserTrait);
+                }
+                else
+                {
+                    __result = __result + "\n" + dynamicImproviserTrait;
+                }
+            }
+
+            // Process Tinkerer unlock trait (tuning spear crafting)
+            bool tinkererUnlocked = eplr.WatchedAttributes.GetBool(SimpleImprovingTraitsModSystem.WATCHED_TINKERER_UNLOCKED, false);
+            if (tinkererUnlocked)
+            {
+                string plainTinkererTraitName = Lang.Get("simpleimprovingtraits:trait-sittinkerermastery");
+                string dynamicTinkererTrait = Lang.Get("simpleimprovingtraits:trait-tinkerer-dynamic");
+
+                // Re-check hasNoTraits
+                hasNoTraits = string.IsNullOrEmpty(__result) ||
+                              __result.Trim() == noTraitsMsg.Trim() ||
+                              __result == noTraitsMsg;
+
+                if (hasNoTraits)
+                {
+                    __result = dynamicTinkererTrait;
+                }
+                else if (__result.Contains(plainTinkererTraitName))
+                {
+                    __result = __result.Replace(plainTinkererTraitName, dynamicTinkererTrait);
+                }
+                else
+                {
+                    __result = __result + "\n" + dynamicTinkererTrait;
+                }
+            }
+
+            // Process Merciless unlock trait (shortsword/shield crafting)
+            bool mercilessUnlocked = eplr.WatchedAttributes.GetBool(SimpleImprovingTraitsModSystem.WATCHED_MERCILESS_UNLOCKED, false);
+            if (mercilessUnlocked)
+            {
+                string plainMercilessTraitName = Lang.Get("simpleimprovingtraits:trait-sitmercilessmastery");
+                string dynamicMercilessTrait = Lang.Get("simpleimprovingtraits:trait-merciless-dynamic");
+
+                // Re-check hasNoTraits
+                hasNoTraits = string.IsNullOrEmpty(__result) ||
+                              __result.Trim() == noTraitsMsg.Trim() ||
+                              __result == noTraitsMsg;
+
+                if (hasNoTraits)
+                {
+                    __result = dynamicMercilessTrait;
+                }
+                else if (__result.Contains(plainMercilessTraitName))
+                {
+                    __result = __result.Replace(plainMercilessTraitName, dynamicMercilessTrait);
+                }
+                else
+                {
+                    __result = __result + "\n" + dynamicMercilessTrait;
+                }
+            }
+
+            // Process Claustrophobic Removed trait (penalty removal)
+            bool claustrophobicRemoved = eplr.WatchedAttributes.GetBool(SimpleImprovingTraitsModSystem.WATCHED_CLAUSTROPHOBIC_REMOVED, false);
+            if (claustrophobicRemoved)
+            {
+                string plainClaustrophobicTraitName = Lang.Get("simpleimprovingtraits:trait-sitclaustrophobicremoved");
+                string dynamicClaustrophobicTrait = Lang.Get("simpleimprovingtraits:trait-claustrophobic-removed-dynamic");
+
+                // Re-check hasNoTraits
+                hasNoTraits = string.IsNullOrEmpty(__result) ||
+                              __result.Trim() == noTraitsMsg.Trim() ||
+                              __result == noTraitsMsg;
+
+                if (hasNoTraits)
+                {
+                    __result = dynamicClaustrophobicTrait;
+                }
+                else if (__result.Contains(plainClaustrophobicTraitName))
+                {
+                    __result = __result.Replace(plainClaustrophobicTraitName, dynamicClaustrophobicTrait);
+                }
+                else
+                {
+                    __result = __result + "\n" + dynamicClaustrophobicTrait;
+                }
+            }
+
             // Clean up any double newlines that might have been introduced
             while (__result.Contains("\n\n"))
             {
@@ -7972,6 +11212,12 @@ namespace SimpleImprovingTraits
                 if (weaponCombo != null)
                 {
                     SimpleImprovingTraitsModSystem.ProcessRangedDamage(shooterPlayer, weaponCombo, damage);
+
+                    // Also track Precise damage if target is a mechanical creature
+                    if (SimpleImprovingTraitsModSystem.IsMechanicalCreature(__instance))
+                    {
+                        SimpleImprovingTraitsModSystem.ProcessPreciseDamage(shooterPlayer, weaponCombo, damage);
+                    }
                 }
                 return; // Don't also count as melee
             }
@@ -7995,6 +11241,12 @@ namespace SimpleImprovingTraits
             if (weaponType != null)
             {
                 SimpleImprovingTraitsModSystem.ProcessMeleeDamage(attackerPlayer, weaponType, damage);
+
+                // Also track Precise damage if target is a mechanical creature
+                if (SimpleImprovingTraitsModSystem.IsMechanicalCreature(__instance))
+                {
+                    SimpleImprovingTraitsModSystem.ProcessPreciseDamage(attackerPlayer, weaponType, damage);
+                }
             }
         }
 
@@ -8305,6 +11557,49 @@ namespace SimpleImprovingTraits
             catch (Exception ex)
             {
                 System.Diagnostics.Debug.WriteLine($"[SimpleImprovingTraits] Error in OnHeldInteractStep_Postfix: {ex.Message}");
+            }
+        }
+    }
+
+    /// <summary>
+    /// Server-side Harmony patches for translocator repairs (Technical trait).
+    /// </summary>
+    public static class TranslocatorPatches
+    {
+        /// <summary>
+        /// Postfix for BlockEntityStaticTranslocator.DoRepair - tracks when player repairs a translocator.
+        /// </summary>
+        public static void DoRepair_Postfix(object __instance, IPlayer byPlayer)
+        {
+            try
+            {
+                // Only process on server
+                if (byPlayer == null) return;
+
+                var serverPlayer = byPlayer as IServerPlayer;
+                if (serverPlayer == null) return;
+
+                // Get the repairState and RepairInteractionsRequired via reflection
+                var instanceType = __instance.GetType();
+                var repairStateField = instanceType.GetField("repairState",
+                    System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance);
+                var repairRequiredField = instanceType.GetField("RepairInteractionsRequired",
+                    System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance);
+
+                if (repairStateField == null || repairRequiredField == null) return;
+
+                int repairState = (int)repairStateField.GetValue(__instance);
+                int repairRequired = (int)repairRequiredField.GetValue(__instance);
+
+                // Check if this repair just completed (FullyRepaired is now true)
+                if (repairState >= repairRequired)
+                {
+                    SimpleImprovingTraitsModSystem.ProcessTranslocatorRepair(serverPlayer);
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[SimpleImprovingTraits] Error in DoRepair_Postfix: {ex.Message}");
             }
         }
     }

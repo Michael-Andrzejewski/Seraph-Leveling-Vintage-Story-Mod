@@ -53,5 +53,10 @@
     "code": "sitforagermastery",
     "type": "positive",
     "attributes": {}
+  },
+  {
+    "code": "sittechnicalmastery",
+    "type": "positive",
+    "attributes": {}
   }
 ]

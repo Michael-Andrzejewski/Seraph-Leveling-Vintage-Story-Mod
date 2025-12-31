@@ -2,8 +2,8 @@
 
   <PropertyGroup>
     <TargetFramework>net8.0</TargetFramework>
-    <RootNamespace>SimpleImprovingTraits</RootNamespace>
-    <AssemblyName>SimpleImprovingTraits</AssemblyName>
+    <RootNamespace>SeraphLeveling</RootNamespace>
+    <AssemblyName>SeraphLeveling</AssemblyName>
   </PropertyGroup>
 
   <ItemGroup>
@@ -43,10 +43,10 @@
     </ItemGroup>
     <Copy SourceFiles="@(AssetFiles)" DestinationFiles="@(AssetFiles->'$(ProjectDir)bin\$(Configuration)\$(TargetFramework)\mod\assets\%(RecursiveDir)%(Filename)%(Extension)')" />
     <!-- Create zip -->
-    <ZipDirectory SourceDirectory="$(ProjectDir)bin\$(Configuration)\$(TargetFramework)\mod\" DestinationFile="$(ProjectDir)bin\$(Configuration)\$(TargetFramework)\SimpleImprovingTraits.zip" Overwrite="true" />
+    <ZipDirectory SourceDirectory="$(ProjectDir)bin\$(Configuration)\$(TargetFramework)\mod\" DestinationFile="$(ProjectDir)bin\$(Configuration)\$(TargetFramework)\SeraphLeveling.zip" Overwrite="true" />
     <!-- Auto-deploy to Vintagestory Mods folder -->
-    <Copy SourceFiles="$(ProjectDir)bin\$(Configuration)\$(TargetFramework)\SimpleImprovingTraits.zip" DestinationFolder="$(APPDATA)\VintagestoryData\Mods\" />
-    <Message Importance="high" Text="Deployed SimpleImprovingTraits.zip to $(APPDATA)\VintagestoryData\Mods\" />
+    <Copy SourceFiles="$(ProjectDir)bin\$(Configuration)\$(TargetFramework)\SeraphLeveling.zip" DestinationFolder="$(APPDATA)\VintagestoryData\Mods\" />
+    <Message Importance="high" Text="Deployed SeraphLeveling.zip to $(APPDATA)\VintagestoryData\Mods\" />
   </Target>
 
 </Project>

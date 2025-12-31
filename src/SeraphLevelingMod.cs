@@ -13,8 +13,96 @@ using Vintagestory.API.Datastructures;
 using Vintagestory.API.MathTools;
 using Vintagestory.API.Server;
 
-namespace SimpleImprovingTraits
+namespace SeraphLeveling
 {
+    /// <summary>
+    /// Configuration class for SeraphLeveling mod.
+    /// Edit ModConfig/SeraphLeveling.json to change these values.
+    /// </summary>
+    public class SeraphLevelingConfig
+    {
+        // Mining progression
+        public int MiningBaseBlocksPerIncrement { get; set; } = 100;
+        public int MiningIncrementStep { get; set; } = 100;
+        public int MiningMaxPercent { get; set; } = 50;
+        public int MiningOreMultiplier { get; set; } = 5;
+
+        // Melee progression
+        public int MeleeBaseDamagePerIncrement { get; set; } = 100;
+        public int MeleeIncrementStep { get; set; } = 100;
+        public int MeleeMaxPercent { get; set; } = 50;
+
+        // Ranged progression
+        public int RangedBaseDamagePerIncrement { get; set; } = 100;
+        public int RangedIncrementStep { get; set; } = 100;
+        public int RangedMaxDamagePercent { get; set; } = 50;
+        public int RangedMaxAccuracyPercent { get; set; } = 50;
+        public int RangedMaxDistancePercent { get; set; } = 50;
+
+        // Walking progression
+        public int WalkingBaseBlocksPerIncrement { get; set; } = 1000;
+        public int WalkingIncrementStep { get; set; } = 1000;
+        public int WalkingMaxPercent { get; set; } = 15;
+
+        // Hunger progression
+        public int HungerBaseSecondsPerIncrement { get; set; } = 300;
+        public int HungerIncrementStep { get; set; } = 60;
+        public int HungerMaxReductionPercent { get; set; } = 25;
+
+        // Armor progression
+        public int ArmorBaseSecondsPerIncrement { get; set; } = 86400;
+        public int ArmorTimeIncrementStep { get; set; } = 86400;
+        public int ArmorBaseDamageBlockedPerIncrement { get; set; } = 100;
+        public int ArmorDamageIncrementStep { get; set; } = 100;
+        public int ArmorBaseRepairsPerIncrement { get; set; } = 1;
+        public int ArmorRepairIncrementStep { get; set; } = 1;
+        public int ArmorMaxDurabilityPercent { get; set; } = 50;
+        public int ArmorMaxWalkSpeedPercent { get; set; } = 50;
+
+        // Clothier progression
+        public int ClothierRequiredUniqueClothes { get; set; } = 20;
+
+        // Mender progression
+        public int MenderBaseRepairsPerIncrement { get; set; } = 5;
+        public int MenderIncrementStep { get; set; } = 1;
+        public int MenderMaxPercent { get; set; } = 20;
+
+        // Pilferer progression
+        public int PilfererBasePointsPerIncrement { get; set; } = 10;
+        public int PilfererIncrementStep { get; set; } = 10;
+        public int PilfererMaxPercent { get; set; } = 20;
+
+        // Resourceful progression
+        public int ResourcefulBaseAnimalsPerIncrement { get; set; } = 10;
+        public int ResourcefulIncrementStep { get; set; } = 10;
+        public int ResourcefulMaxLootPercent { get; set; } = 20;
+        public int ResourcefulMaxSpeedPercent { get; set; } = 25;
+
+        // Forager progression
+        public int ForagerBaseCropsPerIncrement { get; set; } = 10;
+        public int ForagerIncrementStep { get; set; } = 10;
+        public int ForagerMaxLootPercent { get; set; } = 20;
+        public int ForagerMaxWildCropPercent { get; set; } = 20;
+
+        // Furtive progression
+        public int FurtiveBaseSneakBlocksPerIncrement { get; set; } = 100;
+        public int FurtiveIncrementStep { get; set; } = 100;
+        public int FurtiveMaxPercent { get; set; } = 35;
+
+        // Precise progression
+        public int PreciseBaseDamagePerIncrement { get; set; } = 100;
+        public int PreciseIncrementStep { get; set; } = 100;
+        public int PreciseMaxPercent { get; set; } = 30;
+
+        // Technical progression
+        public int TechnicalRequiredTranslocatorRepairs { get; set; } = 5;
+
+        // Hardy Health progression
+        public int HardyHealthMiningThreshold { get; set; } = 110;
+        public int HardyHealthArmorDurabilityThreshold { get; set; } = 10;
+        public int HardyHealthBonus { get; set; } = 5;
+    }
+
     /// <summary>
     /// Tracks progress for a specific ranged weapon combination (for ranged damage progression).
     /// Each weapon combination (bow+arrow) has its own increment counter that persists.
@@ -72,7 +160,7 @@ namespace SimpleImprovingTraits
                 progress = new RangedWeaponProgressData
                 {
                     DamageInIncrement = 0,
-                    CurrentIncrementSize = SimpleImprovingTraitsModSystem.BaseRangedDamagePerIncrement
+                    CurrentIncrementSize = SeraphLevelingModSystem.BaseRangedDamagePerIncrement
                 };
                 WeaponProgress[weaponCombo] = progress;
             }
@@ -269,9 +357,9 @@ namespace SimpleImprovingTraits
             {
                 progress = new ArmorPieceProgressData
                 {
-                    CurrentTimeIncrementSize = SimpleImprovingTraitsModSystem.BaseSecondsInArmorPerIncrement,
-                    CurrentDamageIncrementSize = SimpleImprovingTraitsModSystem.BaseDamageBlockedPerIncrement,
-                    CurrentRepairIncrementSize = SimpleImprovingTraitsModSystem.BaseRepairsPerIncrement
+                    CurrentTimeIncrementSize = SeraphLevelingModSystem.BaseSecondsInArmorPerIncrement,
+                    CurrentDamageIncrementSize = SeraphLevelingModSystem.BaseDamageBlockedPerIncrement,
+                    CurrentRepairIncrementSize = SeraphLevelingModSystem.BaseRepairsPerIncrement
                 };
                 ArmorProgress[armorCode] = progress;
             }
@@ -354,7 +442,7 @@ namespace SimpleImprovingTraits
                 progress = new WeaponProgressData
                 {
                     DamageInIncrement = 0,
-                    CurrentIncrementSize = SimpleImprovingTraitsModSystem.BaseDamagePerIncrement
+                    CurrentIncrementSize = SeraphLevelingModSystem.BaseDamagePerIncrement
                 };
                 WeaponProgress[weaponType] = progress;
             }
@@ -436,7 +524,7 @@ namespace SimpleImprovingTraits
                 progress = new PickaxeProgressData
                 {
                     BlocksInIncrement = 0,
-                    CurrentIncrementSize = SimpleImprovingTraitsModSystem.BaseBlocksPerIncrement
+                    CurrentIncrementSize = SeraphLevelingModSystem.BaseBlocksPerIncrement
                 };
                 PickaxeProgress[pickaxeCode] = progress;
             }
@@ -715,7 +803,7 @@ namespace SimpleImprovingTraits
                 progress = new PreciseWeaponProgressData
                 {
                     DamageInIncrement = 0,
-                    CurrentIncrementSize = SimpleImprovingTraitsModSystem.BasePreciseDamagePerIncrement
+                    CurrentIncrementSize = SeraphLevelingModSystem.BasePreciseDamagePerIncrement
                 };
                 WeaponProgress[weaponType] = progress;
             }
@@ -918,7 +1006,7 @@ namespace SimpleImprovingTraits
     /// Provides a progression system that improves player traits through gameplay.
     /// Currently implements mining speed progression based on blocks mined.
     /// </summary>
-    public class SimpleImprovingTraitsModSystem : ModSystem
+    public class SeraphLevelingModSystem : ModSystem
     {
         public static ICoreServerAPI ServerApi { get; private set; }
 
@@ -1468,6 +1556,7 @@ namespace SimpleImprovingTraits
         public const string WATCHED_CLAUSTROPHOBIC_MINING_REMAINING = "sitClaustrophobicMiningRemaining";
 
         private const string CONFIG_SAVE_KEY = "sitConfig";
+        private const string CONFIG_FILE_NAME = "SeraphLeveling.json";
 
         // Vanilla Hardy trait mining speed bonus (used for cap calculations)
         public const int VANILLA_HARDY_MINING_BONUS = 10;
@@ -1488,6 +1577,9 @@ namespace SimpleImprovingTraits
         {
             base.StartServerSide(api);
             ServerApi = api;
+
+            // Load config file (sets defaults for new worlds)
+            LoadConfigFile(api);
 
             // Register /trait command with subcommands
             api.ChatCommands.Create("trait")
@@ -2032,7 +2124,7 @@ namespace SimpleImprovingTraits
             // Hook into player disconnect to clean up position tracking
             api.Event.PlayerDisconnect += OnPlayerDisconnect;
 
-            api.Logger.Notification("[SimpleImprovingTraits] Mod loaded");
+            api.Logger.Notification("[SeraphLeveling] Mod loaded");
         }
 
         /// <summary>
@@ -4025,7 +4117,7 @@ namespace SimpleImprovingTraits
                                 armorProgress.TotalDurabilityCredits += firstEquipBonus;
                                 pendingArmorProgressSave = true;
 
-                                ServerApi.Logger.Debug($"[SimpleImprovingTraits] Player {player.PlayerName} first-time equipped {itemCode}, +{firstEquipBonus}% durability bonus");
+                                ServerApi.Logger.Debug($"[SeraphLeveling] Player {player.PlayerName} first-time equipped {itemCode}, +{firstEquipBonus}% durability bonus");
 
                                 ApplyArmorBonusesStatic(player, armorProgress.TotalDurabilityCredits, armorProgress.TotalWalkSpeedCredits);
                             }
@@ -4114,7 +4206,7 @@ namespace SimpleImprovingTraits
                             if (actualDurabilityBonus > 0 || actualWalkSpeedBonus > 0)
                             {
                                 player.SendMessage(GlobalConstants.GeneralChatGroup,
-                                    Lang.Get("simpleimprovingtraits:message-armor-first-equip-both", actualDurabilityBonus, actualWalkSpeedBonus),
+                                    Lang.Get("seraphleveling:message-armor-first-equip-both", actualDurabilityBonus, actualWalkSpeedBonus),
                                     EnumChatType.Notification);
                             }
                         }
@@ -4153,7 +4245,7 @@ namespace SimpleImprovingTraits
                 pieceProgress.DamageBlockedInIncrement -= pieceProgress.CurrentDamageIncrementSize;
                 pieceProgress.CurrentDamageIncrementSize += ArmorDamageIncrementStep;
 
-                ServerApi.Logger.Debug($"[SimpleImprovingTraits] Player {player.PlayerName} earned damage credit {pieceProgress.DamageCredits} with {armorCode}");
+                ServerApi.Logger.Debug($"[SeraphLeveling] Player {player.PlayerName} earned damage credit {pieceProgress.DamageCredits} with {armorCode}");
             }
 
             pendingArmorProgressSave = true;
@@ -4162,9 +4254,9 @@ namespace SimpleImprovingTraits
             {
                 ApplyArmorBonusesStatic(player, armorProgress.TotalDurabilityCredits, armorProgress.TotalWalkSpeedCredits);
 
-                int durabilityBonus = CalculateArmorDurabilityBonusPercent(armorProgress.TotalDurabilityCredits, player.Entity);
+                // Notify player of level up with raw improvement (shows progress even when capped)
                 player.SendMessage(GlobalConstants.GeneralChatGroup,
-                    Lang.Get("simpleimprovingtraits:message-armor-damage-level-up", armorProgress.TotalDurabilityCredits, durabilityBonus),
+                    Lang.Get("seraphleveling:message-armor-damage-level-up", armorProgress.TotalDurabilityCredits, armorProgress.TotalDurabilityCredits),
                     EnumChatType.Notification);
 
                 // Check for trait unlocks that depend on armor durability
@@ -4200,7 +4292,7 @@ namespace SimpleImprovingTraits
                 pieceProgress.RepairsInIncrement -= pieceProgress.CurrentRepairIncrementSize;
                 pieceProgress.CurrentRepairIncrementSize += ArmorRepairIncrementStep;
 
-                ServerApi.Logger.Debug($"[SimpleImprovingTraits] Player {player.PlayerName} earned repair credit {pieceProgress.RepairCredits} with {armorCode}");
+                ServerApi.Logger.Debug($"[SeraphLeveling] Player {player.PlayerName} earned repair credit {pieceProgress.RepairCredits} with {armorCode}");
             }
 
             pendingArmorProgressSave = true;
@@ -4209,9 +4301,9 @@ namespace SimpleImprovingTraits
             {
                 ApplyArmorBonusesStatic(player, armorProgress.TotalDurabilityCredits, armorProgress.TotalWalkSpeedCredits);
 
-                int durabilityBonus = CalculateArmorDurabilityBonusPercent(armorProgress.TotalDurabilityCredits, player.Entity);
+                // Notify player of level up with raw improvement (shows progress even when capped)
                 player.SendMessage(GlobalConstants.GeneralChatGroup,
-                    Lang.Get("simpleimprovingtraits:message-armor-repair-level-up", armorProgress.TotalDurabilityCredits, durabilityBonus),
+                    Lang.Get("seraphleveling:message-armor-repair-level-up", armorProgress.TotalDurabilityCredits, armorProgress.TotalDurabilityCredits),
                     EnumChatType.Notification);
 
                 // Check for trait unlocks that depend on armor durability
@@ -4316,7 +4408,7 @@ namespace SimpleImprovingTraits
                 pickaxeProgress.BlocksInIncrement -= pickaxeProgress.CurrentIncrementSize;
                 pickaxeProgress.CurrentIncrementSize += IncrementStep;
 
-                ServerApi.Logger.Debug($"[SimpleImprovingTraits] Player {byPlayer.PlayerName} earned credit {playerProgress.TotalCredits} with {pickaxeCode}, next requires {pickaxeProgress.CurrentIncrementSize} points");
+                ServerApi.Logger.Debug($"[SeraphLeveling] Player {byPlayer.PlayerName} earned credit {playerProgress.TotalCredits} with {pickaxeCode}, next requires {pickaxeProgress.CurrentIncrementSize} points");
             }
 
             pendingMiningProgressSave = true;
@@ -4329,7 +4421,7 @@ namespace SimpleImprovingTraits
                 // Notify player of level up with the level as the bonus (the raw mining speed improvement)
                 // This shows the true progress even when negative traits are still being cancelled
                 byPlayer.SendMessage(GlobalConstants.GeneralChatGroup,
-                    Lang.Get("simpleimprovingtraits:message-mining-level-up", playerProgress.TotalCredits, playerProgress.TotalCredits),
+                    Lang.Get("seraphleveling:message-mining-level-up", playerProgress.TotalCredits, playerProgress.TotalCredits),
                     EnumChatType.Notification);
 
                 // Check for trait unlocks that depend on mining level
@@ -4391,7 +4483,7 @@ namespace SimpleImprovingTraits
                     playerProgress.BlocksInIncrement -= playerProgress.CurrentIncrementSize;
                     playerProgress.CurrentIncrementSize += WalkingIncrementStep;
 
-                    ServerApi.Logger.Debug($"[SimpleImprovingTraits] Player {player.PlayerName} earned walking credit {playerProgress.TotalCredits}, next requires {playerProgress.CurrentIncrementSize} blocks");
+                    ServerApi.Logger.Debug($"[SeraphLeveling] Player {player.PlayerName} earned walking credit {playerProgress.TotalCredits}, next requires {playerProgress.CurrentIncrementSize} blocks");
                 }
 
                 // Mark for saving if any progress was made
@@ -4403,11 +4495,11 @@ namespace SimpleImprovingTraits
                 // If credits increased, update the stat and notify player
                 if (playerProgress.TotalCredits > oldCredits)
                 {
-                    int actualBonusPercent = ApplyWalkingBonusStatic(player, playerProgress.TotalCredits);
+                    ApplyWalkingBonusStatic(player, playerProgress.TotalCredits);
 
-                    // Notify player of level up with actual applied bonus (respects caps)
+                    // Notify player of level up with raw improvement (shows progress even when capped)
                     player.SendMessage(GlobalConstants.GeneralChatGroup,
-                        Lang.Get("simpleimprovingtraits:message-walking-level-up", playerProgress.TotalCredits, actualBonusPercent),
+                        Lang.Get("seraphleveling:message-walking-level-up", playerProgress.TotalCredits, playerProgress.TotalCredits),
                         EnumChatType.Notification);
                 }
             }
@@ -4461,7 +4553,7 @@ namespace SimpleImprovingTraits
                     playerProgress.SecondsInIncrement -= playerProgress.CurrentIncrementSize;
                     playerProgress.CurrentIncrementSize += HungerIncrementStep;
 
-                    ServerApi.Logger.Debug($"[SimpleImprovingTraits] Player {player.PlayerName} earned hunger credit {playerProgress.TotalCredits}/{playerMaxCredits}, next requires {playerProgress.CurrentIncrementSize} seconds");
+                    ServerApi.Logger.Debug($"[SeraphLeveling] Player {player.PlayerName} earned hunger credit {playerProgress.TotalCredits}/{playerMaxCredits}, next requires {playerProgress.CurrentIncrementSize} seconds");
                 }
 
                 // Mark for saving if any progress was made
@@ -4473,11 +4565,11 @@ namespace SimpleImprovingTraits
                 // If credits increased, update the stat and notify player
                 if (playerProgress.TotalCredits > oldCredits)
                 {
-                    int actualBonusPercent = ApplyHungerBonusStatic(player, playerProgress.TotalCredits);
+                    ApplyHungerBonusStatic(player, playerProgress.TotalCredits);
 
-                    // Notify player of level up with actual applied bonus
+                    // Notify player of level up with raw improvement (shows progress even when cancelling Ravenous)
                     player.SendMessage(GlobalConstants.GeneralChatGroup,
-                        Lang.Get("simpleimprovingtraits:message-hunger-level-up", playerProgress.TotalCredits, actualBonusPercent),
+                        Lang.Get("seraphleveling:message-hunger-level-up", playerProgress.TotalCredits, playerProgress.TotalCredits),
                         EnumChatType.Notification);
                 }
             }
@@ -4508,7 +4600,7 @@ namespace SimpleImprovingTraits
             ApplyMiningBonus(byPlayer, miningCredits);
             if (miningCredits > 0)
             {
-                ServerApi.Logger.Debug($"[SimpleImprovingTraits] Applied mining bonus {miningCredits}% to player {byPlayer.PlayerName}");
+                ServerApi.Logger.Debug($"[SeraphLeveling] Applied mining bonus {miningCredits}% to player {byPlayer.PlayerName}");
             }
 
             // Apply melee bonus
@@ -4517,7 +4609,7 @@ namespace SimpleImprovingTraits
             ApplyMeleeBonusStatic(byPlayer, meleeCredits);
             if (meleeCredits > 0)
             {
-                ServerApi.Logger.Debug($"[SimpleImprovingTraits] Applied melee bonus {meleeCredits}% to player {byPlayer.PlayerName}");
+                ServerApi.Logger.Debug($"[SeraphLeveling] Applied melee bonus {meleeCredits}% to player {byPlayer.PlayerName}");
             }
 
             // Apply ranged bonus
@@ -4526,7 +4618,7 @@ namespace SimpleImprovingTraits
             ApplyRangedBonusStatic(byPlayer, rangedCredits);
             if (rangedCredits > 0)
             {
-                ServerApi.Logger.Debug($"[SimpleImprovingTraits] Applied ranged bonus {rangedCredits} credits to player {byPlayer.PlayerName}");
+                ServerApi.Logger.Debug($"[SeraphLeveling] Applied ranged bonus {rangedCredits} credits to player {byPlayer.PlayerName}");
             }
 
             // Apply walking bonus
@@ -4538,7 +4630,7 @@ namespace SimpleImprovingTraits
             ApplyWalkingBonusStatic(byPlayer, walkingCredits);
             if (walkingCredits > 0)
             {
-                ServerApi.Logger.Debug($"[SimpleImprovingTraits] Applied walking bonus {walkingCredits}% to player {byPlayer.PlayerName}");
+                ServerApi.Logger.Debug($"[SeraphLeveling] Applied walking bonus {walkingCredits}% to player {byPlayer.PlayerName}");
             }
 
             // Apply hunger bonus
@@ -4550,7 +4642,7 @@ namespace SimpleImprovingTraits
             ApplyHungerBonusStatic(byPlayer, hungerCredits);
             if (hungerCredits > 0)
             {
-                ServerApi.Logger.Debug($"[SimpleImprovingTraits] Applied hunger bonus -{hungerCredits}% to player {byPlayer.PlayerName}");
+                ServerApi.Logger.Debug($"[SeraphLeveling] Applied hunger bonus -{hungerCredits}% to player {byPlayer.PlayerName}");
             }
 
             // Apply armor bonuses
@@ -4558,7 +4650,7 @@ namespace SimpleImprovingTraits
             ApplyArmorBonusesStatic(byPlayer, armorProg.TotalDurabilityCredits, armorProg.TotalWalkSpeedCredits);
             if (armorProg.TotalDurabilityCredits > 0 || armorProg.TotalWalkSpeedCredits > 0)
             {
-                ServerApi.Logger.Debug($"[SimpleImprovingTraits] Applied armor bonuses: +{armorProg.TotalDurabilityCredits}% durability, -{armorProg.TotalWalkSpeedCredits}% walk speed penalty to player {byPlayer.PlayerName}");
+                ServerApi.Logger.Debug($"[SeraphLeveling] Applied armor bonuses: +{armorProg.TotalDurabilityCredits}% durability, -{armorProg.TotalWalkSpeedCredits}% walk speed penalty to player {byPlayer.PlayerName}");
             }
 
             // Apply clothier bonus
@@ -4566,7 +4658,7 @@ namespace SimpleImprovingTraits
             ApplyClothierBonusStatic(byPlayer, clothierProg);
             if (clothierProg.SewingKitUnlocked)
             {
-                ServerApi.Logger.Debug($"[SimpleImprovingTraits] Applied clothier unlock to player {byPlayer.PlayerName}");
+                ServerApi.Logger.Debug($"[SeraphLeveling] Applied clothier unlock to player {byPlayer.PlayerName}");
             }
 
             // Apply mender bonus
@@ -4578,7 +4670,7 @@ namespace SimpleImprovingTraits
             ApplyMenderBonusStatic(byPlayer, menderCredits);
             if (menderCredits > 0)
             {
-                ServerApi.Logger.Debug($"[SimpleImprovingTraits] Applied mender bonus +{menderCredits}% to player {byPlayer.PlayerName}");
+                ServerApi.Logger.Debug($"[SeraphLeveling] Applied mender bonus +{menderCredits}% to player {byPlayer.PlayerName}");
             }
 
             // Apply pilferer bonus
@@ -4590,7 +4682,7 @@ namespace SimpleImprovingTraits
             ApplyPilfererBonusStatic(byPlayer, pilfererCredits);
             if (pilfererCredits > 0)
             {
-                ServerApi.Logger.Debug($"[SimpleImprovingTraits] Applied pilferer bonus +{pilfererCredits}% to player {byPlayer.PlayerName}");
+                ServerApi.Logger.Debug($"[SeraphLeveling] Applied pilferer bonus +{pilfererCredits}% to player {byPlayer.PlayerName}");
             }
 
             // Apply resourceful bonus
@@ -4602,7 +4694,7 @@ namespace SimpleImprovingTraits
             ApplyResourcefulBonusStatic(byPlayer, resourcefulCredits);
             if (resourcefulCredits > 0)
             {
-                ServerApi.Logger.Debug($"[SimpleImprovingTraits] Applied resourceful bonus +{resourcefulCredits}% to player {byPlayer.PlayerName}");
+                ServerApi.Logger.Debug($"[SeraphLeveling] Applied resourceful bonus +{resourcefulCredits}% to player {byPlayer.PlayerName}");
             }
 
             // Apply forager bonus
@@ -4614,7 +4706,7 @@ namespace SimpleImprovingTraits
             ApplyForagerBonusStatic(byPlayer, foragerCredits);
             if (foragerCredits > 0)
             {
-                ServerApi.Logger.Debug($"[SimpleImprovingTraits] Applied forager bonus +{foragerCredits}% to player {byPlayer.PlayerName}");
+                ServerApi.Logger.Debug($"[SeraphLeveling] Applied forager bonus +{foragerCredits}% to player {byPlayer.PlayerName}");
             }
 
             // Apply furtive bonus
@@ -4626,7 +4718,7 @@ namespace SimpleImprovingTraits
             ApplyFurtiveBonusStatic(byPlayer, furtiveCredits);
             if (furtiveCredits > 0)
             {
-                ServerApi.Logger.Debug($"[SimpleImprovingTraits] Applied furtive bonus -{furtiveCredits}% detection to player {byPlayer.PlayerName}");
+                ServerApi.Logger.Debug($"[SeraphLeveling] Applied furtive bonus -{furtiveCredits}% detection to player {byPlayer.PlayerName}");
             }
 
             // Apply precise bonus
@@ -4635,7 +4727,7 @@ namespace SimpleImprovingTraits
             ApplyPreciseBonusStatic(byPlayer, preciseCredits);
             if (preciseCredits > 0)
             {
-                ServerApi.Logger.Debug($"[SimpleImprovingTraits] Applied precise bonus +{preciseCredits}% mechanical damage to player {byPlayer.PlayerName}");
+                ServerApi.Logger.Debug($"[SeraphLeveling] Applied precise bonus +{preciseCredits}% mechanical damage to player {byPlayer.PlayerName}");
             }
 
             // Apply technical unlock
@@ -4643,7 +4735,7 @@ namespace SimpleImprovingTraits
             if (technicalProg.IsUnlocked)
             {
                 ApplyTechnicalBonusStatic(byPlayer, true);
-                ServerApi.Logger.Debug($"[SimpleImprovingTraits] Applied technical unlock to player {byPlayer.PlayerName}");
+                ServerApi.Logger.Debug($"[SeraphLeveling] Applied technical unlock to player {byPlayer.PlayerName}");
             }
 
             // Apply hardy health unlock
@@ -4651,7 +4743,7 @@ namespace SimpleImprovingTraits
             if (hardyHealthProg.IsUnlocked)
             {
                 ApplyHardyHealthBonusStatic(byPlayer, true);
-                ServerApi.Logger.Debug($"[SimpleImprovingTraits] Applied hardy health +{HardyHealthBonus} HP to player {byPlayer.PlayerName}");
+                ServerApi.Logger.Debug($"[SeraphLeveling] Applied hardy health +{HardyHealthBonus} HP to player {byPlayer.PlayerName}");
             }
 
             // Apply bowyer unlock
@@ -4659,7 +4751,7 @@ namespace SimpleImprovingTraits
             if (bowyerProg.IsUnlocked)
             {
                 ApplyBowyerBonusStatic(byPlayer, true);
-                ServerApi.Logger.Debug($"[SimpleImprovingTraits] Applied bowyer unlock to player {byPlayer.PlayerName}");
+                ServerApi.Logger.Debug($"[SeraphLeveling] Applied bowyer unlock to player {byPlayer.PlayerName}");
             }
 
             // Apply improviser unlock
@@ -4667,7 +4759,7 @@ namespace SimpleImprovingTraits
             if (improviserProg.IsUnlocked)
             {
                 ApplyImproviserBonusStatic(byPlayer, true);
-                ServerApi.Logger.Debug($"[SimpleImprovingTraits] Applied improviser unlock to player {byPlayer.PlayerName}");
+                ServerApi.Logger.Debug($"[SeraphLeveling] Applied improviser unlock to player {byPlayer.PlayerName}");
             }
 
             // Apply tinkerer unlock
@@ -4675,7 +4767,7 @@ namespace SimpleImprovingTraits
             if (tinkererProg.IsUnlocked)
             {
                 ApplyTinkererBonusStatic(byPlayer, true);
-                ServerApi.Logger.Debug($"[SimpleImprovingTraits] Applied tinkerer unlock to player {byPlayer.PlayerName}");
+                ServerApi.Logger.Debug($"[SeraphLeveling] Applied tinkerer unlock to player {byPlayer.PlayerName}");
             }
 
             // Apply merciless unlock
@@ -4683,7 +4775,7 @@ namespace SimpleImprovingTraits
             if (mercilessProg.IsUnlocked)
             {
                 ApplyMercilessBonusStatic(byPlayer, true);
-                ServerApi.Logger.Debug($"[SimpleImprovingTraits] Applied merciless unlock to player {byPlayer.PlayerName}");
+                ServerApi.Logger.Debug($"[SeraphLeveling] Applied merciless unlock to player {byPlayer.PlayerName}");
             }
 
             // Apply claustrophobic removal
@@ -4691,7 +4783,7 @@ namespace SimpleImprovingTraits
             if (claustrophobicProg.IsRemoved)
             {
                 ApplyClaustrophobicRemovalStatic(byPlayer, true);
-                ServerApi.Logger.Debug($"[SimpleImprovingTraits] Applied claustrophobic removal to player {byPlayer.PlayerName}");
+                ServerApi.Logger.Debug($"[SeraphLeveling] Applied claustrophobic removal to player {byPlayer.PlayerName}");
             }
 
             // Initialize equipped armor tracking for this player
@@ -4714,7 +4806,7 @@ namespace SimpleImprovingTraits
             bool hasWeak = PlayerHasVanillaWeak(player.Entity);
             bool hasClaustrophobic = PlayerHasVanillaClaustrophobic(player.Entity);
 
-            ServerApi.Logger.Debug($"[SimpleImprovingTraits] ApplyMiningBonus: player={player.PlayerName}, level={level}, hasClaustrophobic={hasClaustrophobic}, class={player.Entity.WatchedAttributes.GetString("characterClass", "unknown")}");
+            ServerApi.Logger.Debug($"[SeraphLeveling] ApplyMiningBonus: player={player.PlayerName}, level={level}, hasClaustrophobic={hasClaustrophobic}, class={player.Entity.WatchedAttributes.GetString("characterClass", "unknown")}");
 
             int vanillaHardyBonus = hasVanillaHardy ? VANILLA_HARDY_MINING_BONUS : 0;
 
@@ -4726,7 +4818,7 @@ namespace SimpleImprovingTraits
             // Ore penalty is tied to mining penalty - when mining penalty is cancelled (at level 10), ore is also cancelled
             int claustrophobicOreRemaining = claustrophobicMiningRemaining > 0 ? VANILLA_CLAUSTROPHOBIC_ORE_PENALTY : 0;
 
-            ServerApi.Logger.Debug($"[SimpleImprovingTraits] Claustrophobic penalties: miningRemaining={claustrophobicMiningRemaining}, oreRemaining={claustrophobicOreRemaining}");
+            ServerApi.Logger.Debug($"[SeraphLeveling] Claustrophobic penalties: miningRemaining={claustrophobicMiningRemaining}, oreRemaining={claustrophobicOreRemaining}");
 
             // Calculate net bonus after cancelling negative traits
             // Negative trait penalty must be fully cancelled before bonus starts showing
@@ -4839,14 +4931,14 @@ namespace SimpleImprovingTraits
                 // Add the trait
                 var newTraits = currentTraits.Append(traitCode).ToArray();
                 entity.WatchedAttributes.SetStringArray("extraTraits", newTraits);
-                ServerApi.Logger.Debug($"[SimpleImprovingTraits] Added trait {traitCode} to player");
+                ServerApi.Logger.Debug($"[SeraphLeveling] Added trait {traitCode} to player");
             }
             else if (!shouldHave && hasTrait)
             {
                 // Remove the trait
                 var newTraits = currentTraits.Where(t => t != traitCode).ToArray();
                 entity.WatchedAttributes.SetStringArray("extraTraits", newTraits);
-                ServerApi.Logger.Debug($"[SimpleImprovingTraits] Removed trait {traitCode} from player");
+                ServerApi.Logger.Debug($"[SeraphLeveling] Removed trait {traitCode} from player");
             }
         }
 
@@ -4912,7 +5004,7 @@ namespace SimpleImprovingTraits
         /// </summary>
         private void ApplyServerHarmonyPatches(ICoreServerAPI api)
         {
-            serverHarmony = new Harmony("simpleimprovingtraits.server");
+            serverHarmony = new Harmony("seraphleveling.server");
 
             try
             {
@@ -4923,7 +5015,7 @@ namespace SimpleImprovingTraits
 
                 if (receiveDamageMethod == null)
                 {
-                    api.Logger.Warning("[SimpleImprovingTraits] Could not find Entity.ReceiveDamage method");
+                    api.Logger.Warning("[SeraphLeveling] Could not find Entity.ReceiveDamage method");
                     return;
                 }
 
@@ -4932,7 +5024,7 @@ namespace SimpleImprovingTraits
                     nameof(EntityDamagePatches.ReceiveDamage_Postfix));
 
                 serverHarmony.Patch(receiveDamageMethod, postfix: new HarmonyMethod(postfixMethod));
-                api.Logger.Notification("[SimpleImprovingTraits] Successfully patched Entity.ReceiveDamage for melee tracking");
+                api.Logger.Notification("[SeraphLeveling] Successfully patched Entity.ReceiveDamage for melee tracking");
 
                 // Patch EntityBehaviorHarvestable.SetHarvested for Resourceful trait (animal harvesting)
                 PatchAnimalHarvesting(api);
@@ -4945,7 +5037,7 @@ namespace SimpleImprovingTraits
             }
             catch (Exception ex)
             {
-                api.Logger.Error($"[SimpleImprovingTraits] Failed to apply server Harmony patches: {ex.Message}");
+                api.Logger.Error($"[SeraphLeveling] Failed to apply server Harmony patches: {ex.Message}");
             }
         }
 
@@ -4960,7 +5052,7 @@ namespace SimpleImprovingTraits
                 var harvestableType = AccessTools.TypeByName("Vintagestory.GameContent.EntityBehaviorHarvestable");
                 if (harvestableType == null)
                 {
-                    api.Logger.Warning("[SimpleImprovingTraits] Could not find EntityBehaviorHarvestable type");
+                    api.Logger.Warning("[SeraphLeveling] Could not find EntityBehaviorHarvestable type");
                     return;
                 }
 
@@ -4973,7 +5065,7 @@ namespace SimpleImprovingTraits
                 }
                 if (setHarvestedMethod == null)
                 {
-                    api.Logger.Warning("[SimpleImprovingTraits] Could not find SetHarvested or SetHarvestedBy method in EntityBehaviorHarvestable");
+                    api.Logger.Warning("[SeraphLeveling] Could not find SetHarvested or SetHarvestedBy method in EntityBehaviorHarvestable");
                     return;
                 }
 
@@ -4982,11 +5074,11 @@ namespace SimpleImprovingTraits
                     nameof(HarvestingPatches.SetHarvested_Postfix));
 
                 serverHarmony.Patch(setHarvestedMethod, postfix: new HarmonyMethod(postfixMethod));
-                api.Logger.Notification("[SimpleImprovingTraits] Successfully patched EntityBehaviorHarvestable.SetHarvested for Resourceful trait");
+                api.Logger.Notification("[SeraphLeveling] Successfully patched EntityBehaviorHarvestable.SetHarvested for Resourceful trait");
             }
             catch (Exception ex)
             {
-                api.Logger.Warning($"[SimpleImprovingTraits] Failed to patch EntityBehaviorHarvestable: {ex.Message}");
+                api.Logger.Warning($"[SeraphLeveling] Failed to patch EntityBehaviorHarvestable: {ex.Message}");
             }
         }
 
@@ -5011,14 +5103,14 @@ namespace SimpleImprovingTraits
                         var postfixMethod = AccessTools.Method(typeof(SewingKitPatches),
                             nameof(SewingKitPatches.OnHeldInteractStop_Postfix));
                         serverHarmony.Patch(onHeldInteractStopMethod, postfix: new HarmonyMethod(postfixMethod));
-                        api.Logger.Notification("[SimpleImprovingTraits] Successfully patched ItemSewingKit.OnHeldInteractStop for Mender trait");
+                        api.Logger.Notification("[SeraphLeveling] Successfully patched ItemSewingKit.OnHeldInteractStop for Mender trait");
                         anyPatchSucceeded = true;
                     }
                 }
             }
             catch (Exception ex)
             {
-                api.Logger.Debug($"[SimpleImprovingTraits] ItemSewingKit patch attempt: {ex.Message}");
+                api.Logger.Debug($"[SeraphLeveling] ItemSewingKit patch attempt: {ex.Message}");
             }
 
             // Approach 2: Patch CollectibleObject.OnModifiedInInventorySlot to detect durability restoration
@@ -5031,13 +5123,13 @@ namespace SimpleImprovingTraits
                     var postfixMethod = AccessTools.Method(typeof(SewingKitPatches),
                         nameof(SewingKitPatches.OnModifiedInInventorySlot_Postfix));
                     serverHarmony.Patch(onModifiedMethod, postfix: new HarmonyMethod(postfixMethod));
-                    api.Logger.Notification("[SimpleImprovingTraits] Successfully patched CollectibleObject.OnModifiedInInventorySlot for Mender trait");
+                    api.Logger.Notification("[SeraphLeveling] Successfully patched CollectibleObject.OnModifiedInInventorySlot for Mender trait");
                     anyPatchSucceeded = true;
                 }
             }
             catch (Exception ex)
             {
-                api.Logger.Debug($"[SimpleImprovingTraits] OnModifiedInInventorySlot patch attempt: {ex.Message}");
+                api.Logger.Debug($"[SeraphLeveling] OnModifiedInInventorySlot patch attempt: {ex.Message}");
             }
 
             // Approach 3: Patch OnHeldInteractStep as fallback
@@ -5050,18 +5142,18 @@ namespace SimpleImprovingTraits
                     var postfixMethod = AccessTools.Method(typeof(SewingKitPatches),
                         nameof(SewingKitPatches.OnHeldInteractStep_Postfix));
                     serverHarmony.Patch(onHeldInteractStepMethod, postfix: new HarmonyMethod(postfixMethod));
-                    api.Logger.Notification("[SimpleImprovingTraits] Successfully patched CollectibleObject.OnHeldInteractStep for Mender trait");
+                    api.Logger.Notification("[SeraphLeveling] Successfully patched CollectibleObject.OnHeldInteractStep for Mender trait");
                     anyPatchSucceeded = true;
                 }
             }
             catch (Exception ex)
             {
-                api.Logger.Debug($"[SimpleImprovingTraits] OnHeldInteractStep patch attempt: {ex.Message}");
+                api.Logger.Debug($"[SeraphLeveling] OnHeldInteractStep patch attempt: {ex.Message}");
             }
 
             if (!anyPatchSucceeded)
             {
-                api.Logger.Warning("[SimpleImprovingTraits] Could not patch any method for Mender trait (sewing kit repairs)");
+                api.Logger.Warning("[SeraphLeveling] Could not patch any method for Mender trait (sewing kit repairs)");
             }
         }
 
@@ -5076,7 +5168,7 @@ namespace SimpleImprovingTraits
                 var translocatorType = AccessTools.TypeByName("Vintagestory.GameContent.BlockEntityStaticTranslocator");
                 if (translocatorType == null)
                 {
-                    api.Logger.Warning("[SimpleImprovingTraits] Could not find BlockEntityStaticTranslocator type");
+                    api.Logger.Warning("[SeraphLeveling] Could not find BlockEntityStaticTranslocator type");
                     return;
                 }
 
@@ -5084,7 +5176,7 @@ namespace SimpleImprovingTraits
                 var doRepairMethod = AccessTools.Method(translocatorType, "DoRepair");
                 if (doRepairMethod == null)
                 {
-                    api.Logger.Warning("[SimpleImprovingTraits] Could not find DoRepair method in BlockEntityStaticTranslocator");
+                    api.Logger.Warning("[SeraphLeveling] Could not find DoRepair method in BlockEntityStaticTranslocator");
                     return;
                 }
 
@@ -5093,11 +5185,11 @@ namespace SimpleImprovingTraits
                     nameof(TranslocatorPatches.DoRepair_Postfix));
 
                 serverHarmony.Patch(doRepairMethod, postfix: new HarmonyMethod(postfixMethod));
-                api.Logger.Notification("[SimpleImprovingTraits] Successfully patched BlockEntityStaticTranslocator.DoRepair for Technical trait");
+                api.Logger.Notification("[SeraphLeveling] Successfully patched BlockEntityStaticTranslocator.DoRepair for Technical trait");
             }
             catch (Exception ex)
             {
-                api.Logger.Warning($"[SimpleImprovingTraits] Failed to patch BlockEntityStaticTranslocator.DoRepair: {ex.Message}");
+                api.Logger.Warning($"[SeraphLeveling] Failed to patch BlockEntityStaticTranslocator.DoRepair: {ex.Message}");
             }
         }
 
@@ -5135,7 +5227,7 @@ namespace SimpleImprovingTraits
                 weaponProgress.DamageInIncrement -= weaponProgress.CurrentIncrementSize;
                 weaponProgress.CurrentIncrementSize += MeleeIncrementStep;
 
-                ServerApi.Logger.Debug($"[SimpleImprovingTraits] Player {attackerPlayer.PlayerName} earned melee credit {playerProgress.TotalCredits} with {weaponType}, next requires {weaponProgress.CurrentIncrementSize} damage");
+                ServerApi.Logger.Debug($"[SeraphLeveling] Player {attackerPlayer.PlayerName} earned melee credit {playerProgress.TotalCredits} with {weaponType}, next requires {weaponProgress.CurrentIncrementSize} damage");
             }
 
             pendingMeleeProgressSave = true;
@@ -5143,11 +5235,11 @@ namespace SimpleImprovingTraits
             // If credits increased, update the stat and notify player
             if (playerProgress.TotalCredits > oldCredits)
             {
-                int actualBonusPercent = ApplyMeleeBonusStatic(attackerPlayer, playerProgress.TotalCredits);
+                ApplyMeleeBonusStatic(attackerPlayer, playerProgress.TotalCredits);
 
-                // Notify player of level up with actual applied bonus (respects caps)
+                // Notify player of level up with raw improvement (shows progress even when cancelling negative traits)
                 attackerPlayer.SendMessage(GlobalConstants.GeneralChatGroup,
-                    Lang.Get("simpleimprovingtraits:message-melee-level-up", playerProgress.TotalCredits, actualBonusPercent),
+                    Lang.Get("seraphleveling:message-melee-level-up", playerProgress.TotalCredits, playerProgress.TotalCredits),
                     EnumChatType.Notification);
 
                 // Check for trait unlocks that depend on melee damage
@@ -5354,7 +5446,7 @@ namespace SimpleImprovingTraits
                 weaponProgress.DamageInIncrement -= weaponProgress.CurrentIncrementSize;
                 weaponProgress.CurrentIncrementSize += RangedIncrementStep;
 
-                ServerApi.Logger.Debug($"[SimpleImprovingTraits] Player {attackerPlayer.PlayerName} earned ranged credit {playerProgress.TotalCredits} with {weaponCombo}, next requires {weaponProgress.CurrentIncrementSize} damage");
+                ServerApi.Logger.Debug($"[SeraphLeveling] Player {attackerPlayer.PlayerName} earned ranged credit {playerProgress.TotalCredits} with {weaponCombo}, next requires {weaponProgress.CurrentIncrementSize} damage");
             }
 
             pendingRangedProgressSave = true;
@@ -5362,11 +5454,11 @@ namespace SimpleImprovingTraits
             // If credits increased, update the stat and notify player
             if (playerProgress.TotalCredits > oldCredits)
             {
-                var (damageBonus, accuracyBonus, distanceBonus) = ApplyRangedBonusStatic(attackerPlayer, playerProgress.TotalCredits);
+                ApplyRangedBonusStatic(attackerPlayer, playerProgress.TotalCredits);
 
-                // Notify player of level up with actual applied bonuses
+                // Notify player of level up with raw improvement (shows progress even when cancelling negative traits)
                 attackerPlayer.SendMessage(GlobalConstants.GeneralChatGroup,
-                    Lang.Get("simpleimprovingtraits:message-ranged-level-up", playerProgress.TotalCredits, damageBonus, accuracyBonus, distanceBonus),
+                    Lang.Get("seraphleveling:message-ranged-level-up", playerProgress.TotalCredits, playerProgress.TotalCredits, playerProgress.TotalCredits, playerProgress.TotalCredits),
                     EnumChatType.Notification);
 
                 // Check for trait unlocks that depend on ranged damage
@@ -5518,7 +5610,7 @@ namespace SimpleImprovingTraits
             // Debug logging to verify stats are being applied
             if (damageBonus > 0 || accuracyBonus > 0 || distanceBonus > 0)
             {
-                ServerApi?.Logger.Debug($"[SimpleImprovingTraits] Applied ranged stats to {player.PlayerName}: Damage={damageBonus:F2}, Accuracy={accuracyBonus:F2}, Distance={distanceBonus:F2}");
+                ServerApi?.Logger.Debug($"[SeraphLeveling] Applied ranged stats to {player.PlayerName}: Damage={damageBonus:F2}, Accuracy={accuracyBonus:F2}, Distance={distanceBonus:F2}");
             }
 
             // When Frail distance penalty is fully cancelled, also negate the HP penalty
@@ -5739,7 +5831,7 @@ namespace SimpleImprovingTraits
             }
 
             // Unpatch server-side Harmony patches
-            serverHarmony?.UnpatchAll("simpleimprovingtraits.server");
+            serverHarmony?.UnpatchAll("seraphleveling.server");
 
             MiningProgress.Clear();
             MeleeProgress.Clear();
@@ -5972,11 +6064,11 @@ namespace SimpleImprovingTraits
                     }
 
                     ServerApi.WorldManager.SaveGame.StoreData(MINING_PROGRESS_SAVE_KEY, data);
-                    ServerApi.Logger.Debug($"[SimpleImprovingTraits] Persisted mining progress for {snapshot.Length} players (v3 format)");
+                    ServerApi.Logger.Debug($"[SeraphLeveling] Persisted mining progress for {snapshot.Length} players (v3 format)");
                 }
                 catch (Exception ex)
                 {
-                    ServerApi.Logger.Error($"[SimpleImprovingTraits] Failed to persist mining progress: {ex.Message}");
+                    ServerApi.Logger.Error($"[SeraphLeveling] Failed to persist mining progress: {ex.Message}");
                 }
             }
         }
@@ -5996,7 +6088,7 @@ namespace SimpleImprovingTraits
                 byte[] data = ServerApi.WorldManager.SaveGame.GetData(MINING_PROGRESS_SAVE_KEY);
                 if (data == null || data.Length == 0)
                 {
-                    ServerApi.Logger.Debug("[SimpleImprovingTraits] No mining progress data found in world save");
+                    ServerApi.Logger.Debug("[SeraphLeveling] No mining progress data found in world save");
                     return;
                 }
 
@@ -6011,7 +6103,7 @@ namespace SimpleImprovingTraits
 
                         if (b1 != 0x53 || b2 != 0x49 || b3 != 0x54) // "SIT"
                         {
-                            ServerApi.Logger.Warning("[SimpleImprovingTraits] Invalid mining progress data format");
+                            ServerApi.Logger.Warning("[SeraphLeveling] Invalid mining progress data format");
                             return;
                         }
 
@@ -6021,7 +6113,7 @@ namespace SimpleImprovingTraits
                         if (version == 1)
                         {
                             // Legacy format: convert old blocks-based progress to credits
-                            ServerApi.Logger.Notification("[SimpleImprovingTraits] Converting legacy v1 save data to v3 format...");
+                            ServerApi.Logger.Notification("[SeraphLeveling] Converting legacy v1 save data to v3 format...");
                             for (int i = 0; i < playerCount; i++)
                             {
                                 string playerUid = reader.ReadString();
@@ -6047,7 +6139,7 @@ namespace SimpleImprovingTraits
                         else if (version == 2)
                         {
                             // Version 2: single pickaxe tracking - convert to v3
-                            ServerApi.Logger.Notification("[SimpleImprovingTraits] Converting v2 save data to v3 format...");
+                            ServerApi.Logger.Notification("[SeraphLeveling] Converting v2 save data to v3 format...");
                             for (int i = 0; i < playerCount; i++)
                             {
                                 string playerUid = reader.ReadString();
@@ -6103,18 +6195,18 @@ namespace SimpleImprovingTraits
                         }
                         else
                         {
-                            ServerApi.Logger.Warning($"[SimpleImprovingTraits] Unknown save format version {version}");
+                            ServerApi.Logger.Warning($"[SeraphLeveling] Unknown save format version {version}");
                             return;
                         }
                     }
                 }
 
-                ServerApi.Logger.Notification($"[SimpleImprovingTraits] Loaded mining progress for {MiningProgress.Count} players");
+                ServerApi.Logger.Notification($"[SeraphLeveling] Loaded mining progress for {MiningProgress.Count} players");
             }
             catch (Exception ex)
             {
                 MiningProgress.Clear();
-                ServerApi.Logger.Error($"[SimpleImprovingTraits] Failed to load mining progress: {ex.Message}");
+                ServerApi.Logger.Error($"[SeraphLeveling] Failed to load mining progress: {ex.Message}");
             }
         }
 
@@ -6172,11 +6264,11 @@ namespace SimpleImprovingTraits
                     }
 
                     ServerApi.WorldManager.SaveGame.StoreData(MELEE_PROGRESS_SAVE_KEY, data);
-                    ServerApi.Logger.Debug($"[SimpleImprovingTraits] Persisted melee progress for {snapshot.Length} players");
+                    ServerApi.Logger.Debug($"[SeraphLeveling] Persisted melee progress for {snapshot.Length} players");
                 }
                 catch (Exception ex)
                 {
-                    ServerApi.Logger.Error($"[SimpleImprovingTraits] Failed to persist melee progress: {ex.Message}");
+                    ServerApi.Logger.Error($"[SeraphLeveling] Failed to persist melee progress: {ex.Message}");
                 }
             }
         }
@@ -6195,7 +6287,7 @@ namespace SimpleImprovingTraits
                 byte[] data = ServerApi.WorldManager.SaveGame.GetData(MELEE_PROGRESS_SAVE_KEY);
                 if (data == null || data.Length == 0)
                 {
-                    ServerApi.Logger.Debug("[SimpleImprovingTraits] No melee progress data found in world save");
+                    ServerApi.Logger.Debug("[SeraphLeveling] No melee progress data found in world save");
                     return;
                 }
 
@@ -6210,7 +6302,7 @@ namespace SimpleImprovingTraits
 
                         if (b1 != 0x53 || b2 != 0x49 || b3 != 0x4D) // "SIM"
                         {
-                            ServerApi.Logger.Warning("[SimpleImprovingTraits] Invalid melee progress data format");
+                            ServerApi.Logger.Warning("[SeraphLeveling] Invalid melee progress data format");
                             return;
                         }
 
@@ -6245,18 +6337,18 @@ namespace SimpleImprovingTraits
                         }
                         else
                         {
-                            ServerApi.Logger.Warning($"[SimpleImprovingTraits] Unknown melee save format version {version}");
+                            ServerApi.Logger.Warning($"[SeraphLeveling] Unknown melee save format version {version}");
                             return;
                         }
                     }
                 }
 
-                ServerApi.Logger.Notification($"[SimpleImprovingTraits] Loaded melee progress for {MeleeProgress.Count} players");
+                ServerApi.Logger.Notification($"[SeraphLeveling] Loaded melee progress for {MeleeProgress.Count} players");
             }
             catch (Exception ex)
             {
                 MeleeProgress.Clear();
-                ServerApi.Logger.Error($"[SimpleImprovingTraits] Failed to load melee progress: {ex.Message}");
+                ServerApi.Logger.Error($"[SeraphLeveling] Failed to load melee progress: {ex.Message}");
             }
         }
 
@@ -6314,11 +6406,11 @@ namespace SimpleImprovingTraits
                     }
 
                     ServerApi.WorldManager.SaveGame.StoreData(RANGED_PROGRESS_SAVE_KEY, data);
-                    ServerApi.Logger.Debug($"[SimpleImprovingTraits] Persisted ranged progress for {snapshot.Length} players");
+                    ServerApi.Logger.Debug($"[SeraphLeveling] Persisted ranged progress for {snapshot.Length} players");
                 }
                 catch (Exception ex)
                 {
-                    ServerApi.Logger.Error($"[SimpleImprovingTraits] Failed to persist ranged progress: {ex.Message}");
+                    ServerApi.Logger.Error($"[SeraphLeveling] Failed to persist ranged progress: {ex.Message}");
                 }
             }
         }
@@ -6337,7 +6429,7 @@ namespace SimpleImprovingTraits
                 byte[] data = ServerApi.WorldManager.SaveGame.GetData(RANGED_PROGRESS_SAVE_KEY);
                 if (data == null || data.Length == 0)
                 {
-                    ServerApi.Logger.Debug("[SimpleImprovingTraits] No ranged progress data found in world save");
+                    ServerApi.Logger.Debug("[SeraphLeveling] No ranged progress data found in world save");
                     return;
                 }
 
@@ -6352,7 +6444,7 @@ namespace SimpleImprovingTraits
 
                         if (b1 != 0x53 || b2 != 0x49 || b3 != 0x52) // "SIR"
                         {
-                            ServerApi.Logger.Warning("[SimpleImprovingTraits] Invalid ranged progress data format");
+                            ServerApi.Logger.Warning("[SeraphLeveling] Invalid ranged progress data format");
                             return;
                         }
 
@@ -6387,18 +6479,18 @@ namespace SimpleImprovingTraits
                         }
                         else
                         {
-                            ServerApi.Logger.Warning($"[SimpleImprovingTraits] Unknown ranged save format version {version}");
+                            ServerApi.Logger.Warning($"[SeraphLeveling] Unknown ranged save format version {version}");
                             return;
                         }
                     }
                 }
 
-                ServerApi.Logger.Notification($"[SimpleImprovingTraits] Loaded ranged progress for {RangedProgress.Count} players");
+                ServerApi.Logger.Notification($"[SeraphLeveling] Loaded ranged progress for {RangedProgress.Count} players");
             }
             catch (Exception ex)
             {
                 RangedProgress.Clear();
-                ServerApi.Logger.Error($"[SimpleImprovingTraits] Failed to load ranged progress: {ex.Message}");
+                ServerApi.Logger.Error($"[SeraphLeveling] Failed to load ranged progress: {ex.Message}");
             }
         }
 
@@ -6449,11 +6541,11 @@ namespace SimpleImprovingTraits
                     }
 
                     ServerApi.WorldManager.SaveGame.StoreData(WALKING_PROGRESS_SAVE_KEY, data);
-                    ServerApi.Logger.Debug($"[SimpleImprovingTraits] Persisted walking progress for {snapshot.Length} players");
+                    ServerApi.Logger.Debug($"[SeraphLeveling] Persisted walking progress for {snapshot.Length} players");
                 }
                 catch (Exception ex)
                 {
-                    ServerApi.Logger.Error($"[SimpleImprovingTraits] Failed to persist walking progress: {ex.Message}");
+                    ServerApi.Logger.Error($"[SeraphLeveling] Failed to persist walking progress: {ex.Message}");
                 }
             }
         }
@@ -6472,7 +6564,7 @@ namespace SimpleImprovingTraits
                 byte[] data = ServerApi.WorldManager.SaveGame.GetData(WALKING_PROGRESS_SAVE_KEY);
                 if (data == null || data.Length == 0)
                 {
-                    ServerApi.Logger.Debug("[SimpleImprovingTraits] No walking progress data found in world save");
+                    ServerApi.Logger.Debug("[SeraphLeveling] No walking progress data found in world save");
                     return;
                 }
 
@@ -6487,7 +6579,7 @@ namespace SimpleImprovingTraits
 
                         if (b1 != 0x53 || b2 != 0x49 || b3 != 0x57) // "SIW"
                         {
-                            ServerApi.Logger.Warning("[SimpleImprovingTraits] Invalid walking progress data format");
+                            ServerApi.Logger.Warning("[SeraphLeveling] Invalid walking progress data format");
                             return;
                         }
 
@@ -6511,18 +6603,18 @@ namespace SimpleImprovingTraits
                         }
                         else
                         {
-                            ServerApi.Logger.Warning($"[SimpleImprovingTraits] Unknown walking save format version {version}");
+                            ServerApi.Logger.Warning($"[SeraphLeveling] Unknown walking save format version {version}");
                             return;
                         }
                     }
                 }
 
-                ServerApi.Logger.Notification($"[SimpleImprovingTraits] Loaded walking progress for {WalkingProgress.Count} players");
+                ServerApi.Logger.Notification($"[SeraphLeveling] Loaded walking progress for {WalkingProgress.Count} players");
             }
             catch (Exception ex)
             {
                 WalkingProgress.Clear();
-                ServerApi.Logger.Error($"[SimpleImprovingTraits] Failed to load walking progress: {ex.Message}");
+                ServerApi.Logger.Error($"[SeraphLeveling] Failed to load walking progress: {ex.Message}");
             }
         }
 
@@ -6573,11 +6665,11 @@ namespace SimpleImprovingTraits
                     }
 
                     ServerApi.WorldManager.SaveGame.StoreData(HUNGER_PROGRESS_SAVE_KEY, data);
-                    ServerApi.Logger.Debug($"[SimpleImprovingTraits] Persisted hunger progress for {snapshot.Length} players");
+                    ServerApi.Logger.Debug($"[SeraphLeveling] Persisted hunger progress for {snapshot.Length} players");
                 }
                 catch (Exception ex)
                 {
-                    ServerApi.Logger.Error($"[SimpleImprovingTraits] Failed to persist hunger progress: {ex.Message}");
+                    ServerApi.Logger.Error($"[SeraphLeveling] Failed to persist hunger progress: {ex.Message}");
                 }
             }
         }
@@ -6596,7 +6688,7 @@ namespace SimpleImprovingTraits
                 byte[] data = ServerApi.WorldManager.SaveGame.GetData(HUNGER_PROGRESS_SAVE_KEY);
                 if (data == null || data.Length == 0)
                 {
-                    ServerApi.Logger.Debug("[SimpleImprovingTraits] No hunger progress data found in world save");
+                    ServerApi.Logger.Debug("[SeraphLeveling] No hunger progress data found in world save");
                     return;
                 }
 
@@ -6611,7 +6703,7 @@ namespace SimpleImprovingTraits
 
                         if (b1 != 0x53 || b2 != 0x49 || b3 != 0x48) // "SIH"
                         {
-                            ServerApi.Logger.Warning("[SimpleImprovingTraits] Invalid hunger progress data format");
+                            ServerApi.Logger.Warning("[SeraphLeveling] Invalid hunger progress data format");
                             return;
                         }
 
@@ -6635,18 +6727,18 @@ namespace SimpleImprovingTraits
                         }
                         else
                         {
-                            ServerApi.Logger.Warning($"[SimpleImprovingTraits] Unknown hunger save format version {version}");
+                            ServerApi.Logger.Warning($"[SeraphLeveling] Unknown hunger save format version {version}");
                             return;
                         }
                     }
                 }
 
-                ServerApi.Logger.Notification($"[SimpleImprovingTraits] Loaded hunger progress for {HungerProgress.Count} players");
+                ServerApi.Logger.Notification($"[SeraphLeveling] Loaded hunger progress for {HungerProgress.Count} players");
             }
             catch (Exception ex)
             {
                 HungerProgress.Clear();
-                ServerApi.Logger.Error($"[SimpleImprovingTraits] Failed to load hunger progress: {ex.Message}");
+                ServerApi.Logger.Error($"[SeraphLeveling] Failed to load hunger progress: {ex.Message}");
             }
         }
 
@@ -6708,11 +6800,11 @@ namespace SimpleImprovingTraits
                 }
 
                 ServerApi.WorldManager.SaveGame.StoreData(ARMOR_PROGRESS_SAVE_KEY, data);
-                ServerApi.Logger.Debug($"[SimpleImprovingTraits] Saved armor progress for {ArmorProgress.Count} players");
+                ServerApi.Logger.Debug($"[SeraphLeveling] Saved armor progress for {ArmorProgress.Count} players");
             }
             catch (Exception ex)
             {
-                ServerApi.Logger.Error($"[SimpleImprovingTraits] Failed to persist armor progress: {ex.Message}");
+                ServerApi.Logger.Error($"[SeraphLeveling] Failed to persist armor progress: {ex.Message}");
             }
         }
 
@@ -6730,7 +6822,7 @@ namespace SimpleImprovingTraits
                 byte[] data = ServerApi.WorldManager.SaveGame.GetData(ARMOR_PROGRESS_SAVE_KEY);
                 if (data == null || data.Length == 0)
                 {
-                    ServerApi.Logger.Debug("[SimpleImprovingTraits] No armor progress data found in world save");
+                    ServerApi.Logger.Debug("[SeraphLeveling] No armor progress data found in world save");
                     return;
                 }
 
@@ -6745,7 +6837,7 @@ namespace SimpleImprovingTraits
 
                         if (b1 != 0x53 || b2 != 0x49 || b3 != 0x41) // "SIA"
                         {
-                            ServerApi.Logger.Warning("[SimpleImprovingTraits] Invalid armor progress data format");
+                            ServerApi.Logger.Warning("[SeraphLeveling] Invalid armor progress data format");
                             return;
                         }
 
@@ -6789,18 +6881,110 @@ namespace SimpleImprovingTraits
                         }
                         else
                         {
-                            ServerApi.Logger.Warning($"[SimpleImprovingTraits] Unknown armor save format version {version}");
+                            ServerApi.Logger.Warning($"[SeraphLeveling] Unknown armor save format version {version}");
                             return;
                         }
                     }
                 }
 
-                ServerApi.Logger.Notification($"[SimpleImprovingTraits] Loaded armor progress for {ArmorProgress.Count} players");
+                ServerApi.Logger.Notification($"[SeraphLeveling] Loaded armor progress for {ArmorProgress.Count} players");
             }
             catch (Exception ex)
             {
                 ArmorProgress.Clear();
-                ServerApi.Logger.Error($"[SimpleImprovingTraits] Failed to load armor progress: {ex.Message}");
+                ServerApi.Logger.Error($"[SeraphLeveling] Failed to load armor progress: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// Load configuration from ModConfig/SeraphLeveling.json.
+        /// If the file doesn't exist, creates one with default values.
+        /// These values are used as defaults for new worlds.
+        /// </summary>
+        private void LoadConfigFile(ICoreServerAPI api)
+        {
+            try
+            {
+                SeraphLevelingConfig config = api.LoadModConfig<SeraphLevelingConfig>(CONFIG_FILE_NAME);
+                if (config == null)
+                {
+                    config = new SeraphLevelingConfig();
+                    api.StoreModConfig(config, CONFIG_FILE_NAME);
+                    api.Logger.Notification("[SeraphLeveling] Created default config file: ModConfig/" + CONFIG_FILE_NAME);
+                }
+
+                // Apply config values to static variables (these become defaults for new worlds)
+                BaseBlocksPerIncrement = config.MiningBaseBlocksPerIncrement;
+                IncrementStep = config.MiningIncrementStep;
+                MaxMiningSpeedPercent = config.MiningMaxPercent;
+                OreMultiplier = config.MiningOreMultiplier;
+
+                BaseDamagePerIncrement = config.MeleeBaseDamagePerIncrement;
+                MeleeIncrementStep = config.MeleeIncrementStep;
+                MaxMeleeDamagePercent = config.MeleeMaxPercent;
+
+                BaseRangedDamagePerIncrement = config.RangedBaseDamagePerIncrement;
+                RangedIncrementStep = config.RangedIncrementStep;
+                MaxRangedDamagePercent = config.RangedMaxDamagePercent;
+                MaxRangedAccuracyPercent = config.RangedMaxAccuracyPercent;
+                MaxRangedDistancePercent = config.RangedMaxDistancePercent;
+
+                BaseBlocksWalkedPerIncrement = config.WalkingBaseBlocksPerIncrement;
+                WalkingIncrementStep = config.WalkingIncrementStep;
+                MaxWalkingSpeedPercent = config.WalkingMaxPercent;
+
+                BaseSecondsPerIncrement = config.HungerBaseSecondsPerIncrement;
+                HungerIncrementStep = config.HungerIncrementStep;
+                MaxHungerReductionPercent = config.HungerMaxReductionPercent;
+
+                BaseSecondsInArmorPerIncrement = config.ArmorBaseSecondsPerIncrement;
+                ArmorTimeIncrementStep = config.ArmorTimeIncrementStep;
+                BaseDamageBlockedPerIncrement = config.ArmorBaseDamageBlockedPerIncrement;
+                ArmorDamageIncrementStep = config.ArmorDamageIncrementStep;
+                BaseRepairsPerIncrement = config.ArmorBaseRepairsPerIncrement;
+                ArmorRepairIncrementStep = config.ArmorRepairIncrementStep;
+                MaxArmorDurabilityPercent = config.ArmorMaxDurabilityPercent;
+                MaxArmorWalkSpeedPercent = config.ArmorMaxWalkSpeedPercent;
+
+                ClothierRequiredUniqueClothes = config.ClothierRequiredUniqueClothes;
+
+                BaseMenderRepairsPerIncrement = config.MenderBaseRepairsPerIncrement;
+                MenderIncrementStep = config.MenderIncrementStep;
+                MaxMenderPercent = config.MenderMaxPercent;
+
+                BasePilfererPointsPerIncrement = config.PilfererBasePointsPerIncrement;
+                PilfererIncrementStep = config.PilfererIncrementStep;
+                MaxPilfererPercent = config.PilfererMaxPercent;
+
+                BaseResourcefulAnimalsPerIncrement = config.ResourcefulBaseAnimalsPerIncrement;
+                ResourcefulIncrementStep = config.ResourcefulIncrementStep;
+                MaxResourcefulLootPercent = config.ResourcefulMaxLootPercent;
+                MaxResourcefulSpeedPercent = config.ResourcefulMaxSpeedPercent;
+
+                BaseForagerCropsPerIncrement = config.ForagerBaseCropsPerIncrement;
+                ForagerIncrementStep = config.ForagerIncrementStep;
+                MaxForagerLootPercent = config.ForagerMaxLootPercent;
+                MaxForagerWildCropPercent = config.ForagerMaxWildCropPercent;
+
+                BaseFurtiveSneakBlocksPerIncrement = config.FurtiveBaseSneakBlocksPerIncrement;
+                FurtiveIncrementStep = config.FurtiveIncrementStep;
+                MaxFurtivePercent = config.FurtiveMaxPercent;
+
+                BasePreciseDamagePerIncrement = config.PreciseBaseDamagePerIncrement;
+                PreciseIncrementStep = config.PreciseIncrementStep;
+                MaxPrecisePercent = config.PreciseMaxPercent;
+
+                TechnicalRequiredTranslocatorRepairs = config.TechnicalRequiredTranslocatorRepairs;
+
+                HardyHealthMiningThreshold = config.HardyHealthMiningThreshold;
+                HardyHealthArmorDurabilityThreshold = config.HardyHealthArmorDurabilityThreshold;
+                HardyHealthBonus = config.HardyHealthBonus;
+
+                api.Logger.Notification("[SeraphLeveling] Config loaded from ModConfig/" + CONFIG_FILE_NAME);
+            }
+            catch (Exception ex)
+            {
+                api.Logger.Error($"[SeraphLeveling] Failed to load config file: {ex.Message}. Using default values.");
             }
         }
 
@@ -6856,11 +7040,11 @@ namespace SimpleImprovingTraits
                 }
 
                 ServerApi.WorldManager.SaveGame.StoreData(CONFIG_SAVE_KEY, data);
-                ServerApi.Logger.Debug($"[SimpleImprovingTraits] Config saved (Mining: Base={BaseBlocksPerIncrement}, Max={MaxMiningSpeedPercent}% | Melee: Base={BaseDamagePerIncrement}, Max={MaxMeleeDamagePercent}% | Ranged: Base={BaseRangedDamagePerIncrement}, MaxDmg={MaxRangedDamagePercent}% | Walking: Base={BaseBlocksWalkedPerIncrement}, Max={MaxWalkingSpeedPercent}% | Hunger: Base={BaseSecondsPerIncrement}, Max={MaxHungerReductionPercent}% | Armor: MaxDur={MaxArmorDurabilityPercent}%, MaxWalk={MaxArmorWalkSpeedPercent}%)");
+                ServerApi.Logger.Debug($"[SeraphLeveling] Config saved (Mining: Base={BaseBlocksPerIncrement}, Max={MaxMiningSpeedPercent}% | Melee: Base={BaseDamagePerIncrement}, Max={MaxMeleeDamagePercent}% | Ranged: Base={BaseRangedDamagePerIncrement}, MaxDmg={MaxRangedDamagePercent}% | Walking: Base={BaseBlocksWalkedPerIncrement}, Max={MaxWalkingSpeedPercent}% | Hunger: Base={BaseSecondsPerIncrement}, Max={MaxHungerReductionPercent}% | Armor: MaxDur={MaxArmorDurabilityPercent}%, MaxWalk={MaxArmorWalkSpeedPercent}%)");
             }
             catch (Exception ex)
             {
-                ServerApi.Logger.Error($"[SimpleImprovingTraits] Failed to persist config: {ex.Message}");
+                ServerApi.Logger.Error($"[SeraphLeveling] Failed to persist config: {ex.Message}");
             }
         }
 
@@ -6877,7 +7061,7 @@ namespace SimpleImprovingTraits
                 byte[] data = ServerApi.WorldManager.SaveGame.GetData(CONFIG_SAVE_KEY);
                 if (data == null || data.Length == 0)
                 {
-                    ServerApi.Logger.Debug("[SimpleImprovingTraits] No config data found, using defaults");
+                    ServerApi.Logger.Debug("[SeraphLeveling] No config data found, using defaults");
                     return;
                 }
 
@@ -7032,11 +7216,11 @@ namespace SimpleImprovingTraits
                     }
                 }
 
-                ServerApi.Logger.Notification($"[SimpleImprovingTraits] Config loaded (Mining: Base={BaseBlocksPerIncrement}, Max={MaxMiningSpeedPercent}% | Melee: Base={BaseDamagePerIncrement}, Max={MaxMeleeDamagePercent}% | Ranged: Base={BaseRangedDamagePerIncrement}, MaxDmg={MaxRangedDamagePercent}% | Walking: Base={BaseBlocksWalkedPerIncrement}, Max={MaxWalkingSpeedPercent}% | Hunger: Base={BaseSecondsPerIncrement}, Max={MaxHungerReductionPercent}% | Armor: MaxDur={MaxArmorDurabilityPercent}%, MaxWalk={MaxArmorWalkSpeedPercent}%)");
+                ServerApi.Logger.Notification($"[SeraphLeveling] Config loaded (Mining: Base={BaseBlocksPerIncrement}, Max={MaxMiningSpeedPercent}% | Melee: Base={BaseDamagePerIncrement}, Max={MaxMeleeDamagePercent}% | Ranged: Base={BaseRangedDamagePerIncrement}, MaxDmg={MaxRangedDamagePercent}% | Walking: Base={BaseBlocksWalkedPerIncrement}, Max={MaxWalkingSpeedPercent}% | Hunger: Base={BaseSecondsPerIncrement}, Max={MaxHungerReductionPercent}% | Armor: MaxDur={MaxArmorDurabilityPercent}%, MaxWalk={MaxArmorWalkSpeedPercent}%)");
             }
             catch (Exception ex)
             {
-                ServerApi.Logger.Error($"[SimpleImprovingTraits] Failed to load config: {ex.Message}");
+                ServerApi.Logger.Error($"[SeraphLeveling] Failed to load config: {ex.Message}");
             }
         }
 
@@ -7166,7 +7350,7 @@ namespace SimpleImprovingTraits
                                 {
                                     // New unique clothing worn
                                     pendingClothierProgressSave = true;
-                                    ServerApi.Logger.Debug($"[SimpleImprovingTraits] Player {player.PlayerName} wore new clothing: {itemCode} ({clothierProgress.UniqueClothesWorn.Count}/{ClothierRequiredUniqueClothes})");
+                                    ServerApi.Logger.Debug($"[SeraphLeveling] Player {player.PlayerName} wore new clothing: {itemCode} ({clothierProgress.UniqueClothesWorn.Count}/{ClothierRequiredUniqueClothes})");
 
                                     // Check if unlocked
                                     if (clothierProgress.UniqueClothesWorn.Count >= ClothierRequiredUniqueClothes && !clothierProgress.SewingKitUnlocked)
@@ -7174,7 +7358,7 @@ namespace SimpleImprovingTraits
                                         clothierProgress.SewingKitUnlocked = true;
                                         ApplyClothierBonusStatic(player, clothierProgress);
                                         player.SendMessage(GlobalConstants.GeneralChatGroup,
-                                            Lang.Get("simpleimprovingtraits:message-clothier-unlocked"),
+                                            Lang.Get("seraphleveling:message-clothier-unlocked"),
                                             EnumChatType.Notification);
                                     }
                                 }
@@ -7271,7 +7455,7 @@ namespace SimpleImprovingTraits
                             {
                                 // Sewing kit was consumed - repair happened!
                                 int kitsUsed = previousCount - currentCount;
-                                ServerApi.Logger.Debug($"[SimpleImprovingTraits] Player {player.PlayerName} used {kitsUsed} sewing kit(s) for repair");
+                                ServerApi.Logger.Debug($"[SeraphLeveling] Player {player.PlayerName} used {kitsUsed} sewing kit(s) for repair");
 
                                 for (int i = 0; i < kitsUsed; i++)
                                 {
@@ -7337,7 +7521,7 @@ namespace SimpleImprovingTraits
                             // Use a higher threshold since method 1 should catch most sewing kit repairs
                             if (repairPercent >= 10)
                             {
-                                ServerApi.Logger.Debug($"[SimpleImprovingTraits] Player {player.PlayerName} repaired {itemCode} (+{repairPercent}% durability) via durability tracking");
+                                ServerApi.Logger.Debug($"[SeraphLeveling] Player {player.PlayerName} repaired {itemCode} (+{repairPercent}% durability) via durability tracking");
                                 ProcessMenderRepair(player);
                             }
                         }
@@ -7427,7 +7611,7 @@ namespace SimpleImprovingTraits
                     playerProgress.BlocksInIncrement -= playerProgress.CurrentIncrementSize;
                     playerProgress.CurrentIncrementSize += FurtiveIncrementStep;
 
-                    ServerApi.Logger.Debug($"[SimpleImprovingTraits] Player {player.PlayerName} earned furtive credit {playerProgress.TotalCredits}, next requires {playerProgress.CurrentIncrementSize} blocks");
+                    ServerApi.Logger.Debug($"[SeraphLeveling] Player {player.PlayerName} earned furtive credit {playerProgress.TotalCredits}, next requires {playerProgress.CurrentIncrementSize} blocks");
                 }
 
                 // Mark for saving if any progress was made
@@ -7439,11 +7623,11 @@ namespace SimpleImprovingTraits
                 // If credits increased, update the stat and notify player
                 if (playerProgress.TotalCredits > oldCredits)
                 {
-                    int actualBonusPercent = ApplyFurtiveBonusStatic(player, playerProgress.TotalCredits);
+                    ApplyFurtiveBonusStatic(player, playerProgress.TotalCredits);
 
-                    // Notify player of level up with actual applied bonus
+                    // Notify player of level up with raw improvement (shows progress even when capped)
                     player.SendMessage(GlobalConstants.GeneralChatGroup,
-                        Lang.Get("simpleimprovingtraits:message-furtive-level-up", playerProgress.TotalCredits, actualBonusPercent),
+                        Lang.Get("seraphleveling:message-furtive-level-up", playerProgress.TotalCredits, playerProgress.TotalCredits),
                         EnumChatType.Notification);
                 }
             }
@@ -7570,7 +7754,7 @@ namespace SimpleImprovingTraits
                 weaponProgress.DamageInIncrement -= weaponProgress.CurrentIncrementSize;
                 weaponProgress.CurrentIncrementSize += PreciseIncrementStep;
 
-                ServerApi.Logger.Debug($"[SimpleImprovingTraits] Player {attackerPlayer.PlayerName} earned precise credit {playerProgress.TotalCredits} with {weaponType}, next requires {weaponProgress.CurrentIncrementSize} damage");
+                ServerApi.Logger.Debug($"[SeraphLeveling] Player {attackerPlayer.PlayerName} earned precise credit {playerProgress.TotalCredits} with {weaponType}, next requires {weaponProgress.CurrentIncrementSize} damage");
             }
 
             // Mark for saving if any progress was made
@@ -7582,11 +7766,11 @@ namespace SimpleImprovingTraits
             // If credits increased, update the stat and notify player
             if (playerProgress.TotalCredits > oldCredits)
             {
-                int actualBonusPercent = ApplyPreciseBonusStatic(attackerPlayer, playerProgress.TotalCredits);
+                ApplyPreciseBonusStatic(attackerPlayer, playerProgress.TotalCredits);
 
-                // Notify player of level up
+                // Notify player of level up with raw improvement (shows progress even when capped)
                 attackerPlayer.SendMessage(GlobalConstants.GeneralChatGroup,
-                    Lang.Get("simpleimprovingtraits:message-precise-level-up", playerProgress.TotalCredits, actualBonusPercent),
+                    Lang.Get("seraphleveling:message-precise-level-up", playerProgress.TotalCredits, playerProgress.TotalCredits),
                     EnumChatType.Notification);
 
                 // Check if Tinkerer should be unlocked
@@ -7701,7 +7885,7 @@ namespace SimpleImprovingTraits
 
             // Notify player
             player.SendMessage(GlobalConstants.GeneralChatGroup,
-                Lang.Get("simpleimprovingtraits:message-hardy-health-unlock", HardyHealthBonus),
+                Lang.Get("seraphleveling:message-hardy-health-unlock", HardyHealthBonus),
                 EnumChatType.Notification);
         }
 
@@ -7754,7 +7938,7 @@ namespace SimpleImprovingTraits
 
             // Notify player
             player.SendMessage(GlobalConstants.GeneralChatGroup,
-                Lang.Get("simpleimprovingtraits:message-tinkerer-unlock"),
+                Lang.Get("seraphleveling:message-tinkerer-unlock"),
                 EnumChatType.Notification);
         }
 
@@ -7821,7 +8005,7 @@ namespace SimpleImprovingTraits
 
             // Notify player
             player.SendMessage(GlobalConstants.GeneralChatGroup,
-                Lang.Get("simpleimprovingtraits:message-merciless-unlock"),
+                Lang.Get("seraphleveling:message-merciless-unlock"),
                 EnumChatType.Notification);
         }
 
@@ -7869,7 +8053,7 @@ namespace SimpleImprovingTraits
 
             // Notify player
             player.SendMessage(GlobalConstants.GeneralChatGroup,
-                Lang.Get("simpleimprovingtraits:message-bowyer-unlock"),
+                Lang.Get("seraphleveling:message-bowyer-unlock"),
                 EnumChatType.Notification);
         }
 
@@ -7908,7 +8092,7 @@ namespace SimpleImprovingTraits
 
             // Notify player
             player.SendMessage(GlobalConstants.GeneralChatGroup,
-                Lang.Get("simpleimprovingtraits:message-improviser-unlock"),
+                Lang.Get("seraphleveling:message-improviser-unlock"),
                 EnumChatType.Notification);
         }
 
@@ -7951,7 +8135,7 @@ namespace SimpleImprovingTraits
 
             // Notify player
             player.SendMessage(GlobalConstants.GeneralChatGroup,
-                Lang.Get("simpleimprovingtraits:message-claustrophobic-removed"),
+                Lang.Get("seraphleveling:message-claustrophobic-removed"),
                 EnumChatType.Notification);
         }
 
@@ -8184,16 +8368,17 @@ namespace SimpleImprovingTraits
                 progress.RepairsInIncrement -= progress.CurrentIncrementSize;
                 progress.CurrentIncrementSize += MenderIncrementStep;
 
-                ServerApi.Logger.Debug($"[SimpleImprovingTraits] Player {player.PlayerName} earned mender credit {progress.TotalCredits}");
+                ServerApi.Logger.Debug($"[SeraphLeveling] Player {player.PlayerName} earned mender credit {progress.TotalCredits}");
             }
 
             pendingMenderProgressSave = true;
 
             if (progress.TotalCredits > oldCredits)
             {
-                int bonusPercent = ApplyMenderBonusStatic(player, progress.TotalCredits);
+                ApplyMenderBonusStatic(player, progress.TotalCredits);
+                // Notify player of level up with raw improvement (shows progress even when capped)
                 player.SendMessage(GlobalConstants.GeneralChatGroup,
-                    Lang.Get("simpleimprovingtraits:message-mender-level-up", progress.TotalCredits, bonusPercent),
+                    Lang.Get("seraphleveling:message-mender-level-up", progress.TotalCredits, progress.TotalCredits),
                     EnumChatType.Notification);
             }
         }
@@ -8436,16 +8621,17 @@ namespace SimpleImprovingTraits
                 progress.PointsInIncrement -= progress.CurrentIncrementSize;
                 progress.CurrentIncrementSize += PilfererIncrementStep;
 
-                ServerApi.Logger.Debug($"[SimpleImprovingTraits] Player {player.PlayerName} earned pilferer credit {progress.TotalCredits} from vessel");
+                ServerApi.Logger.Debug($"[SeraphLeveling] Player {player.PlayerName} earned pilferer credit {progress.TotalCredits} from vessel");
             }
 
             pendingPilfererProgressSave = true;
 
             if (progress.TotalCredits > oldCredits)
             {
-                int bonusPercent = ApplyPilfererBonusStatic(player, progress.TotalCredits);
+                ApplyPilfererBonusStatic(player, progress.TotalCredits);
+                // Notify player of level up with raw improvement (shows progress even when cancelling Heavyhanded)
                 player.SendMessage(GlobalConstants.GeneralChatGroup,
-                    Lang.Get("simpleimprovingtraits:message-pilferer-level-up", progress.TotalCredits, bonusPercent),
+                    Lang.Get("seraphleveling:message-pilferer-level-up", progress.TotalCredits, progress.TotalCredits),
                     EnumChatType.Notification);
             }
         }
@@ -8478,16 +8664,17 @@ namespace SimpleImprovingTraits
                 progress.PointsInIncrement -= progress.CurrentIncrementSize;
                 progress.CurrentIncrementSize += PilfererIncrementStep;
 
-                ServerApi.Logger.Debug($"[SimpleImprovingTraits] Player {player.PlayerName} earned pilferer credit {progress.TotalCredits} from chest");
+                ServerApi.Logger.Debug($"[SeraphLeveling] Player {player.PlayerName} earned pilferer credit {progress.TotalCredits} from chest");
             }
 
             pendingPilfererProgressSave = true;
 
             if (progress.TotalCredits > oldCredits)
             {
-                int bonusPercent = ApplyPilfererBonusStatic(player, progress.TotalCredits);
+                ApplyPilfererBonusStatic(player, progress.TotalCredits);
+                // Notify player of level up with raw improvement (shows progress even when cancelling Heavyhanded)
                 player.SendMessage(GlobalConstants.GeneralChatGroup,
-                    Lang.Get("simpleimprovingtraits:message-pilferer-level-up", progress.TotalCredits, bonusPercent),
+                    Lang.Get("seraphleveling:message-pilferer-level-up", progress.TotalCredits, progress.TotalCredits),
                     EnumChatType.Notification);
             }
         }
@@ -8754,7 +8941,7 @@ namespace SimpleImprovingTraits
                 progress.AnimalsInIncrement -= progress.CurrentIncrementSize;
                 progress.CurrentIncrementSize += ResourcefulIncrementStep;
 
-                ServerApi.Logger.Debug($"[SimpleImprovingTraits] Player {player.PlayerName} earned resourceful credit {progress.TotalCredits}");
+                ServerApi.Logger.Debug($"[SeraphLeveling] Player {player.PlayerName} earned resourceful credit {progress.TotalCredits}");
             }
 
             pendingResourcefulProgressSave = true;
@@ -8762,9 +8949,9 @@ namespace SimpleImprovingTraits
             if (progress.TotalCredits > oldCredits)
             {
                 ApplyResourcefulBonusStatic(player, progress.TotalCredits);
-                int lootBonus = CalculateResourcefulLootBonusPercent(progress.TotalCredits, player.Entity);
+                // Notify player of level up with raw improvement (shows progress even when cancelling Kind)
                 player.SendMessage(GlobalConstants.GeneralChatGroup,
-                    Lang.Get("simpleimprovingtraits:message-resourceful-level-up", progress.TotalCredits, lootBonus),
+                    Lang.Get("seraphleveling:message-resourceful-level-up", progress.TotalCredits, progress.TotalCredits),
                     EnumChatType.Notification);
             }
         }
@@ -9074,7 +9261,7 @@ namespace SimpleImprovingTraits
                 progress.CropsInIncrement -= progress.CurrentIncrementSize;
                 progress.CurrentIncrementSize += ForagerIncrementStep;
 
-                ServerApi.Logger.Debug($"[SimpleImprovingTraits] Player {player.PlayerName} earned forager credit {progress.TotalCredits}");
+                ServerApi.Logger.Debug($"[SeraphLeveling] Player {player.PlayerName} earned forager credit {progress.TotalCredits}");
             }
 
             pendingForagerProgressSave = true;
@@ -9082,11 +9269,9 @@ namespace SimpleImprovingTraits
             if (progress.TotalCredits > oldCredits)
             {
                 ApplyForagerBonusStatic(player, progress.TotalCredits);
-                // Use the net bonus from WatchedAttributes which accounts for Civil/Heavyhanded penalties
-                int netLootBonus = player.Entity.WatchedAttributes.GetInt(WATCHED_FORAGER_LOOT_BONUS, 0);
-                int netWildCropBonus = player.Entity.WatchedAttributes.GetInt(WATCHED_FORAGER_WILD_CROP_BONUS, 0);
+                // Notify player of level up with raw improvement (shows progress even when cancelling Civil/Heavyhanded)
                 player.SendMessage(GlobalConstants.GeneralChatGroup,
-                    Lang.Get("simpleimprovingtraits:message-forager-level-up", progress.TotalCredits, netLootBonus, netWildCropBonus),
+                    Lang.Get("seraphleveling:message-forager-level-up", progress.TotalCredits, progress.TotalCredits, progress.TotalCredits),
                     EnumChatType.Notification);
             }
         }
@@ -9401,7 +9586,7 @@ namespace SimpleImprovingTraits
             progress.TranslocatorsRepaired++;
             pendingTechnicalProgressSave = true;
 
-            ServerApi.Logger.Debug($"[SimpleImprovingTraits] Player {player.PlayerName} repaired translocator ({progress.TranslocatorsRepaired} / {TechnicalRequiredTranslocatorRepairs})");
+            ServerApi.Logger.Debug($"[SeraphLeveling] Player {player.PlayerName} repaired translocator ({progress.TranslocatorsRepaired} / {TechnicalRequiredTranslocatorRepairs})");
 
             // Check if we've reached the unlock threshold
             if (progress.TranslocatorsRepaired >= TechnicalRequiredTranslocatorRepairs)
@@ -9411,7 +9596,7 @@ namespace SimpleImprovingTraits
 
                 // Notify player
                 player.SendMessage(GlobalConstants.GeneralChatGroup,
-                    Lang.Get("simpleimprovingtraits:message-technical-unlock"),
+                    Lang.Get("seraphleveling:message-technical-unlock"),
                     EnumChatType.Notification);
 
                 // Check if Tinkerer should now be unlocked
@@ -10018,7 +10203,7 @@ namespace SimpleImprovingTraits
                 }
                 catch (Exception ex)
                 {
-                    ServerApi.Logger.Error($"[SimpleImprovingTraits] Failed to persist clothier progress: {ex.Message}");
+                    ServerApi.Logger.Error($"[SeraphLeveling] Failed to persist clothier progress: {ex.Message}");
                 }
             }
         }
@@ -10033,7 +10218,7 @@ namespace SimpleImprovingTraits
                 byte[] data = ServerApi.WorldManager.SaveGame.GetData(CLOTHIER_PROGRESS_SAVE_KEY);
                 if (data == null || data.Length == 0)
                 {
-                    ServerApi.Logger.Debug("[SimpleImprovingTraits] No clothier progress data found");
+                    ServerApi.Logger.Debug("[SeraphLeveling] No clothier progress data found");
                     return;
                 }
 
@@ -10048,7 +10233,7 @@ namespace SimpleImprovingTraits
 
                         if (magic1 != 0x43 || magic2 != 0x4C || magic3 != 0x54)
                         {
-                            ServerApi.Logger.Warning("[SimpleImprovingTraits] Invalid clothier progress magic bytes");
+                            ServerApi.Logger.Warning("[SeraphLeveling] Invalid clothier progress magic bytes");
                             return;
                         }
 
@@ -10068,12 +10253,12 @@ namespace SimpleImprovingTraits
                     }
                 }
 
-                ServerApi.Logger.Notification($"[SimpleImprovingTraits] Loaded clothier progress for {ClothierProgress.Count} players");
+                ServerApi.Logger.Notification($"[SeraphLeveling] Loaded clothier progress for {ClothierProgress.Count} players");
             }
             catch (Exception ex)
             {
                 ClothierProgress.Clear();
-                ServerApi.Logger.Error($"[SimpleImprovingTraits] Failed to load clothier progress: {ex.Message}");
+                ServerApi.Logger.Error($"[SeraphLeveling] Failed to load clothier progress: {ex.Message}");
             }
         }
 
@@ -10122,7 +10307,7 @@ namespace SimpleImprovingTraits
                 }
                 catch (Exception ex)
                 {
-                    ServerApi.Logger.Error($"[SimpleImprovingTraits] Failed to persist mender progress: {ex.Message}");
+                    ServerApi.Logger.Error($"[SeraphLeveling] Failed to persist mender progress: {ex.Message}");
                 }
             }
         }
@@ -10137,7 +10322,7 @@ namespace SimpleImprovingTraits
                 byte[] data = ServerApi.WorldManager.SaveGame.GetData(MENDER_PROGRESS_SAVE_KEY);
                 if (data == null || data.Length == 0)
                 {
-                    ServerApi.Logger.Debug("[SimpleImprovingTraits] No mender progress data found");
+                    ServerApi.Logger.Debug("[SeraphLeveling] No mender progress data found");
                     return;
                 }
 
@@ -10152,7 +10337,7 @@ namespace SimpleImprovingTraits
 
                         if (magic1 != 0x4D || magic2 != 0x4E || magic3 != 0x44)
                         {
-                            ServerApi.Logger.Warning("[SimpleImprovingTraits] Invalid mender progress magic bytes");
+                            ServerApi.Logger.Warning("[SeraphLeveling] Invalid mender progress magic bytes");
                             return;
                         }
 
@@ -10171,12 +10356,12 @@ namespace SimpleImprovingTraits
                     }
                 }
 
-                ServerApi.Logger.Notification($"[SimpleImprovingTraits] Loaded mender progress for {MenderProgress.Count} players");
+                ServerApi.Logger.Notification($"[SeraphLeveling] Loaded mender progress for {MenderProgress.Count} players");
             }
             catch (Exception ex)
             {
                 MenderProgress.Clear();
-                ServerApi.Logger.Error($"[SimpleImprovingTraits] Failed to load mender progress: {ex.Message}");
+                ServerApi.Logger.Error($"[SeraphLeveling] Failed to load mender progress: {ex.Message}");
             }
         }
 
@@ -10230,7 +10415,7 @@ namespace SimpleImprovingTraits
                 }
                 catch (Exception ex)
                 {
-                    ServerApi.Logger.Error($"[SimpleImprovingTraits] Failed to persist pilferer progress: {ex.Message}");
+                    ServerApi.Logger.Error($"[SeraphLeveling] Failed to persist pilferer progress: {ex.Message}");
                 }
             }
         }
@@ -10245,7 +10430,7 @@ namespace SimpleImprovingTraits
                 byte[] data = ServerApi.WorldManager.SaveGame.GetData(PILFERER_PROGRESS_SAVE_KEY);
                 if (data == null || data.Length == 0)
                 {
-                    ServerApi.Logger.Debug("[SimpleImprovingTraits] No pilferer progress data found");
+                    ServerApi.Logger.Debug("[SeraphLeveling] No pilferer progress data found");
                     return;
                 }
 
@@ -10260,7 +10445,7 @@ namespace SimpleImprovingTraits
 
                         if (magic1 != 0x50 || magic2 != 0x4C || magic3 != 0x46)
                         {
-                            ServerApi.Logger.Warning("[SimpleImprovingTraits] Invalid pilferer progress magic bytes");
+                            ServerApi.Logger.Warning("[SeraphLeveling] Invalid pilferer progress magic bytes");
                             return;
                         }
 
@@ -10284,12 +10469,12 @@ namespace SimpleImprovingTraits
                     }
                 }
 
-                ServerApi.Logger.Notification($"[SimpleImprovingTraits] Loaded pilferer progress for {PilfererProgress.Count} players");
+                ServerApi.Logger.Notification($"[SeraphLeveling] Loaded pilferer progress for {PilfererProgress.Count} players");
             }
             catch (Exception ex)
             {
                 PilfererProgress.Clear();
-                ServerApi.Logger.Error($"[SimpleImprovingTraits] Failed to load pilferer progress: {ex.Message}");
+                ServerApi.Logger.Error($"[SeraphLeveling] Failed to load pilferer progress: {ex.Message}");
             }
         }
 
@@ -10338,7 +10523,7 @@ namespace SimpleImprovingTraits
                 }
                 catch (Exception ex)
                 {
-                    ServerApi.Logger.Error($"[SimpleImprovingTraits] Failed to persist resourceful progress: {ex.Message}");
+                    ServerApi.Logger.Error($"[SeraphLeveling] Failed to persist resourceful progress: {ex.Message}");
                 }
             }
         }
@@ -10353,7 +10538,7 @@ namespace SimpleImprovingTraits
                 byte[] data = ServerApi.WorldManager.SaveGame.GetData(RESOURCEFUL_PROGRESS_SAVE_KEY);
                 if (data == null || data.Length == 0)
                 {
-                    ServerApi.Logger.Debug("[SimpleImprovingTraits] No resourceful progress data found");
+                    ServerApi.Logger.Debug("[SeraphLeveling] No resourceful progress data found");
                     return;
                 }
 
@@ -10368,7 +10553,7 @@ namespace SimpleImprovingTraits
 
                         if (magic1 != 0x52 || magic2 != 0x53 || magic3 != 0x46)
                         {
-                            ServerApi.Logger.Warning("[SimpleImprovingTraits] Invalid resourceful progress magic bytes");
+                            ServerApi.Logger.Warning("[SeraphLeveling] Invalid resourceful progress magic bytes");
                             return;
                         }
 
@@ -10387,12 +10572,12 @@ namespace SimpleImprovingTraits
                     }
                 }
 
-                ServerApi.Logger.Notification($"[SimpleImprovingTraits] Loaded resourceful progress for {ResourcefulProgress.Count} players");
+                ServerApi.Logger.Notification($"[SeraphLeveling] Loaded resourceful progress for {ResourcefulProgress.Count} players");
             }
             catch (Exception ex)
             {
                 ResourcefulProgress.Clear();
-                ServerApi.Logger.Error($"[SimpleImprovingTraits] Failed to load resourceful progress: {ex.Message}");
+                ServerApi.Logger.Error($"[SeraphLeveling] Failed to load resourceful progress: {ex.Message}");
             }
         }
 
@@ -10441,7 +10626,7 @@ namespace SimpleImprovingTraits
                 }
                 catch (Exception ex)
                 {
-                    ServerApi.Logger.Error($"[SimpleImprovingTraits] Failed to persist forager progress: {ex.Message}");
+                    ServerApi.Logger.Error($"[SeraphLeveling] Failed to persist forager progress: {ex.Message}");
                 }
             }
         }
@@ -10456,7 +10641,7 @@ namespace SimpleImprovingTraits
                 byte[] data = ServerApi.WorldManager.SaveGame.GetData(FORAGER_PROGRESS_SAVE_KEY);
                 if (data == null || data.Length == 0)
                 {
-                    ServerApi.Logger.Debug("[SimpleImprovingTraits] No forager progress data found");
+                    ServerApi.Logger.Debug("[SeraphLeveling] No forager progress data found");
                     return;
                 }
 
@@ -10471,7 +10656,7 @@ namespace SimpleImprovingTraits
 
                         if (magic1 != 0x46 || magic2 != 0x52 || magic3 != 0x47)
                         {
-                            ServerApi.Logger.Warning("[SimpleImprovingTraits] Invalid forager progress magic bytes");
+                            ServerApi.Logger.Warning("[SeraphLeveling] Invalid forager progress magic bytes");
                             return;
                         }
 
@@ -10490,12 +10675,12 @@ namespace SimpleImprovingTraits
                     }
                 }
 
-                ServerApi.Logger.Notification($"[SimpleImprovingTraits] Loaded forager progress for {ForagerProgress.Count} players");
+                ServerApi.Logger.Notification($"[SeraphLeveling] Loaded forager progress for {ForagerProgress.Count} players");
             }
             catch (Exception ex)
             {
                 ForagerProgress.Clear();
-                ServerApi.Logger.Error($"[SimpleImprovingTraits] Failed to load forager progress: {ex.Message}");
+                ServerApi.Logger.Error($"[SeraphLeveling] Failed to load forager progress: {ex.Message}");
             }
         }
 
@@ -10548,7 +10733,7 @@ namespace SimpleImprovingTraits
                 }
                 catch (Exception ex)
                 {
-                    ServerApi.Logger.Error($"[SimpleImprovingTraits] Failed to persist furtive progress: {ex.Message}");
+                    ServerApi.Logger.Error($"[SeraphLeveling] Failed to persist furtive progress: {ex.Message}");
                 }
             }
         }
@@ -10563,7 +10748,7 @@ namespace SimpleImprovingTraits
                 byte[] data = ServerApi.WorldManager.SaveGame.GetData(FURTIVE_PROGRESS_SAVE_KEY);
                 if (data == null || data.Length == 0)
                 {
-                    ServerApi.Logger.Debug("[SimpleImprovingTraits] No furtive progress data found");
+                    ServerApi.Logger.Debug("[SeraphLeveling] No furtive progress data found");
                     return;
                 }
 
@@ -10578,7 +10763,7 @@ namespace SimpleImprovingTraits
 
                         if (magic1 != 0x46 || magic2 != 0x55 || magic3 != 0x52)
                         {
-                            ServerApi.Logger.Warning("[SimpleImprovingTraits] Invalid furtive progress magic bytes");
+                            ServerApi.Logger.Warning("[SeraphLeveling] Invalid furtive progress magic bytes");
                             return;
                         }
 
@@ -10597,12 +10782,12 @@ namespace SimpleImprovingTraits
                     }
                 }
 
-                ServerApi.Logger.Notification($"[SimpleImprovingTraits] Loaded furtive progress for {FurtiveProgress.Count} players");
+                ServerApi.Logger.Notification($"[SeraphLeveling] Loaded furtive progress for {FurtiveProgress.Count} players");
             }
             catch (Exception ex)
             {
                 FurtiveProgress.Clear();
-                ServerApi.Logger.Error($"[SimpleImprovingTraits] Failed to load furtive progress: {ex.Message}");
+                ServerApi.Logger.Error($"[SeraphLeveling] Failed to load furtive progress: {ex.Message}");
             }
         }
 
@@ -10662,7 +10847,7 @@ namespace SimpleImprovingTraits
                 }
                 catch (Exception ex)
                 {
-                    ServerApi.Logger.Error($"[SimpleImprovingTraits] Failed to persist precise progress: {ex.Message}");
+                    ServerApi.Logger.Error($"[SeraphLeveling] Failed to persist precise progress: {ex.Message}");
                 }
             }
         }
@@ -10677,7 +10862,7 @@ namespace SimpleImprovingTraits
                 byte[] data = ServerApi.WorldManager.SaveGame.GetData(PRECISE_PROGRESS_SAVE_KEY);
                 if (data == null || data.Length == 0)
                 {
-                    ServerApi.Logger.Debug("[SimpleImprovingTraits] No precise progress data found");
+                    ServerApi.Logger.Debug("[SeraphLeveling] No precise progress data found");
                     return;
                 }
 
@@ -10692,7 +10877,7 @@ namespace SimpleImprovingTraits
 
                         if (magic1 != 0x50 || magic2 != 0x52 || magic3 != 0x43)
                         {
-                            ServerApi.Logger.Warning("[SimpleImprovingTraits] Invalid precise progress magic bytes");
+                            ServerApi.Logger.Warning("[SeraphLeveling] Invalid precise progress magic bytes");
                             return;
                         }
 
@@ -10722,12 +10907,12 @@ namespace SimpleImprovingTraits
                     }
                 }
 
-                ServerApi.Logger.Notification($"[SimpleImprovingTraits] Loaded precise progress for {PreciseProgress.Count} players");
+                ServerApi.Logger.Notification($"[SeraphLeveling] Loaded precise progress for {PreciseProgress.Count} players");
             }
             catch (Exception ex)
             {
                 PreciseProgress.Clear();
-                ServerApi.Logger.Error($"[SimpleImprovingTraits] Failed to load precise progress: {ex.Message}");
+                ServerApi.Logger.Error($"[SeraphLeveling] Failed to load precise progress: {ex.Message}");
             }
         }
 
@@ -10779,7 +10964,7 @@ namespace SimpleImprovingTraits
                 }
                 catch (Exception ex)
                 {
-                    ServerApi.Logger.Error($"[SimpleImprovingTraits] Failed to persist technical progress: {ex.Message}");
+                    ServerApi.Logger.Error($"[SeraphLeveling] Failed to persist technical progress: {ex.Message}");
                 }
             }
         }
@@ -10794,7 +10979,7 @@ namespace SimpleImprovingTraits
                 byte[] data = ServerApi.WorldManager.SaveGame.GetData(TECHNICAL_PROGRESS_SAVE_KEY);
                 if (data == null || data.Length == 0)
                 {
-                    ServerApi.Logger.Debug("[SimpleImprovingTraits] No technical progress data found");
+                    ServerApi.Logger.Debug("[SeraphLeveling] No technical progress data found");
                     return;
                 }
 
@@ -10809,7 +10994,7 @@ namespace SimpleImprovingTraits
 
                         if (magic1 != 0x54 || magic2 != 0x45 || magic3 != 0x43)
                         {
-                            ServerApi.Logger.Warning("[SimpleImprovingTraits] Invalid technical progress magic bytes");
+                            ServerApi.Logger.Warning("[SeraphLeveling] Invalid technical progress magic bytes");
                             return;
                         }
 
@@ -10827,12 +11012,12 @@ namespace SimpleImprovingTraits
                     }
                 }
 
-                ServerApi.Logger.Notification($"[SimpleImprovingTraits] Loaded technical progress for {TechnicalProgress.Count} players");
+                ServerApi.Logger.Notification($"[SeraphLeveling] Loaded technical progress for {TechnicalProgress.Count} players");
             }
             catch (Exception ex)
             {
                 TechnicalProgress.Clear();
-                ServerApi.Logger.Error($"[SimpleImprovingTraits] Failed to load technical progress: {ex.Message}");
+                ServerApi.Logger.Error($"[SeraphLeveling] Failed to load technical progress: {ex.Message}");
             }
         }
 
@@ -10883,7 +11068,7 @@ namespace SimpleImprovingTraits
                 }
                 catch (Exception ex)
                 {
-                    ServerApi.Logger.Error($"[SimpleImprovingTraits] Failed to persist hardy health progress: {ex.Message}");
+                    ServerApi.Logger.Error($"[SeraphLeveling] Failed to persist hardy health progress: {ex.Message}");
                 }
             }
         }
@@ -10898,7 +11083,7 @@ namespace SimpleImprovingTraits
                 byte[] data = ServerApi.WorldManager.SaveGame.GetData(HARDY_HEALTH_PROGRESS_SAVE_KEY);
                 if (data == null || data.Length == 0)
                 {
-                    ServerApi.Logger.Debug("[SimpleImprovingTraits] No hardy health progress data found");
+                    ServerApi.Logger.Debug("[SeraphLeveling] No hardy health progress data found");
                     return;
                 }
 
@@ -10913,7 +11098,7 @@ namespace SimpleImprovingTraits
 
                         if (magic1 != 0x48 || magic2 != 0x44 || magic3 != 0x48)
                         {
-                            ServerApi.Logger.Warning("[SimpleImprovingTraits] Invalid hardy health progress magic bytes");
+                            ServerApi.Logger.Warning("[SeraphLeveling] Invalid hardy health progress magic bytes");
                             return;
                         }
 
@@ -10930,12 +11115,12 @@ namespace SimpleImprovingTraits
                     }
                 }
 
-                ServerApi.Logger.Notification($"[SimpleImprovingTraits] Loaded hardy health progress for {HardyHealthProgress.Count} players");
+                ServerApi.Logger.Notification($"[SeraphLeveling] Loaded hardy health progress for {HardyHealthProgress.Count} players");
             }
             catch (Exception ex)
             {
                 HardyHealthProgress.Clear();
-                ServerApi.Logger.Error($"[SimpleImprovingTraits] Failed to load hardy health progress: {ex.Message}");
+                ServerApi.Logger.Error($"[SeraphLeveling] Failed to load hardy health progress: {ex.Message}");
             }
         }
 
@@ -10987,7 +11172,7 @@ namespace SimpleImprovingTraits
                 }
                 catch (Exception ex)
                 {
-                    ServerApi.Logger.Error($"[SimpleImprovingTraits] Failed to persist bowyer progress: {ex.Message}");
+                    ServerApi.Logger.Error($"[SeraphLeveling] Failed to persist bowyer progress: {ex.Message}");
                 }
             }
         }
@@ -11002,7 +11187,7 @@ namespace SimpleImprovingTraits
                 byte[] data = ServerApi.WorldManager.SaveGame.GetData(BOWYER_PROGRESS_SAVE_KEY);
                 if (data == null || data.Length == 0)
                 {
-                    ServerApi.Logger.Debug("[SimpleImprovingTraits] No bowyer progress data found");
+                    ServerApi.Logger.Debug("[SeraphLeveling] No bowyer progress data found");
                     return;
                 }
 
@@ -11017,7 +11202,7 @@ namespace SimpleImprovingTraits
 
                         if (magic1 != 0x42 || magic2 != 0x57 || magic3 != 0x59)
                         {
-                            ServerApi.Logger.Warning("[SimpleImprovingTraits] Invalid bowyer progress magic bytes");
+                            ServerApi.Logger.Warning("[SeraphLeveling] Invalid bowyer progress magic bytes");
                             return;
                         }
 
@@ -11035,12 +11220,12 @@ namespace SimpleImprovingTraits
                     }
                 }
 
-                ServerApi.Logger.Notification($"[SimpleImprovingTraits] Loaded bowyer progress for {BowyerProgress.Count} players");
+                ServerApi.Logger.Notification($"[SeraphLeveling] Loaded bowyer progress for {BowyerProgress.Count} players");
             }
             catch (Exception ex)
             {
                 BowyerProgress.Clear();
-                ServerApi.Logger.Error($"[SimpleImprovingTraits] Failed to load bowyer progress: {ex.Message}");
+                ServerApi.Logger.Error($"[SeraphLeveling] Failed to load bowyer progress: {ex.Message}");
             }
         }
 
@@ -11092,7 +11277,7 @@ namespace SimpleImprovingTraits
                 }
                 catch (Exception ex)
                 {
-                    ServerApi.Logger.Error($"[SimpleImprovingTraits] Failed to persist improviser progress: {ex.Message}");
+                    ServerApi.Logger.Error($"[SeraphLeveling] Failed to persist improviser progress: {ex.Message}");
                 }
             }
         }
@@ -11107,7 +11292,7 @@ namespace SimpleImprovingTraits
                 byte[] data = ServerApi.WorldManager.SaveGame.GetData(IMPROVISER_PROGRESS_SAVE_KEY);
                 if (data == null || data.Length == 0)
                 {
-                    ServerApi.Logger.Debug("[SimpleImprovingTraits] No improviser progress data found");
+                    ServerApi.Logger.Debug("[SeraphLeveling] No improviser progress data found");
                     return;
                 }
 
@@ -11122,7 +11307,7 @@ namespace SimpleImprovingTraits
 
                         if (magic1 != 0x49 || magic2 != 0x4D || magic3 != 0x50)
                         {
-                            ServerApi.Logger.Warning("[SimpleImprovingTraits] Invalid improviser progress magic bytes");
+                            ServerApi.Logger.Warning("[SeraphLeveling] Invalid improviser progress magic bytes");
                             return;
                         }
 
@@ -11140,12 +11325,12 @@ namespace SimpleImprovingTraits
                     }
                 }
 
-                ServerApi.Logger.Notification($"[SimpleImprovingTraits] Loaded improviser progress for {ImproviserProgress.Count} players");
+                ServerApi.Logger.Notification($"[SeraphLeveling] Loaded improviser progress for {ImproviserProgress.Count} players");
             }
             catch (Exception ex)
             {
                 ImproviserProgress.Clear();
-                ServerApi.Logger.Error($"[SimpleImprovingTraits] Failed to load improviser progress: {ex.Message}");
+                ServerApi.Logger.Error($"[SeraphLeveling] Failed to load improviser progress: {ex.Message}");
             }
         }
 
@@ -11196,7 +11381,7 @@ namespace SimpleImprovingTraits
                 }
                 catch (Exception ex)
                 {
-                    ServerApi.Logger.Error($"[SimpleImprovingTraits] Failed to persist tinkerer progress: {ex.Message}");
+                    ServerApi.Logger.Error($"[SeraphLeveling] Failed to persist tinkerer progress: {ex.Message}");
                 }
             }
         }
@@ -11211,7 +11396,7 @@ namespace SimpleImprovingTraits
                 byte[] data = ServerApi.WorldManager.SaveGame.GetData(TINKERER_PROGRESS_SAVE_KEY);
                 if (data == null || data.Length == 0)
                 {
-                    ServerApi.Logger.Debug("[SimpleImprovingTraits] No tinkerer progress data found");
+                    ServerApi.Logger.Debug("[SeraphLeveling] No tinkerer progress data found");
                     return;
                 }
 
@@ -11226,7 +11411,7 @@ namespace SimpleImprovingTraits
 
                         if (magic1 != 0x54 || magic2 != 0x4E || magic3 != 0x4B)
                         {
-                            ServerApi.Logger.Warning("[SimpleImprovingTraits] Invalid tinkerer progress magic bytes");
+                            ServerApi.Logger.Warning("[SeraphLeveling] Invalid tinkerer progress magic bytes");
                             return;
                         }
 
@@ -11243,12 +11428,12 @@ namespace SimpleImprovingTraits
                     }
                 }
 
-                ServerApi.Logger.Notification($"[SimpleImprovingTraits] Loaded tinkerer progress for {TinkererProgress.Count} players");
+                ServerApi.Logger.Notification($"[SeraphLeveling] Loaded tinkerer progress for {TinkererProgress.Count} players");
             }
             catch (Exception ex)
             {
                 TinkererProgress.Clear();
-                ServerApi.Logger.Error($"[SimpleImprovingTraits] Failed to load tinkerer progress: {ex.Message}");
+                ServerApi.Logger.Error($"[SeraphLeveling] Failed to load tinkerer progress: {ex.Message}");
             }
         }
 
@@ -11299,7 +11484,7 @@ namespace SimpleImprovingTraits
                 }
                 catch (Exception ex)
                 {
-                    ServerApi.Logger.Error($"[SimpleImprovingTraits] Failed to persist merciless progress: {ex.Message}");
+                    ServerApi.Logger.Error($"[SeraphLeveling] Failed to persist merciless progress: {ex.Message}");
                 }
             }
         }
@@ -11314,7 +11499,7 @@ namespace SimpleImprovingTraits
                 byte[] data = ServerApi.WorldManager.SaveGame.GetData(MERCILESS_PROGRESS_SAVE_KEY);
                 if (data == null || data.Length == 0)
                 {
-                    ServerApi.Logger.Debug("[SimpleImprovingTraits] No merciless progress data found");
+                    ServerApi.Logger.Debug("[SeraphLeveling] No merciless progress data found");
                     return;
                 }
 
@@ -11329,7 +11514,7 @@ namespace SimpleImprovingTraits
 
                         if (magic1 != 0x4D || magic2 != 0x52 || magic3 != 0x43)
                         {
-                            ServerApi.Logger.Warning("[SimpleImprovingTraits] Invalid merciless progress magic bytes");
+                            ServerApi.Logger.Warning("[SeraphLeveling] Invalid merciless progress magic bytes");
                             return;
                         }
 
@@ -11346,12 +11531,12 @@ namespace SimpleImprovingTraits
                     }
                 }
 
-                ServerApi.Logger.Notification($"[SimpleImprovingTraits] Loaded merciless progress for {MercilessProgress.Count} players");
+                ServerApi.Logger.Notification($"[SeraphLeveling] Loaded merciless progress for {MercilessProgress.Count} players");
             }
             catch (Exception ex)
             {
                 MercilessProgress.Clear();
-                ServerApi.Logger.Error($"[SimpleImprovingTraits] Failed to load merciless progress: {ex.Message}");
+                ServerApi.Logger.Error($"[SeraphLeveling] Failed to load merciless progress: {ex.Message}");
             }
         }
 
@@ -11402,7 +11587,7 @@ namespace SimpleImprovingTraits
                 }
                 catch (Exception ex)
                 {
-                    ServerApi.Logger.Error($"[SimpleImprovingTraits] Failed to persist claustrophobic removal progress: {ex.Message}");
+                    ServerApi.Logger.Error($"[SeraphLeveling] Failed to persist claustrophobic removal progress: {ex.Message}");
                 }
             }
         }
@@ -11417,7 +11602,7 @@ namespace SimpleImprovingTraits
                 byte[] data = ServerApi.WorldManager.SaveGame.GetData(CLAUSTROPHOBIC_REMOVAL_PROGRESS_SAVE_KEY);
                 if (data == null || data.Length == 0)
                 {
-                    ServerApi.Logger.Debug("[SimpleImprovingTraits] No claustrophobic removal progress data found");
+                    ServerApi.Logger.Debug("[SeraphLeveling] No claustrophobic removal progress data found");
                     return;
                 }
 
@@ -11432,7 +11617,7 @@ namespace SimpleImprovingTraits
 
                         if (magic1 != 0x43 || magic2 != 0x4C || magic3 != 0x52)
                         {
-                            ServerApi.Logger.Warning("[SimpleImprovingTraits] Invalid claustrophobic removal progress magic bytes");
+                            ServerApi.Logger.Warning("[SeraphLeveling] Invalid claustrophobic removal progress magic bytes");
                             return;
                         }
 
@@ -11449,12 +11634,12 @@ namespace SimpleImprovingTraits
                     }
                 }
 
-                ServerApi.Logger.Notification($"[SimpleImprovingTraits] Loaded claustrophobic removal progress for {ClaustrophobicRemovalProgress.Count} players");
+                ServerApi.Logger.Notification($"[SeraphLeveling] Loaded claustrophobic removal progress for {ClaustrophobicRemovalProgress.Count} players");
             }
             catch (Exception ex)
             {
                 ClaustrophobicRemovalProgress.Clear();
-                ServerApi.Logger.Error($"[SimpleImprovingTraits] Failed to load claustrophobic removal progress: {ex.Message}");
+                ServerApi.Logger.Error($"[SeraphLeveling] Failed to load claustrophobic removal progress: {ex.Message}");
             }
         }
     }
@@ -11463,7 +11648,7 @@ namespace SimpleImprovingTraits
     /// Client-side mod system that displays mining progression in the character traits dialog.
     /// Uses Harmony to patch the CharacterSystem's trait display method.
     /// </summary>
-    public class SimpleImprovingTraitsClientSystem : ModSystem
+    public class SeraphLevelingClientSystem : ModSystem
     {
         private ICoreClientAPI clientApi;
         private Harmony harmony;
@@ -11479,16 +11664,16 @@ namespace SimpleImprovingTraits
             clientApi = api;
 
             // Apply Harmony patches manually for better control
-            harmony = new Harmony("simpleimprovingtraits");
+            harmony = new Harmony("seraphleveling");
             try
             {
                 ApplyPatches(api);
-                api.Logger.Notification("[SimpleImprovingTraits] Client-side mod loaded, Harmony patches applied");
+                api.Logger.Notification("[SeraphLeveling] Client-side mod loaded, Harmony patches applied");
             }
             catch (Exception ex)
             {
-                api.Logger.Error($"[SimpleImprovingTraits] Failed to apply Harmony patches: {ex.Message}");
-                api.Logger.Error($"[SimpleImprovingTraits] Stack trace: {ex.StackTrace}");
+                api.Logger.Error($"[SeraphLeveling] Failed to apply Harmony patches: {ex.Message}");
+                api.Logger.Error($"[SeraphLeveling] Stack trace: {ex.StackTrace}");
             }
         }
 
@@ -11501,7 +11686,7 @@ namespace SimpleImprovingTraits
             var characterSystemType = AccessTools.TypeByName("Vintagestory.GameContent.CharacterSystem");
             if (characterSystemType == null)
             {
-                api.Logger.Warning("[SimpleImprovingTraits] Could not find CharacterSystem type");
+                api.Logger.Warning("[SeraphLeveling] Could not find CharacterSystem type");
                 return;
             }
 
@@ -11509,14 +11694,14 @@ namespace SimpleImprovingTraits
             var targetMethod = AccessTools.Method(characterSystemType, "getClassTraitText");
             if (targetMethod == null)
             {
-                api.Logger.Warning("[SimpleImprovingTraits] Could not find getClassTraitText method");
+                api.Logger.Warning("[SeraphLeveling] Could not find getClassTraitText method");
 
                 // List available methods for debugging
                 var methods = characterSystemType.GetMethods(System.Reflection.BindingFlags.Instance |
                     System.Reflection.BindingFlags.Static |
                     System.Reflection.BindingFlags.Public |
                     System.Reflection.BindingFlags.NonPublic);
-                api.Logger.Debug($"[SimpleImprovingTraits] Available methods in CharacterSystem:");
+                api.Logger.Debug($"[SeraphLeveling] Available methods in CharacterSystem:");
                 foreach (var m in methods)
                 {
                     if (m.Name.ToLower().Contains("trait"))
@@ -11527,19 +11712,19 @@ namespace SimpleImprovingTraits
                 return;
             }
 
-            api.Logger.Debug($"[SimpleImprovingTraits] Found method: {targetMethod.Name}, params: {string.Join(", ", targetMethod.GetParameters().Select(p => p.ParameterType.Name + " " + p.Name))}");
+            api.Logger.Debug($"[SeraphLeveling] Found method: {targetMethod.Name}, params: {string.Join(", ", targetMethod.GetParameters().Select(p => p.ParameterType.Name + " " + p.Name))}");
 
             // Get our postfix method
             var postfixMethod = AccessTools.Method(typeof(CharacterSystemPatches), nameof(CharacterSystemPatches.GetClassTraitText_Postfix));
 
             // Apply the patch
             harmony.Patch(targetMethod, postfix: new HarmonyMethod(postfixMethod));
-            api.Logger.Notification("[SimpleImprovingTraits] Successfully patched getClassTraitText");
+            api.Logger.Notification("[SeraphLeveling] Successfully patched getClassTraitText");
         }
 
         public override void Dispose()
         {
-            harmony?.UnpatchAll("simpleimprovingtraits");
+            harmony?.UnpatchAll("seraphleveling");
             base.Dispose();
         }
     }
@@ -11566,43 +11751,43 @@ namespace SimpleImprovingTraits
 
             // Log the raw result string to see exact format (escape special chars for visibility)
             string escapedResult = __result?.Replace("\n", "\\n").Replace("\r", "\\r") ?? "NULL";
-            ClientApi.Logger.Debug($"[SimpleImprovingTraits] RAW getClassTraitText result: {escapedResult}");
+            ClientApi.Logger.Debug($"[SeraphLeveling] RAW getClassTraitText result: {escapedResult}");
 
             // Get mining progression data
-            int miningLevel = eplr.WatchedAttributes.GetInt(SimpleImprovingTraitsModSystem.WATCHED_MINING_LEVEL, 0);
-            int miningBonus = eplr.WatchedAttributes.GetInt(SimpleImprovingTraitsModSystem.WATCHED_MINING_BONUS, 0);
+            int miningLevel = eplr.WatchedAttributes.GetInt(SeraphLevelingModSystem.WATCHED_MINING_LEVEL, 0);
+            int miningBonus = eplr.WatchedAttributes.GetInt(SeraphLevelingModSystem.WATCHED_MINING_BONUS, 0);
             bool hasVanillaHardy = eplr.WatchedAttributes.GetBool("sitHasVanillaHardy", false);
 
             // Get melee progression data
-            int meleeLevel = eplr.WatchedAttributes.GetInt(SimpleImprovingTraitsModSystem.WATCHED_MELEE_LEVEL, 0);
-            int meleeBonus = eplr.WatchedAttributes.GetInt(SimpleImprovingTraitsModSystem.WATCHED_MELEE_BONUS, 0);
+            int meleeLevel = eplr.WatchedAttributes.GetInt(SeraphLevelingModSystem.WATCHED_MELEE_LEVEL, 0);
+            int meleeBonus = eplr.WatchedAttributes.GetInt(SeraphLevelingModSystem.WATCHED_MELEE_BONUS, 0);
             bool hasVanillaSoldier = eplr.WatchedAttributes.GetBool("sitHasVanillaSoldier", false);
 
             // Get ranged progression data
-            int rangedLevel = eplr.WatchedAttributes.GetInt(SimpleImprovingTraitsModSystem.WATCHED_RANGED_LEVEL, 0);
-            int rangedDamageBonus = eplr.WatchedAttributes.GetInt(SimpleImprovingTraitsModSystem.WATCHED_RANGED_DAMAGE_BONUS, 0);
-            int rangedAccuracyBonus = eplr.WatchedAttributes.GetInt(SimpleImprovingTraitsModSystem.WATCHED_RANGED_ACCURACY_BONUS, 0);
-            int rangedDistanceBonus = eplr.WatchedAttributes.GetInt(SimpleImprovingTraitsModSystem.WATCHED_RANGED_DISTANCE_BONUS, 0);
+            int rangedLevel = eplr.WatchedAttributes.GetInt(SeraphLevelingModSystem.WATCHED_RANGED_LEVEL, 0);
+            int rangedDamageBonus = eplr.WatchedAttributes.GetInt(SeraphLevelingModSystem.WATCHED_RANGED_DAMAGE_BONUS, 0);
+            int rangedAccuracyBonus = eplr.WatchedAttributes.GetInt(SeraphLevelingModSystem.WATCHED_RANGED_ACCURACY_BONUS, 0);
+            int rangedDistanceBonus = eplr.WatchedAttributes.GetInt(SeraphLevelingModSystem.WATCHED_RANGED_DISTANCE_BONUS, 0);
             bool hasVanillaFocused = eplr.WatchedAttributes.GetBool("sitHasVanillaFocused", false);
 
             // Get walking progression data
-            int walkingLevel = eplr.WatchedAttributes.GetInt(SimpleImprovingTraitsModSystem.WATCHED_WALKING_LEVEL, 0);
-            int walkingBonus = eplr.WatchedAttributes.GetInt(SimpleImprovingTraitsModSystem.WATCHED_WALKING_BONUS, 0);
+            int walkingLevel = eplr.WatchedAttributes.GetInt(SeraphLevelingModSystem.WATCHED_WALKING_LEVEL, 0);
+            int walkingBonus = eplr.WatchedAttributes.GetInt(SeraphLevelingModSystem.WATCHED_WALKING_BONUS, 0);
             bool hasVanillaFleetfooted = eplr.WatchedAttributes.GetBool("sitHasVanillaFleetfooted", false);
 
             // Get armor progression data
-            int armorDurabilityLevel = eplr.WatchedAttributes.GetInt(SimpleImprovingTraitsModSystem.WATCHED_ARMOR_DURABILITY_LEVEL, 0);
-            int armorDurabilityBonus = eplr.WatchedAttributes.GetInt(SimpleImprovingTraitsModSystem.WATCHED_ARMOR_DURABILITY_BONUS, 0);
-            int armorWalkSpeedLevel = eplr.WatchedAttributes.GetInt(SimpleImprovingTraitsModSystem.WATCHED_ARMOR_WALKSPEED_LEVEL, 0);
-            int armorWalkSpeedBonus = eplr.WatchedAttributes.GetInt(SimpleImprovingTraitsModSystem.WATCHED_ARMOR_WALKSPEED_BONUS, 0);
+            int armorDurabilityLevel = eplr.WatchedAttributes.GetInt(SeraphLevelingModSystem.WATCHED_ARMOR_DURABILITY_LEVEL, 0);
+            int armorDurabilityBonus = eplr.WatchedAttributes.GetInt(SeraphLevelingModSystem.WATCHED_ARMOR_DURABILITY_BONUS, 0);
+            int armorWalkSpeedLevel = eplr.WatchedAttributes.GetInt(SeraphLevelingModSystem.WATCHED_ARMOR_WALKSPEED_LEVEL, 0);
+            int armorWalkSpeedBonus = eplr.WatchedAttributes.GetInt(SeraphLevelingModSystem.WATCHED_ARMOR_WALKSPEED_BONUS, 0);
             bool hasVanillaSoldierArmor = eplr.WatchedAttributes.GetBool("sitHasVanillaSoldierArmor", false);
 
-            ClientApi.Logger.Debug($"[SimpleImprovingTraits] getClassTraitText postfix called. Mining: Level={miningLevel}, Bonus={miningBonus}%, HasHardy={hasVanillaHardy} | Melee: Level={meleeLevel}, Bonus={meleeBonus}%, HasSoldier={hasVanillaSoldier} | Ranged: Level={rangedLevel}, HasFocused={hasVanillaFocused} | Walking: Level={walkingLevel}, HasFleetfooted={hasVanillaFleetfooted} | Armor: Dur={armorDurabilityLevel}, Walk={armorWalkSpeedLevel}");
+            ClientApi.Logger.Debug($"[SeraphLeveling] getClassTraitText postfix called. Mining: Level={miningLevel}, Bonus={miningBonus}%, HasHardy={hasVanillaHardy} | Melee: Level={meleeLevel}, Bonus={meleeBonus}%, HasSoldier={hasVanillaSoldier} | Ranged: Level={rangedLevel}, HasFocused={hasVanillaFocused} | Walking: Level={walkingLevel}, HasFleetfooted={hasVanillaFleetfooted} | Armor: Dur={armorDurabilityLevel}, Walk={armorWalkSpeedLevel}");
 
             // Get the "no traits" message - vanilla uses this for classes like Commoner
             string noTraitsMsg = Lang.Get("charactersheet-notraits");
 
-            ClientApi.Logger.Debug($"[SimpleImprovingTraits] Original result: '{__result}', noTraitsMsg: '{noTraitsMsg}'");
+            ClientApi.Logger.Debug($"[SeraphLeveling] Original result: '{__result}', noTraitsMsg: '{noTraitsMsg}'");
 
             // Check if we have NO real traits (only "no traits" message or empty)
             // Use Contains to handle cases where the message might have formatting
@@ -11616,14 +11801,14 @@ namespace SimpleImprovingTraits
             // Only show Hardy when miningBonus > 0 (after negative traits are cancelled)
             if (miningBonus > 0)
             {
-                string plainMiningTraitName = Lang.Get("simpleimprovingtraits:trait-sitminingmastery");
+                string plainMiningTraitName = Lang.Get("seraphleveling:trait-sitminingmastery");
 
                 if (hasVanillaHardy)
                 {
                     // Class already has Hardy (e.g., Blackguard) - update the existing Hardy's mining speed
-                    int combinedBonus = SimpleImprovingTraitsModSystem.VANILLA_HARDY_MINING_BONUS + miningBonus;
+                    int combinedBonus = SeraphLevelingModSystem.VANILLA_HARDY_MINING_BONUS + miningBonus;
                     __result = __result.Replace(
-                        $"+{SimpleImprovingTraitsModSystem.VANILLA_HARDY_MINING_BONUS}% mining speed",
+                        $"+{SeraphLevelingModSystem.VANILLA_HARDY_MINING_BONUS}% mining speed",
                         $"+{combinedBonus}% mining speed");
 
                     // Remove our separate sitminingmastery entry if somehow present
@@ -11638,19 +11823,19 @@ namespace SimpleImprovingTraits
                 {
                     // Commoner or other class with no traits - replace entirely with our dynamic Hardy
                     // Use mining-only format since we don't have Hardy Health yet
-                    __result = Lang.Get("simpleimprovingtraits:trait-hardy-mining-only-dynamic", miningBonus);
+                    __result = Lang.Get("seraphleveling:trait-hardy-mining-only-dynamic", miningBonus);
                     hasNoTraits = false; // We now have traits
                 }
                 else if (__result.Contains(plainMiningTraitName))
                 {
                     // We have our trait but no vanilla Hardy - replace plain name with dynamic version
                     __result = __result.Replace(plainMiningTraitName,
-                        Lang.Get("simpleimprovingtraits:trait-hardy-mining-only-dynamic", miningBonus));
+                        Lang.Get("seraphleveling:trait-hardy-mining-only-dynamic", miningBonus));
                 }
                 else
                 {
                     // Has other traits but no Hardy at all - append our dynamic Hardy
-                    __result = __result + "\n" + Lang.Get("simpleimprovingtraits:trait-hardy-mining-only-dynamic", miningBonus);
+                    __result = __result + "\n" + Lang.Get("seraphleveling:trait-hardy-mining-only-dynamic", miningBonus);
                 }
             }
 
@@ -11658,7 +11843,7 @@ namespace SimpleImprovingTraits
             // Only show Soldier melee when meleeBonus > 0 (after negative traits are cancelled)
             if (meleeBonus > 0)
             {
-                string plainMeleeTraitName = Lang.Get("simpleimprovingtraits:trait-sitmeleemastery");
+                string plainMeleeTraitName = Lang.Get("seraphleveling:trait-sitmeleemastery");
 
                 // Re-check hasNoTraits after mining processing
                 hasNoTraits = string.IsNullOrEmpty(__result) ||
@@ -11670,9 +11855,9 @@ namespace SimpleImprovingTraits
                 if (hasVanillaSoldier)
                 {
                     // Class already has Soldier (e.g., Blackguard) - update the existing Soldier's melee damage
-                    int combinedBonus = SimpleImprovingTraitsModSystem.VANILLA_SOLDIER_MELEE_BONUS + meleeBonus;
+                    int combinedBonus = SeraphLevelingModSystem.VANILLA_SOLDIER_MELEE_BONUS + meleeBonus;
                     __result = __result.Replace(
-                        $"+{SimpleImprovingTraitsModSystem.VANILLA_SOLDIER_MELEE_BONUS}% melee damage",
+                        $"+{SeraphLevelingModSystem.VANILLA_SOLDIER_MELEE_BONUS}% melee damage",
                         $"+{combinedBonus}% melee damage");
 
                     // Remove our separate sitmeleemastery entry if somehow present
@@ -11686,18 +11871,18 @@ namespace SimpleImprovingTraits
                 else if (hasNoTraits)
                 {
                     // Commoner or other class with no traits - replace entirely with our dynamic Soldier
-                    __result = Lang.Get("simpleimprovingtraits:trait-soldier-dynamic", meleeBonus);
+                    __result = Lang.Get("seraphleveling:trait-soldier-dynamic", meleeBonus);
                 }
                 else if (__result.Contains(plainMeleeTraitName))
                 {
                     // We have our trait but no vanilla Soldier - replace plain name with dynamic version
                     __result = __result.Replace(plainMeleeTraitName,
-                        Lang.Get("simpleimprovingtraits:trait-soldier-dynamic", meleeBonus));
+                        Lang.Get("seraphleveling:trait-soldier-dynamic", meleeBonus));
                 }
                 else
                 {
                     // Has other traits but no Soldier at all - append our dynamic Soldier
-                    __result = __result + "\n" + Lang.Get("simpleimprovingtraits:trait-soldier-dynamic", meleeBonus);
+                    __result = __result + "\n" + Lang.Get("seraphleveling:trait-soldier-dynamic", meleeBonus);
                 }
             }
 
@@ -11705,7 +11890,7 @@ namespace SimpleImprovingTraits
             // Only show Focused when any bonus > 0 (after negative traits are cancelled for that stat)
             if (rangedDamageBonus > 0 || rangedAccuracyBonus > 0 || rangedDistanceBonus > 0)
             {
-                string plainRangedTraitName = Lang.Get("simpleimprovingtraits:trait-sitrangedmastery");
+                string plainRangedTraitName = Lang.Get("seraphleveling:trait-sitrangedmastery");
 
                 // Re-check hasNoTraits after melee processing
                 hasNoTraits = string.IsNullOrEmpty(__result) ||
@@ -11718,21 +11903,21 @@ namespace SimpleImprovingTraits
                 {
                     // Class already has Focused (e.g., Hunter) - update the existing Focused's stats
                     // Ranged damage
-                    int combinedDamage = SimpleImprovingTraitsModSystem.VANILLA_FOCUSED_DAMAGE_BONUS + rangedDamageBonus;
+                    int combinedDamage = SeraphLevelingModSystem.VANILLA_FOCUSED_DAMAGE_BONUS + rangedDamageBonus;
                     __result = __result.Replace(
-                        $"+{SimpleImprovingTraitsModSystem.VANILLA_FOCUSED_DAMAGE_BONUS}% ranged damage",
+                        $"+{SeraphLevelingModSystem.VANILLA_FOCUSED_DAMAGE_BONUS}% ranged damage",
                         $"+{combinedDamage}% ranged damage");
 
                     // Ranged accuracy
-                    int combinedAccuracy = SimpleImprovingTraitsModSystem.VANILLA_FOCUSED_ACCURACY_BONUS + rangedAccuracyBonus;
+                    int combinedAccuracy = SeraphLevelingModSystem.VANILLA_FOCUSED_ACCURACY_BONUS + rangedAccuracyBonus;
                     __result = __result.Replace(
-                        $"+{SimpleImprovingTraitsModSystem.VANILLA_FOCUSED_ACCURACY_BONUS}% ranged accuracy",
+                        $"+{SeraphLevelingModSystem.VANILLA_FOCUSED_ACCURACY_BONUS}% ranged accuracy",
                         $"+{combinedAccuracy}% ranged accuracy");
 
                     // Ranged distance
-                    int combinedDistance = SimpleImprovingTraitsModSystem.VANILLA_FOCUSED_DISTANCE_BONUS + rangedDistanceBonus;
+                    int combinedDistance = SeraphLevelingModSystem.VANILLA_FOCUSED_DISTANCE_BONUS + rangedDistanceBonus;
                     __result = __result.Replace(
-                        $"+{SimpleImprovingTraitsModSystem.VANILLA_FOCUSED_DISTANCE_BONUS}% ranged distance",
+                        $"+{SeraphLevelingModSystem.VANILLA_FOCUSED_DISTANCE_BONUS}% ranged distance",
                         $"+{combinedDistance}% ranged distance");
 
                     // Remove our separate sitrangedmastery entry if somehow present
@@ -11746,25 +11931,25 @@ namespace SimpleImprovingTraits
                 else if (hasNoTraits)
                 {
                     // Commoner or other class with no traits - replace entirely with our dynamic Focused
-                    __result = Lang.Get("simpleimprovingtraits:trait-focused-dynamic", rangedDamageBonus, rangedAccuracyBonus, rangedDistanceBonus);
+                    __result = Lang.Get("seraphleveling:trait-focused-dynamic", rangedDamageBonus, rangedAccuracyBonus, rangedDistanceBonus);
                 }
                 else if (__result.Contains(plainRangedTraitName))
                 {
                     // We have our trait but no vanilla Focused - replace plain name with dynamic version
                     __result = __result.Replace(plainRangedTraitName,
-                        Lang.Get("simpleimprovingtraits:trait-focused-dynamic", rangedDamageBonus, rangedAccuracyBonus, rangedDistanceBonus));
+                        Lang.Get("seraphleveling:trait-focused-dynamic", rangedDamageBonus, rangedAccuracyBonus, rangedDistanceBonus));
                 }
                 else
                 {
                     // Has other traits but no Focused at all - append our dynamic Focused
-                    __result = __result + "\n" + Lang.Get("simpleimprovingtraits:trait-focused-dynamic", rangedDamageBonus, rangedAccuracyBonus, rangedDistanceBonus);
+                    __result = __result + "\n" + Lang.Get("seraphleveling:trait-focused-dynamic", rangedDamageBonus, rangedAccuracyBonus, rangedDistanceBonus);
                 }
             }
 
             // Process walking progression (Fleetfooted trait)
             if (walkingLevel > 0)
             {
-                string plainWalkingTraitName = Lang.Get("simpleimprovingtraits:trait-sitwalkingmastery");
+                string plainWalkingTraitName = Lang.Get("seraphleveling:trait-sitwalkingmastery");
 
                 // Re-check hasNoTraits after ranged processing
                 hasNoTraits = string.IsNullOrEmpty(__result) ||
@@ -11776,9 +11961,9 @@ namespace SimpleImprovingTraits
                 if (hasVanillaFleetfooted)
                 {
                     // Class already has Fleetfooted (e.g., Hunter, Clockmaker) - update the existing Fleetfooted's walk speed
-                    int combinedBonus = SimpleImprovingTraitsModSystem.VANILLA_FLEETFOOTED_WALK_BONUS + walkingBonus;
+                    int combinedBonus = SeraphLevelingModSystem.VANILLA_FLEETFOOTED_WALK_BONUS + walkingBonus;
                     __result = __result.Replace(
-                        $"+{SimpleImprovingTraitsModSystem.VANILLA_FLEETFOOTED_WALK_BONUS}% walk speed",
+                        $"+{SeraphLevelingModSystem.VANILLA_FLEETFOOTED_WALK_BONUS}% walk speed",
                         $"+{combinedBonus}% walk speed");
 
                     // Remove our separate sitwalkingmastery entry if somehow present
@@ -11792,18 +11977,18 @@ namespace SimpleImprovingTraits
                 else if (hasNoTraits)
                 {
                     // Commoner or other class with no traits - replace entirely with our dynamic Fleetfooted
-                    __result = Lang.Get("simpleimprovingtraits:trait-fleetfooted-dynamic", walkingBonus);
+                    __result = Lang.Get("seraphleveling:trait-fleetfooted-dynamic", walkingBonus);
                 }
                 else if (__result.Contains(plainWalkingTraitName))
                 {
                     // We have our trait but no vanilla Fleetfooted - replace plain name with dynamic version
                     __result = __result.Replace(plainWalkingTraitName,
-                        Lang.Get("simpleimprovingtraits:trait-fleetfooted-dynamic", walkingBonus));
+                        Lang.Get("seraphleveling:trait-fleetfooted-dynamic", walkingBonus));
                 }
                 else
                 {
                     // Has other traits but no Fleetfooted at all - append our dynamic Fleetfooted
-                    __result = __result + "\n" + Lang.Get("simpleimprovingtraits:trait-fleetfooted-dynamic", walkingBonus);
+                    __result = __result + "\n" + Lang.Get("seraphleveling:trait-fleetfooted-dynamic", walkingBonus);
                 }
             }
 
@@ -11829,25 +12014,25 @@ namespace SimpleImprovingTraits
                     // Update armor durability if we have bonus
                     if (armorDurabilityBonus > 0)
                     {
-                        int combinedDurability = SimpleImprovingTraitsModSystem.VANILLA_SOLDIER_ARMOR_DURABILITY_BONUS + armorDurabilityBonus;
+                        int combinedDurability = SeraphLevelingModSystem.VANILLA_SOLDIER_ARMOR_DURABILITY_BONUS + armorDurabilityBonus;
                         __result = __result.Replace(
-                            $"+{SimpleImprovingTraitsModSystem.VANILLA_SOLDIER_ARMOR_DURABILITY_BONUS}% armor durability",
+                            $"+{SeraphLevelingModSystem.VANILLA_SOLDIER_ARMOR_DURABILITY_BONUS}% armor durability",
                             $"+{combinedDurability}% armor durability");
                     }
 
                     // Update armor speed penalty if we have bonus
                     if (armorWalkSpeedBonus > 0)
                     {
-                        int combinedSpeedPenalty = SimpleImprovingTraitsModSystem.VANILLA_SOLDIER_ARMOR_WALKSPEED_BONUS + armorWalkSpeedBonus;
+                        int combinedSpeedPenalty = SeraphLevelingModSystem.VANILLA_SOLDIER_ARMOR_WALKSPEED_BONUS + armorWalkSpeedBonus;
                         __result = __result.Replace(
-                            $"-{SimpleImprovingTraitsModSystem.VANILLA_SOLDIER_ARMOR_WALKSPEED_BONUS}% armor speed penalty",
+                            $"-{SeraphLevelingModSystem.VANILLA_SOLDIER_ARMOR_WALKSPEED_BONUS}% armor speed penalty",
                             $"-{combinedSpeedPenalty}% armor speed penalty");
                     }
                 }
                 else if (hasNoTraits)
                 {
                     // No traits at all - show our armor progression as a Soldier-like trait
-                    __result = Lang.Get("simpleimprovingtraits:trait-soldier-armor-dynamic", totalDurabilityBonus, totalWalkSpeedBonus);
+                    __result = Lang.Get("seraphleveling:trait-soldier-armor-dynamic", totalDurabilityBonus, totalWalkSpeedBonus);
                 }
                 else
                 {
@@ -11856,28 +12041,28 @@ namespace SimpleImprovingTraits
                     if (totalDurabilityBonus > 0 || totalWalkSpeedBonus > 0)
                     {
                         // Check if melee progression already added a dynamic Soldier entry
-                        string meleeSoldierPattern = Lang.Get("simpleimprovingtraits:trait-soldier-dynamic", meleeBonus);
+                        string meleeSoldierPattern = Lang.Get("seraphleveling:trait-soldier-dynamic", meleeBonus);
                         if (meleeLevel > 0 && __result.Contains(meleeSoldierPattern))
                         {
                             // Replace the melee-only Soldier with a combined entry
                             __result = __result.Replace(meleeSoldierPattern,
-                                Lang.Get("simpleimprovingtraits:trait-soldier-combined-dynamic", meleeBonus, totalDurabilityBonus, totalWalkSpeedBonus));
+                                Lang.Get("seraphleveling:trait-soldier-combined-dynamic", meleeBonus, totalDurabilityBonus, totalWalkSpeedBonus));
                         }
                         else
                         {
                             // No melee Soldier was added, add armor-only entry
-                            __result = __result + "\n" + Lang.Get("simpleimprovingtraits:trait-soldier-armor-dynamic", totalDurabilityBonus, totalWalkSpeedBonus);
+                            __result = __result + "\n" + Lang.Get("seraphleveling:trait-soldier-armor-dynamic", totalDurabilityBonus, totalWalkSpeedBonus);
                         }
                     }
                 }
             }
 
             // Process Clothier trait (unlocked by wearing 20 unique clothes)
-            bool clothierUnlocked = eplr.WatchedAttributes.GetBool(SimpleImprovingTraitsModSystem.WATCHED_CLOTHIER_UNLOCKED, false);
+            bool clothierUnlocked = eplr.WatchedAttributes.GetBool(SeraphLevelingModSystem.WATCHED_CLOTHIER_UNLOCKED, false);
             if (clothierUnlocked)
             {
-                string plainClothierTraitName = Lang.Get("simpleimprovingtraits:trait-sitclothiermastery");
-                string dynamicClothierTrait = Lang.Get("simpleimprovingtraits:trait-clothier-dynamic");
+                string plainClothierTraitName = Lang.Get("seraphleveling:trait-sitclothiermastery");
+                string dynamicClothierTrait = Lang.Get("seraphleveling:trait-clothier-dynamic");
 
                 // Re-check hasNoTraits after armor processing
                 hasNoTraits = string.IsNullOrEmpty(__result) ||
@@ -11901,13 +12086,13 @@ namespace SimpleImprovingTraits
             }
 
             // Process Mender trait (improves armor/clothing durability)
-            int menderLevel = eplr.WatchedAttributes.GetInt(SimpleImprovingTraitsModSystem.WATCHED_MENDER_LEVEL, 0);
-            int menderBonus = eplr.WatchedAttributes.GetInt(SimpleImprovingTraitsModSystem.WATCHED_MENDER_BONUS, 0);
+            int menderLevel = eplr.WatchedAttributes.GetInt(SeraphLevelingModSystem.WATCHED_MENDER_LEVEL, 0);
+            int menderBonus = eplr.WatchedAttributes.GetInt(SeraphLevelingModSystem.WATCHED_MENDER_BONUS, 0);
             bool hasVanillaMender = eplr.WatchedAttributes.GetBool("sitHasVanillaMender", false);
             if (menderLevel > 0)
             {
-                string plainMenderTraitName = Lang.Get("simpleimprovingtraits:trait-sitmendermastery");
-                string dynamicMenderTrait = Lang.Get("simpleimprovingtraits:trait-mender-dynamic", menderBonus);
+                string plainMenderTraitName = Lang.Get("seraphleveling:trait-sitmendermastery");
+                string dynamicMenderTrait = Lang.Get("seraphleveling:trait-mender-dynamic", menderBonus);
 
                 // Re-check hasNoTraits
                 hasNoTraits = string.IsNullOrEmpty(__result) ||
@@ -11919,9 +12104,9 @@ namespace SimpleImprovingTraits
                 if (hasVanillaMender)
                 {
                     // Class already has Mender trait - update the existing durability value
-                    int combinedBonus = SimpleImprovingTraitsModSystem.VANILLA_MENDER_ARMOR_DURABILITY_BONUS + menderBonus;
+                    int combinedBonus = SeraphLevelingModSystem.VANILLA_MENDER_ARMOR_DURABILITY_BONUS + menderBonus;
                     __result = __result.Replace(
-                        $"+{SimpleImprovingTraitsModSystem.VANILLA_MENDER_ARMOR_DURABILITY_BONUS}% armor durability",
+                        $"+{SeraphLevelingModSystem.VANILLA_MENDER_ARMOR_DURABILITY_BONUS}% armor durability",
                         $"+{combinedBonus}% armor durability");
                 }
                 else if (hasNoTraits)
@@ -11939,15 +12124,15 @@ namespace SimpleImprovingTraits
             }
 
             // Process Pilferer trait (improves rusty gear, vessel loot, vessel collection)
-            int pilfererLevel = eplr.WatchedAttributes.GetInt(SimpleImprovingTraitsModSystem.WATCHED_PILFERER_LEVEL, 0);
-            int pilfererBonus = eplr.WatchedAttributes.GetInt(SimpleImprovingTraitsModSystem.WATCHED_PILFERER_BONUS, 0);
+            int pilfererLevel = eplr.WatchedAttributes.GetInt(SeraphLevelingModSystem.WATCHED_PILFERER_LEVEL, 0);
+            int pilfererBonus = eplr.WatchedAttributes.GetInt(SeraphLevelingModSystem.WATCHED_PILFERER_BONUS, 0);
             bool hasVanillaPilferer = eplr.WatchedAttributes.GetBool("sitHasVanillaPilferer", false);
             // Only show Pilferer when bonus > 0 (after Heavyhanded vessel penalty is cancelled)
             if (pilfererBonus > 0)
             {
-                string plainPilfererTraitName = Lang.Get("simpleimprovingtraits:trait-sitpilferermastery");
+                string plainPilfererTraitName = Lang.Get("seraphleveling:trait-sitpilferermastery");
                 // Pilferer uses the same bonus for all 3 stats (vessel drops, rusty gear, vessel collection)
-                string dynamicPilfererTrait = Lang.Get("simpleimprovingtraits:trait-pilferer-dynamic", pilfererBonus, pilfererBonus, pilfererBonus);
+                string dynamicPilfererTrait = Lang.Get("seraphleveling:trait-pilferer-dynamic", pilfererBonus, pilfererBonus, pilfererBonus);
 
                 // Re-check hasNoTraits
                 hasNoTraits = string.IsNullOrEmpty(__result) ||
@@ -11959,17 +12144,17 @@ namespace SimpleImprovingTraits
                 if (hasVanillaPilferer)
                 {
                     // Class already has Pilferer trait - update the existing values
-                    int combinedRusty = SimpleImprovingTraitsModSystem.VANILLA_PILFERER_RUSTY_GEAR_BONUS + pilfererBonus;
-                    int combinedVessel = SimpleImprovingTraitsModSystem.VANILLA_PILFERER_VESSEL_CONTENTS_BONUS + pilfererBonus;
-                    int combinedCollection = SimpleImprovingTraitsModSystem.VANILLA_PILFERER_WHOLE_VESSEL_BONUS + pilfererBonus;
+                    int combinedRusty = SeraphLevelingModSystem.VANILLA_PILFERER_RUSTY_GEAR_BONUS + pilfererBonus;
+                    int combinedVessel = SeraphLevelingModSystem.VANILLA_PILFERER_VESSEL_CONTENTS_BONUS + pilfererBonus;
+                    int combinedCollection = SeraphLevelingModSystem.VANILLA_PILFERER_WHOLE_VESSEL_BONUS + pilfererBonus;
                     __result = __result.Replace(
-                        $"+{SimpleImprovingTraitsModSystem.VANILLA_PILFERER_RUSTY_GEAR_BONUS}% rusty gear",
+                        $"+{SeraphLevelingModSystem.VANILLA_PILFERER_RUSTY_GEAR_BONUS}% rusty gear",
                         $"+{combinedRusty}% rusty gear");
                     __result = __result.Replace(
-                        $"+{SimpleImprovingTraitsModSystem.VANILLA_PILFERER_VESSEL_CONTENTS_BONUS}% cracked vessel drops",
+                        $"+{SeraphLevelingModSystem.VANILLA_PILFERER_VESSEL_CONTENTS_BONUS}% cracked vessel drops",
                         $"+{combinedVessel}% cracked vessel drops");
                     __result = __result.Replace(
-                        $"+{SimpleImprovingTraitsModSystem.VANILLA_PILFERER_WHOLE_VESSEL_BONUS}% vessel collection",
+                        $"+{SeraphLevelingModSystem.VANILLA_PILFERER_WHOLE_VESSEL_BONUS}% vessel collection",
                         $"+{combinedCollection}% vessel collection");
                 }
                 else if (hasNoTraits)
@@ -11988,15 +12173,15 @@ namespace SimpleImprovingTraits
             }
 
             // Process Resourceful trait (improves animal loot and harvesting speed)
-            int resourcefulLevel = eplr.WatchedAttributes.GetInt(SimpleImprovingTraitsModSystem.WATCHED_RESOURCEFUL_LEVEL, 0);
-            int resourcefulLootBonus = eplr.WatchedAttributes.GetInt(SimpleImprovingTraitsModSystem.WATCHED_RESOURCEFUL_LOOT_BONUS, 0);
-            int resourcefulSpeedBonus = eplr.WatchedAttributes.GetInt(SimpleImprovingTraitsModSystem.WATCHED_RESOURCEFUL_SPEED_BONUS, 0);
+            int resourcefulLevel = eplr.WatchedAttributes.GetInt(SeraphLevelingModSystem.WATCHED_RESOURCEFUL_LEVEL, 0);
+            int resourcefulLootBonus = eplr.WatchedAttributes.GetInt(SeraphLevelingModSystem.WATCHED_RESOURCEFUL_LOOT_BONUS, 0);
+            int resourcefulSpeedBonus = eplr.WatchedAttributes.GetInt(SeraphLevelingModSystem.WATCHED_RESOURCEFUL_SPEED_BONUS, 0);
             bool hasVanillaResourceful = eplr.WatchedAttributes.GetBool("sitHasVanillaResourceful", false);
             // Only show Resourceful when any bonus > 0 (after Kind penalty is cancelled)
             if (resourcefulLootBonus > 0 || resourcefulSpeedBonus > 0)
             {
-                string plainResourcefulTraitName = Lang.Get("simpleimprovingtraits:trait-sitresourcefulmastery");
-                string dynamicResourcefulTrait = Lang.Get("simpleimprovingtraits:trait-resourceful-dynamic", resourcefulLootBonus, resourcefulSpeedBonus);
+                string plainResourcefulTraitName = Lang.Get("seraphleveling:trait-sitresourcefulmastery");
+                string dynamicResourcefulTrait = Lang.Get("seraphleveling:trait-resourceful-dynamic", resourcefulLootBonus, resourcefulSpeedBonus);
 
                 // Re-check hasNoTraits
                 hasNoTraits = string.IsNullOrEmpty(__result) ||
@@ -12008,13 +12193,13 @@ namespace SimpleImprovingTraits
                 if (hasVanillaResourceful)
                 {
                     // Class already has Resourceful trait - update the existing values
-                    int combinedLoot = SimpleImprovingTraitsModSystem.VANILLA_RESOURCEFUL_LOOT_BONUS + resourcefulLootBonus;
-                    int combinedSpeed = SimpleImprovingTraitsModSystem.VANILLA_RESOURCEFUL_SPEED_BONUS + resourcefulSpeedBonus;
+                    int combinedLoot = SeraphLevelingModSystem.VANILLA_RESOURCEFUL_LOOT_BONUS + resourcefulLootBonus;
+                    int combinedSpeed = SeraphLevelingModSystem.VANILLA_RESOURCEFUL_SPEED_BONUS + resourcefulSpeedBonus;
                     __result = __result.Replace(
-                        $"+{SimpleImprovingTraitsModSystem.VANILLA_RESOURCEFUL_LOOT_BONUS}% animal loot",
+                        $"+{SeraphLevelingModSystem.VANILLA_RESOURCEFUL_LOOT_BONUS}% animal loot",
                         $"+{combinedLoot}% animal loot");
                     __result = __result.Replace(
-                        $"+{SimpleImprovingTraitsModSystem.VANILLA_RESOURCEFUL_SPEED_BONUS}% harvesting speed",
+                        $"+{SeraphLevelingModSystem.VANILLA_RESOURCEFUL_SPEED_BONUS}% harvesting speed",
                         $"+{combinedSpeed}% harvesting speed");
                 }
                 else if (hasNoTraits)
@@ -12032,15 +12217,15 @@ namespace SimpleImprovingTraits
             }
 
             // Process Forager trait (improves foraging loot and wild crop drops)
-            int foragerLevel = eplr.WatchedAttributes.GetInt(SimpleImprovingTraitsModSystem.WATCHED_FORAGER_LEVEL, 0);
-            int foragerLootBonus = eplr.WatchedAttributes.GetInt(SimpleImprovingTraitsModSystem.WATCHED_FORAGER_LOOT_BONUS, 0);
-            int foragerWildCropBonus = eplr.WatchedAttributes.GetInt(SimpleImprovingTraitsModSystem.WATCHED_FORAGER_WILD_CROP_BONUS, 0);
+            int foragerLevel = eplr.WatchedAttributes.GetInt(SeraphLevelingModSystem.WATCHED_FORAGER_LEVEL, 0);
+            int foragerLootBonus = eplr.WatchedAttributes.GetInt(SeraphLevelingModSystem.WATCHED_FORAGER_LOOT_BONUS, 0);
+            int foragerWildCropBonus = eplr.WatchedAttributes.GetInt(SeraphLevelingModSystem.WATCHED_FORAGER_WILD_CROP_BONUS, 0);
             bool hasVanillaForager = eplr.WatchedAttributes.GetBool("sitHasVanillaForager", false);
             // Only show Forager when any bonus > 0 (after Civil/Heavyhanded penalties are cancelled)
             if (foragerLootBonus > 0 || foragerWildCropBonus > 0)
             {
-                string plainForagerTraitName = Lang.Get("simpleimprovingtraits:trait-sitforagermastery");
-                string dynamicForagerTrait = Lang.Get("simpleimprovingtraits:trait-forager-dynamic", foragerLootBonus, foragerWildCropBonus);
+                string plainForagerTraitName = Lang.Get("seraphleveling:trait-sitforagermastery");
+                string dynamicForagerTrait = Lang.Get("seraphleveling:trait-forager-dynamic", foragerLootBonus, foragerWildCropBonus);
 
                 // Re-check hasNoTraits
                 hasNoTraits = string.IsNullOrEmpty(__result) ||
@@ -12052,13 +12237,13 @@ namespace SimpleImprovingTraits
                 if (hasVanillaForager)
                 {
                     // Class already has Forager trait - update the existing values
-                    int combinedLoot = SimpleImprovingTraitsModSystem.VANILLA_FORAGER_LOOT_BONUS + foragerLootBonus;
-                    int combinedWildCrop = SimpleImprovingTraitsModSystem.VANILLA_FORAGER_WILD_CROP_BONUS + foragerWildCropBonus;
+                    int combinedLoot = SeraphLevelingModSystem.VANILLA_FORAGER_LOOT_BONUS + foragerLootBonus;
+                    int combinedWildCrop = SeraphLevelingModSystem.VANILLA_FORAGER_WILD_CROP_BONUS + foragerWildCropBonus;
                     __result = __result.Replace(
-                        $"+{SimpleImprovingTraitsModSystem.VANILLA_FORAGER_LOOT_BONUS}% foraging loot",
+                        $"+{SeraphLevelingModSystem.VANILLA_FORAGER_LOOT_BONUS}% foraging loot",
                         $"+{combinedLoot}% foraging loot");
                     __result = __result.Replace(
-                        $"+{SimpleImprovingTraitsModSystem.VANILLA_FORAGER_WILD_CROP_BONUS}% wild crop drops",
+                        $"+{SeraphLevelingModSystem.VANILLA_FORAGER_WILD_CROP_BONUS}% wild crop drops",
                         $"+{combinedWildCrop}% wild crop drops");
                 }
                 else if (hasNoTraits)
@@ -12076,13 +12261,13 @@ namespace SimpleImprovingTraits
             }
 
             // Process Furtive trait (reduces animal detection range)
-            int furtiveLevel = eplr.WatchedAttributes.GetInt(SimpleImprovingTraitsModSystem.WATCHED_FURTIVE_LEVEL, 0);
-            int furtiveBonus = eplr.WatchedAttributes.GetInt(SimpleImprovingTraitsModSystem.WATCHED_FURTIVE_BONUS, 0);
+            int furtiveLevel = eplr.WatchedAttributes.GetInt(SeraphLevelingModSystem.WATCHED_FURTIVE_LEVEL, 0);
+            int furtiveBonus = eplr.WatchedAttributes.GetInt(SeraphLevelingModSystem.WATCHED_FURTIVE_BONUS, 0);
             bool hasVanillaFurtive = eplr.WatchedAttributes.GetBool("sitHasVanillaFurtive", false);
             if (furtiveLevel > 0)
             {
-                string plainFurtiveTraitName = Lang.Get("simpleimprovingtraits:trait-sitfurtivemastery");
-                string dynamicFurtiveTrait = Lang.Get("simpleimprovingtraits:trait-furtive-dynamic", furtiveBonus);
+                string plainFurtiveTraitName = Lang.Get("seraphleveling:trait-sitfurtivemastery");
+                string dynamicFurtiveTrait = Lang.Get("seraphleveling:trait-furtive-dynamic", furtiveBonus);
 
                 // Re-check hasNoTraits
                 hasNoTraits = string.IsNullOrEmpty(__result) ||
@@ -12094,9 +12279,9 @@ namespace SimpleImprovingTraits
                 if (hasVanillaFurtive)
                 {
                     // Class already has Furtive trait - update the existing values
-                    int combinedBonus = SimpleImprovingTraitsModSystem.VANILLA_FURTIVE_DETECTION_REDUCTION + furtiveBonus;
+                    int combinedBonus = SeraphLevelingModSystem.VANILLA_FURTIVE_DETECTION_REDUCTION + furtiveBonus;
                     __result = __result.Replace(
-                        $"-{SimpleImprovingTraitsModSystem.VANILLA_FURTIVE_DETECTION_REDUCTION}% animal seeking range",
+                        $"-{SeraphLevelingModSystem.VANILLA_FURTIVE_DETECTION_REDUCTION}% animal seeking range",
                         $"-{combinedBonus}% animal detection range");
                 }
                 else if (hasNoTraits)
@@ -12114,13 +12299,13 @@ namespace SimpleImprovingTraits
             }
 
             // Process Precise trait (improves damage to mechanicals)
-            int preciseLevel = eplr.WatchedAttributes.GetInt(SimpleImprovingTraitsModSystem.WATCHED_PRECISE_LEVEL, 0);
-            int preciseBonus = eplr.WatchedAttributes.GetInt(SimpleImprovingTraitsModSystem.WATCHED_PRECISE_BONUS, 0);
+            int preciseLevel = eplr.WatchedAttributes.GetInt(SeraphLevelingModSystem.WATCHED_PRECISE_LEVEL, 0);
+            int preciseBonus = eplr.WatchedAttributes.GetInt(SeraphLevelingModSystem.WATCHED_PRECISE_BONUS, 0);
             bool hasVanillaPrecise = eplr.WatchedAttributes.GetBool("sitHasVanillaPrecise", false);
             if (preciseLevel > 0)
             {
-                string plainPreciseTraitName = Lang.Get("simpleimprovingtraits:trait-sitprecisemastery");
-                string dynamicPreciseTrait = Lang.Get("simpleimprovingtraits:trait-precise-dynamic", preciseBonus);
+                string plainPreciseTraitName = Lang.Get("seraphleveling:trait-sitprecisemastery");
+                string dynamicPreciseTrait = Lang.Get("seraphleveling:trait-precise-dynamic", preciseBonus);
 
                 // Re-check hasNoTraits
                 hasNoTraits = string.IsNullOrEmpty(__result) ||
@@ -12132,9 +12317,9 @@ namespace SimpleImprovingTraits
                 if (hasVanillaPrecise)
                 {
                     // Class already has Precise trait - update the existing values
-                    int combinedBonus = SimpleImprovingTraitsModSystem.VANILLA_PRECISE_MECHANICAL_DAMAGE_BONUS + preciseBonus;
+                    int combinedBonus = SeraphLevelingModSystem.VANILLA_PRECISE_MECHANICAL_DAMAGE_BONUS + preciseBonus;
                     __result = __result.Replace(
-                        $"+{SimpleImprovingTraitsModSystem.VANILLA_PRECISE_MECHANICAL_DAMAGE_BONUS}% damage vs mechanicals",
+                        $"+{SeraphLevelingModSystem.VANILLA_PRECISE_MECHANICAL_DAMAGE_BONUS}% damage vs mechanicals",
                         $"+{combinedBonus}% damage to mechanicals");
                 }
                 else if (hasNoTraits)
@@ -12152,12 +12337,12 @@ namespace SimpleImprovingTraits
             }
 
             // Process Hunger trait (reduces hunger rate)
-            int hungerLevel = eplr.WatchedAttributes.GetInt(SimpleImprovingTraitsModSystem.WATCHED_HUNGER_LEVEL, 0);
-            int hungerBonus = eplr.WatchedAttributes.GetInt(SimpleImprovingTraitsModSystem.WATCHED_HUNGER_BONUS, 0);
+            int hungerLevel = eplr.WatchedAttributes.GetInt(SeraphLevelingModSystem.WATCHED_HUNGER_LEVEL, 0);
+            int hungerBonus = eplr.WatchedAttributes.GetInt(SeraphLevelingModSystem.WATCHED_HUNGER_BONUS, 0);
             if (hungerLevel > 0)
             {
-                string plainHungerTraitName = Lang.Get("simpleimprovingtraits:trait-sithungermastery");
-                string dynamicHungerTrait = Lang.Get("simpleimprovingtraits:trait-hunger-dynamic", hungerBonus);
+                string plainHungerTraitName = Lang.Get("seraphleveling:trait-sithungermastery");
+                string dynamicHungerTrait = Lang.Get("seraphleveling:trait-hunger-dynamic", hungerBonus);
 
                 // Re-check hasNoTraits
                 hasNoTraits = string.IsNullOrEmpty(__result) ||
@@ -12181,11 +12366,11 @@ namespace SimpleImprovingTraits
             }
 
             // Process Technical unlock trait (translocator gear cost reduction)
-            bool technicalUnlocked = eplr.WatchedAttributes.GetBool(SimpleImprovingTraitsModSystem.WATCHED_TECHNICAL_UNLOCKED, false);
+            bool technicalUnlocked = eplr.WatchedAttributes.GetBool(SeraphLevelingModSystem.WATCHED_TECHNICAL_UNLOCKED, false);
             if (technicalUnlocked)
             {
-                string plainTechnicalTraitName = Lang.Get("simpleimprovingtraits:trait-sittechnicalmastery");
-                string dynamicTechnicalTrait = Lang.Get("simpleimprovingtraits:trait-technical-dynamic");
+                string plainTechnicalTraitName = Lang.Get("seraphleveling:trait-sittechnicalmastery");
+                string dynamicTechnicalTrait = Lang.Get("seraphleveling:trait-technical-dynamic");
 
                 // Re-check hasNoTraits
                 hasNoTraits = string.IsNullOrEmpty(__result) ||
@@ -12209,11 +12394,11 @@ namespace SimpleImprovingTraits
             }
 
             // Process Hardy Health unlock trait (+5 HP)
-            bool hardyHealthUnlocked = eplr.WatchedAttributes.GetBool(SimpleImprovingTraitsModSystem.WATCHED_HARDY_HEALTH_UNLOCKED, false);
+            bool hardyHealthUnlocked = eplr.WatchedAttributes.GetBool(SeraphLevelingModSystem.WATCHED_HARDY_HEALTH_UNLOCKED, false);
             if (hardyHealthUnlocked)
             {
-                string plainHardyHealthTraitName = Lang.Get("simpleimprovingtraits:trait-sithardyhealthmastery");
-                string dynamicHardyHealthTrait = Lang.Get("simpleimprovingtraits:trait-hardyhealth-dynamic", SimpleImprovingTraitsModSystem.HardyHealthBonus);
+                string plainHardyHealthTraitName = Lang.Get("seraphleveling:trait-sithardyhealthmastery");
+                string dynamicHardyHealthTrait = Lang.Get("seraphleveling:trait-hardyhealth-dynamic", SeraphLevelingModSystem.HardyHealthBonus);
 
                 // Re-check hasNoTraits
                 hasNoTraits = string.IsNullOrEmpty(__result) ||
@@ -12237,11 +12422,11 @@ namespace SimpleImprovingTraits
             }
 
             // Process Bowyer unlock trait (crude bow crafting)
-            bool bowyerUnlocked = eplr.WatchedAttributes.GetBool(SimpleImprovingTraitsModSystem.WATCHED_BOWYER_UNLOCKED, false);
+            bool bowyerUnlocked = eplr.WatchedAttributes.GetBool(SeraphLevelingModSystem.WATCHED_BOWYER_UNLOCKED, false);
             if (bowyerUnlocked)
             {
-                string plainBowyerTraitName = Lang.Get("simpleimprovingtraits:trait-sitbowyermastery");
-                string dynamicBowyerTrait = Lang.Get("simpleimprovingtraits:trait-bowyer-dynamic");
+                string plainBowyerTraitName = Lang.Get("seraphleveling:trait-sitbowyermastery");
+                string dynamicBowyerTrait = Lang.Get("seraphleveling:trait-bowyer-dynamic");
 
                 // Re-check hasNoTraits
                 hasNoTraits = string.IsNullOrEmpty(__result) ||
@@ -12265,11 +12450,11 @@ namespace SimpleImprovingTraits
             }
 
             // Process Improviser unlock trait (sling crafting)
-            bool improviserUnlocked = eplr.WatchedAttributes.GetBool(SimpleImprovingTraitsModSystem.WATCHED_IMPROVISER_UNLOCKED, false);
+            bool improviserUnlocked = eplr.WatchedAttributes.GetBool(SeraphLevelingModSystem.WATCHED_IMPROVISER_UNLOCKED, false);
             if (improviserUnlocked)
             {
-                string plainImproviserTraitName = Lang.Get("simpleimprovingtraits:trait-sitimprovisermastery");
-                string dynamicImproviserTrait = Lang.Get("simpleimprovingtraits:trait-improviser-dynamic");
+                string plainImproviserTraitName = Lang.Get("seraphleveling:trait-sitimprovisermastery");
+                string dynamicImproviserTrait = Lang.Get("seraphleveling:trait-improviser-dynamic");
 
                 // Re-check hasNoTraits
                 hasNoTraits = string.IsNullOrEmpty(__result) ||
@@ -12293,11 +12478,11 @@ namespace SimpleImprovingTraits
             }
 
             // Process Tinkerer unlock trait (tuning spear crafting)
-            bool tinkererUnlocked = eplr.WatchedAttributes.GetBool(SimpleImprovingTraitsModSystem.WATCHED_TINKERER_UNLOCKED, false);
+            bool tinkererUnlocked = eplr.WatchedAttributes.GetBool(SeraphLevelingModSystem.WATCHED_TINKERER_UNLOCKED, false);
             if (tinkererUnlocked)
             {
-                string plainTinkererTraitName = Lang.Get("simpleimprovingtraits:trait-sittinkerermastery");
-                string dynamicTinkererTrait = Lang.Get("simpleimprovingtraits:trait-tinkerer-dynamic");
+                string plainTinkererTraitName = Lang.Get("seraphleveling:trait-sittinkerermastery");
+                string dynamicTinkererTrait = Lang.Get("seraphleveling:trait-tinkerer-dynamic");
 
                 // Re-check hasNoTraits
                 hasNoTraits = string.IsNullOrEmpty(__result) ||
@@ -12321,11 +12506,11 @@ namespace SimpleImprovingTraits
             }
 
             // Process Merciless unlock trait (shortsword/shield crafting)
-            bool mercilessUnlocked = eplr.WatchedAttributes.GetBool(SimpleImprovingTraitsModSystem.WATCHED_MERCILESS_UNLOCKED, false);
+            bool mercilessUnlocked = eplr.WatchedAttributes.GetBool(SeraphLevelingModSystem.WATCHED_MERCILESS_UNLOCKED, false);
             if (mercilessUnlocked)
             {
-                string plainMercilessTraitName = Lang.Get("simpleimprovingtraits:trait-sitmercilessmastery");
-                string dynamicMercilessTrait = Lang.Get("simpleimprovingtraits:trait-merciless-dynamic");
+                string plainMercilessTraitName = Lang.Get("seraphleveling:trait-sitmercilessmastery");
+                string dynamicMercilessTrait = Lang.Get("seraphleveling:trait-merciless-dynamic");
 
                 // Re-check hasNoTraits
                 hasNoTraits = string.IsNullOrEmpty(__result) ||
@@ -12359,13 +12544,13 @@ namespace SimpleImprovingTraits
 
             // Civil trait (Tailor) - foraging loot penalty
             bool hasCivil = eplr.WatchedAttributes.GetBool("sitHasCivil", false);
-            int civilRemaining = eplr.WatchedAttributes.GetInt(SimpleImprovingTraitsModSystem.WATCHED_CIVIL_REMAINING, 0);
+            int civilRemaining = eplr.WatchedAttributes.GetInt(SeraphLevelingModSystem.WATCHED_CIVIL_REMAINING, 0);
             if (hasCivil)
             {
                 // Vanilla format: <font color="#ff8484">• Civil </font> <font opacity="0.6">(-10% loot from foraging)</font>
                 if (civilRemaining > 0)
                 {
-                    string dynamicCivilTrait = Lang.Get("simpleimprovingtraits:trait-civil-dynamic", civilRemaining);
+                    string dynamicCivilTrait = Lang.Get("seraphleveling:trait-civil-dynamic", civilRemaining);
                     __result = System.Text.RegularExpressions.Regex.Replace(__result,
                         @"<font color=""#ff8484"">• Civil </font> <font opacity=""0\.6"">\(-\d+% loot from foraging\)</font>",
                         dynamicCivilTrait);
@@ -12383,14 +12568,14 @@ namespace SimpleImprovingTraits
             // Vanilla format: <font color="#ff8484">• Weak </font> <font opacity="0.6">(-2 health points, -10% mining speed)</font>
             // Both penalties are cancelled together at mining level 10
             bool hasWeak = eplr.WatchedAttributes.GetBool("sitHasWeak", false);
-            int weakMiningRemaining = eplr.WatchedAttributes.GetInt(SimpleImprovingTraitsModSystem.WATCHED_WEAK_MINING_REMAINING, 0);
-            int weakHpRemaining = eplr.WatchedAttributes.GetInt(SimpleImprovingTraitsModSystem.WATCHED_WEAK_HP_REMAINING, 0);
+            int weakMiningRemaining = eplr.WatchedAttributes.GetInt(SeraphLevelingModSystem.WATCHED_WEAK_MINING_REMAINING, 0);
+            int weakHpRemaining = eplr.WatchedAttributes.GetInt(SeraphLevelingModSystem.WATCHED_WEAK_HP_REMAINING, 0);
             if (hasWeak)
             {
                 if (weakMiningRemaining > 0 || weakHpRemaining > 0)
                 {
                     // Show both penalties during progression (both are cancelled at level 10)
-                    string dynamicWeakTrait = Lang.Get("simpleimprovingtraits:trait-weak-dynamic", weakHpRemaining, weakMiningRemaining);
+                    string dynamicWeakTrait = Lang.Get("seraphleveling:trait-weak-dynamic", weakHpRemaining, weakMiningRemaining);
                     __result = System.Text.RegularExpressions.Regex.Replace(__result,
                         @"<font color=""#ff8484"">• Weak </font> <font opacity=""0\.6"">\(-\d+ health points, -\d+% mining speed\)</font>",
                         dynamicWeakTrait);
@@ -12407,8 +12592,8 @@ namespace SimpleImprovingTraits
             // Kind trait (Tailor) - animal loot and harvesting speed penalty
             // Vanilla format: <font color="#ff8484">• Kind </font> <font opacity="0.6">(-10% animal loot, -25% harvesting speed)</font>
             bool hasKind = eplr.WatchedAttributes.GetBool("sitHasKind", false);
-            int kindLootRemaining = eplr.WatchedAttributes.GetInt(SimpleImprovingTraitsModSystem.WATCHED_KIND_LOOT_REMAINING, 0);
-            int kindSpeedRemaining = eplr.WatchedAttributes.GetInt(SimpleImprovingTraitsModSystem.WATCHED_KIND_SPEED_REMAINING, 0);
+            int kindLootRemaining = eplr.WatchedAttributes.GetInt(SeraphLevelingModSystem.WATCHED_KIND_LOOT_REMAINING, 0);
+            int kindSpeedRemaining = eplr.WatchedAttributes.GetInt(SeraphLevelingModSystem.WATCHED_KIND_SPEED_REMAINING, 0);
             if (hasKind)
             {
                 if (kindLootRemaining > 0 || kindSpeedRemaining > 0)
@@ -12416,15 +12601,15 @@ namespace SimpleImprovingTraits
                     string dynamicKindTrait;
                     if (kindLootRemaining > 0 && kindSpeedRemaining > 0)
                     {
-                        dynamicKindTrait = Lang.Get("simpleimprovingtraits:trait-kind-dynamic", kindLootRemaining, kindSpeedRemaining);
+                        dynamicKindTrait = Lang.Get("seraphleveling:trait-kind-dynamic", kindLootRemaining, kindSpeedRemaining);
                     }
                     else if (kindLootRemaining > 0)
                     {
-                        dynamicKindTrait = Lang.Get("simpleimprovingtraits:trait-kind-loot-only-dynamic", kindLootRemaining);
+                        dynamicKindTrait = Lang.Get("seraphleveling:trait-kind-loot-only-dynamic", kindLootRemaining);
                     }
                     else
                     {
-                        dynamicKindTrait = Lang.Get("simpleimprovingtraits:trait-kind-speed-only-dynamic", kindSpeedRemaining);
+                        dynamicKindTrait = Lang.Get("seraphleveling:trait-kind-speed-only-dynamic", kindSpeedRemaining);
                     }
                     __result = System.Text.RegularExpressions.Regex.Replace(__result,
                         @"<font color=""#ff8484"">• Kind </font> <font opacity=""0\.6"">\(-\d+% animal loot, -\d+% harvesting speed\)</font>",
@@ -12442,12 +12627,12 @@ namespace SimpleImprovingTraits
             // Farsighted trait (Hunter) - melee damage penalty
             // Vanilla format: <font color="#ff8484">• Farsighted </font> <font opacity="0.6">(-15% melee damage)</font>
             bool hasFarsighted = eplr.WatchedAttributes.GetBool("sitHasFarsighted", false);
-            int farsightedRemaining = eplr.WatchedAttributes.GetInt(SimpleImprovingTraitsModSystem.WATCHED_FARSIGHTED_REMAINING, 0);
+            int farsightedRemaining = eplr.WatchedAttributes.GetInt(SeraphLevelingModSystem.WATCHED_FARSIGHTED_REMAINING, 0);
             if (hasFarsighted)
             {
                 if (farsightedRemaining > 0)
                 {
-                    string dynamicFarsightedTrait = Lang.Get("simpleimprovingtraits:trait-farsighted-dynamic", farsightedRemaining);
+                    string dynamicFarsightedTrait = Lang.Get("seraphleveling:trait-farsighted-dynamic", farsightedRemaining);
                     __result = System.Text.RegularExpressions.Regex.Replace(__result,
                         @"<font color=""#ff8484"">• Farsighted </font> <font opacity=""0\.6"">\(-\d+% melee damage\)</font>",
                         dynamicFarsightedTrait);
@@ -12464,12 +12649,12 @@ namespace SimpleImprovingTraits
             // Nervous trait (Malefactor, Clockmaker) - melee damage penalty
             // Vanilla format: <font color="#ff8484">• Nervous </font> <font opacity="0.6">(-15% melee damage)</font>
             bool hasNervous = eplr.WatchedAttributes.GetBool("sitHasNervous", false);
-            int nervousRemaining = eplr.WatchedAttributes.GetInt(SimpleImprovingTraitsModSystem.WATCHED_NERVOUS_REMAINING, 0);
+            int nervousRemaining = eplr.WatchedAttributes.GetInt(SeraphLevelingModSystem.WATCHED_NERVOUS_REMAINING, 0);
             if (hasNervous)
             {
                 if (nervousRemaining > 0)
                 {
-                    string dynamicNervousTrait = Lang.Get("simpleimprovingtraits:trait-nervous-dynamic", nervousRemaining);
+                    string dynamicNervousTrait = Lang.Get("seraphleveling:trait-nervous-dynamic", nervousRemaining);
                     __result = System.Text.RegularExpressions.Regex.Replace(__result,
                         @"<font color=""#ff8484"">• Nervous </font> <font opacity=""0\.6"">\(-\d+% melee damage\)</font>",
                         dynamicNervousTrait);
@@ -12486,12 +12671,12 @@ namespace SimpleImprovingTraits
             // Nearsighted trait (Blackguard) - ranged damage penalty
             // Vanilla format: <font color="#ff8484">• Nearsighted </font> <font opacity="0.6">(-15% ranged damage)</font>
             bool hasNearsighted = eplr.WatchedAttributes.GetBool("sitHasNearsighted", false);
-            int nearsightedRemaining = eplr.WatchedAttributes.GetInt(SimpleImprovingTraitsModSystem.WATCHED_NEARSIGHTED_REMAINING, 0);
+            int nearsightedRemaining = eplr.WatchedAttributes.GetInt(SeraphLevelingModSystem.WATCHED_NEARSIGHTED_REMAINING, 0);
             if (hasNearsighted)
             {
                 if (nearsightedRemaining > 0)
                 {
-                    string dynamicNearsightedTrait = Lang.Get("simpleimprovingtraits:trait-nearsighted-dynamic", nearsightedRemaining);
+                    string dynamicNearsightedTrait = Lang.Get("seraphleveling:trait-nearsighted-dynamic", nearsightedRemaining);
                     __result = System.Text.RegularExpressions.Regex.Replace(__result,
                         @"<font color=""#ff8484"">• Nearsighted </font> <font opacity=""0\.6"">\(-\d+% ranged damage\)</font>",
                         dynamicNearsightedTrait);
@@ -12509,14 +12694,14 @@ namespace SimpleImprovingTraits
             // Vanilla format: <font color="#ff8484">• Frail </font> <font opacity="0.6">(-2.5 health points, -25% ranged distance)</font>
             // Both penalties are cancelled together at ranged level 25
             bool hasFrail = eplr.WatchedAttributes.GetBool("sitHasFrail", false);
-            int frailDistanceRemaining = eplr.WatchedAttributes.GetInt(SimpleImprovingTraitsModSystem.WATCHED_FRAIL_DISTANCE_REMAINING, 0);
-            float frailHpRemaining = eplr.WatchedAttributes.GetFloat(SimpleImprovingTraitsModSystem.WATCHED_FRAIL_HP_REMAINING, 0f);
+            int frailDistanceRemaining = eplr.WatchedAttributes.GetInt(SeraphLevelingModSystem.WATCHED_FRAIL_DISTANCE_REMAINING, 0);
+            float frailHpRemaining = eplr.WatchedAttributes.GetFloat(SeraphLevelingModSystem.WATCHED_FRAIL_HP_REMAINING, 0f);
             if (hasFrail)
             {
                 if (frailDistanceRemaining > 0 || frailHpRemaining > 0)
                 {
                     // Show both penalties during progression (both are cancelled at level 25)
-                    string dynamicFrailTrait = Lang.Get("simpleimprovingtraits:trait-frail-dynamic", frailHpRemaining, frailDistanceRemaining);
+                    string dynamicFrailTrait = Lang.Get("seraphleveling:trait-frail-dynamic", frailHpRemaining, frailDistanceRemaining);
                     __result = System.Text.RegularExpressions.Regex.Replace(__result,
                         @"<font color=""#ff8484"">• Frail </font> <font opacity=""0\.6"">\(-[\d\.]+ health points, -\d+% ranged distance\)</font>",
                         dynamicFrailTrait);
@@ -12533,9 +12718,9 @@ namespace SimpleImprovingTraits
             // Heavyhanded trait (Blackguard) - vessel, foraging, wild crop penalties
             // Vanilla format: <font color="#ff8484">• Heavyhanded </font> <font opacity="0.6">(-10% cracked vessel loot, -15% loot from foraging, -20% wild crop drop rate)</font>
             bool hasHeavyhanded = eplr.WatchedAttributes.GetBool("sitHasHeavyhanded", false);
-            int heavyhandedVesselRemaining = eplr.WatchedAttributes.GetInt(SimpleImprovingTraitsModSystem.WATCHED_HEAVYHANDED_VESSEL_REMAINING, 0);
-            int heavyhandedForagingRemaining = eplr.WatchedAttributes.GetInt(SimpleImprovingTraitsModSystem.WATCHED_HEAVYHANDED_FORAGING_REMAINING, 0);
-            int heavyhandedWildCropRemaining = eplr.WatchedAttributes.GetInt(SimpleImprovingTraitsModSystem.WATCHED_HEAVYHANDED_WILD_CROP_REMAINING, 0);
+            int heavyhandedVesselRemaining = eplr.WatchedAttributes.GetInt(SeraphLevelingModSystem.WATCHED_HEAVYHANDED_VESSEL_REMAINING, 0);
+            int heavyhandedForagingRemaining = eplr.WatchedAttributes.GetInt(SeraphLevelingModSystem.WATCHED_HEAVYHANDED_FORAGING_REMAINING, 0);
+            int heavyhandedWildCropRemaining = eplr.WatchedAttributes.GetInt(SeraphLevelingModSystem.WATCHED_HEAVYHANDED_WILD_CROP_REMAINING, 0);
             if (hasHeavyhanded)
             {
                 if (heavyhandedVesselRemaining > 0 || heavyhandedForagingRemaining > 0 || heavyhandedWildCropRemaining > 0)
@@ -12547,7 +12732,7 @@ namespace SimpleImprovingTraits
                     if (heavyhandedWildCropRemaining > 0) parts.Add($"-{heavyhandedWildCropRemaining}% wild crop drop rate");
 
                     string partialDescription = string.Join(", ", parts);
-                    string dynamicHeavyhandedTrait = Lang.Get("simpleimprovingtraits:trait-heavyhanded-partial-dynamic", partialDescription);
+                    string dynamicHeavyhandedTrait = Lang.Get("seraphleveling:trait-heavyhanded-partial-dynamic", partialDescription);
                     __result = System.Text.RegularExpressions.Regex.Replace(__result,
                         @"<font color=""#ff8484"">• Heavyhanded </font> <font opacity=""0\.6"">\(-\d+% cracked vessel loot, -\d+% loot from foraging, -\d+% wild crop drop rate\)</font>",
                         dynamicHeavyhandedTrait);
@@ -12564,13 +12749,13 @@ namespace SimpleImprovingTraits
             // Ravenous trait (Blackguard) - hunger rate penalty
             // Vanilla format: <font color="#ff8484">• Ravenous </font> <font opacity="0.6">(+30% hunger rate)</font>
             bool hasRavenous = eplr.WatchedAttributes.GetBool("sitHasVanillaRavenous", false);
-            int ravenousRemaining = eplr.WatchedAttributes.GetInt(SimpleImprovingTraitsModSystem.WATCHED_RAVENOUS_REMAINING, 0);
+            int ravenousRemaining = eplr.WatchedAttributes.GetInt(SeraphLevelingModSystem.WATCHED_RAVENOUS_REMAINING, 0);
             if (hasRavenous)
             {
                 if (ravenousRemaining > 0)
                 {
                     // Show Ravenous with remaining penalty
-                    string dynamicRavenousTrait = Lang.Get("simpleimprovingtraits:trait-ravenous-dynamic", ravenousRemaining);
+                    string dynamicRavenousTrait = Lang.Get("seraphleveling:trait-ravenous-dynamic", ravenousRemaining);
                     __result = System.Text.RegularExpressions.Regex.Replace(__result,
                         @"<font color=""#ff8484"">• Ravenous </font> <font opacity=""0\.6"">\(\+\d+% hunger rate\)</font>",
                         dynamicRavenousTrait);
@@ -12588,10 +12773,10 @@ namespace SimpleImprovingTraits
             // Mining penalty decreases progressively with mining level (1-10)
             // At level 10, both mining and ore penalties are cancelled, and Hardy bonus starts showing
             bool hasClaustrophobic = eplr.WatchedAttributes.GetBool("sitHasClaustrophobic", false);
-            int claustrophobicMiningRemaining = eplr.WatchedAttributes.GetInt(SimpleImprovingTraitsModSystem.WATCHED_CLAUSTROPHOBIC_MINING_REMAINING, 0);
+            int claustrophobicMiningRemaining = eplr.WatchedAttributes.GetInt(SeraphLevelingModSystem.WATCHED_CLAUSTROPHOBIC_MINING_REMAINING, 0);
 
-            ClientApi.Logger.Debug($"[SimpleImprovingTraits] Claustrophobic check: hasClaustrophobic={hasClaustrophobic}, miningRemaining={claustrophobicMiningRemaining}");
-            ClientApi.Logger.Debug($"[SimpleImprovingTraits] Result contains 'Claustrophobic': {__result.Contains("Claustrophobic")}");
+            ClientApi.Logger.Debug($"[SeraphLeveling] Claustrophobic check: hasClaustrophobic={hasClaustrophobic}, miningRemaining={claustrophobicMiningRemaining}");
+            ClientApi.Logger.Debug($"[SeraphLeveling] Result contains 'Claustrophobic': {__result.Contains("Claustrophobic")}");
 
             if (hasClaustrophobic)
             {
@@ -12599,9 +12784,9 @@ namespace SimpleImprovingTraits
                 {
                     // Show both ore drop (-15%) and mining speed penalties while being reduced
                     // Ore penalty stays at -15% until fully cancelled, mining speed decreases progressively
-                    string dynamicClaustrophobicTrait = Lang.Get("simpleimprovingtraits:trait-claustrophobic-dynamic",
-                        SimpleImprovingTraitsModSystem.VANILLA_CLAUSTROPHOBIC_ORE_PENALTY, claustrophobicMiningRemaining);
-                    ClientApi.Logger.Debug($"[SimpleImprovingTraits] Replacing Claustrophobic with: {dynamicClaustrophobicTrait}");
+                    string dynamicClaustrophobicTrait = Lang.Get("seraphleveling:trait-claustrophobic-dynamic",
+                        SeraphLevelingModSystem.VANILLA_CLAUSTROPHOBIC_ORE_PENALTY, claustrophobicMiningRemaining);
+                    ClientApi.Logger.Debug($"[SeraphLeveling] Replacing Claustrophobic with: {dynamicClaustrophobicTrait}");
 
                     // Vanilla format: <font color="#ff8484">• Claustrophobic </font> <font opacity="0.6">(-15% ore drop rate, -10% mining speed)</font>
                     string beforeReplace = __result;
@@ -12611,7 +12796,7 @@ namespace SimpleImprovingTraits
 
                     if (__result == beforeReplace)
                     {
-                        ClientApi.Logger.Debug("[SimpleImprovingTraits] Primary regex did not match, trying alternative patterns");
+                        ClientApi.Logger.Debug("[SeraphLeveling] Primary regex did not match, trying alternative patterns");
                         // Try without bullet
                         __result = System.Text.RegularExpressions.Regex.Replace(__result,
                             @"<font color=""#ff8484"">Claustrophobic</font>.*?\(-\d+% ore drop rate, -\d+% mining speed\).*?</font>",
@@ -12626,12 +12811,12 @@ namespace SimpleImprovingTraits
                             dynamicClaustrophobicTrait);
                     }
 
-                    ClientApi.Logger.Debug($"[SimpleImprovingTraits] After replacement: {(__result != beforeReplace ? "SUCCESS" : "FAILED")}");
+                    ClientApi.Logger.Debug($"[SeraphLeveling] After replacement: {(__result != beforeReplace ? "SUCCESS" : "FAILED")}");
                 }
                 else
                 {
                     // Both penalties cancelled at level 10 - remove Claustrophobic entirely (Hardy will show instead)
-                    ClientApi.Logger.Debug("[SimpleImprovingTraits] Trying to remove Claustrophobic (level >= 10)");
+                    ClientApi.Logger.Debug("[SeraphLeveling] Trying to remove Claustrophobic (level >= 10)");
                     string beforeReplace = __result;
 
                     // Vanilla format: <font color="#ff8484">• Claustrophobic </font> <font opacity="0.6">(-15% ore drop rate, -10% mining speed)</font>
@@ -12642,7 +12827,7 @@ namespace SimpleImprovingTraits
 
                     if (__result == beforeReplace)
                     {
-                        ClientApi.Logger.Debug("[SimpleImprovingTraits] Primary removal regex did not match, trying alternatives");
+                        ClientApi.Logger.Debug("[SeraphLeveling] Primary removal regex did not match, trying alternatives");
                         // Try broader pattern
                         __result = System.Text.RegularExpressions.Regex.Replace(__result,
                             @"\n?<font color=""#ff8484"">.*?Claustrophobic.*?</font>.*?\(-\d+% ore drop rate, -\d+% mining speed\).*?</font>",
@@ -12657,7 +12842,7 @@ namespace SimpleImprovingTraits
                             "");
                     }
 
-                    ClientApi.Logger.Debug($"[SimpleImprovingTraits] Removal result: {(__result != beforeReplace ? "SUCCESS" : "FAILED")}");
+                    ClientApi.Logger.Debug($"[SeraphLeveling] Removal result: {(__result != beforeReplace ? "SUCCESS" : "FAILED")}");
                 }
             }
 
@@ -12680,7 +12865,7 @@ namespace SimpleImprovingTraits
             // Final trim
             __result = __result.Trim();
 
-            ClientApi.Logger.Debug($"[SimpleImprovingTraits] Modified result: {__result}");
+            ClientApi.Logger.Debug($"[SeraphLeveling] Modified result: {__result}");
         }
     }
 
@@ -12702,7 +12887,7 @@ namespace SimpleImprovingTraits
             TrackArmorDamageBlocked(__instance, damageSource, damage);
 
             // Check if this is ranged damage (projectile with CauseEntity)
-            if (SimpleImprovingTraitsModSystem.IsRangedDamage(damageSource))
+            if (SeraphLevelingModSystem.IsRangedDamage(damageSource))
             {
                 // For ranged: CauseEntity is the shooter, SourceEntity is the projectile
                 var shooterEntity = damageSource.CauseEntity as EntityPlayer;
@@ -12715,16 +12900,16 @@ namespace SimpleImprovingTraits
                 if (__instance == shooterEntity) return;
 
                 // Get the weapon combination (bow+arrow, sling+stone, etc.)
-                string weaponCombo = SimpleImprovingTraitsModSystem.GetRangedWeaponCombo(damageSource.SourceEntity, shooterEntity);
+                string weaponCombo = SeraphLevelingModSystem.GetRangedWeaponCombo(damageSource.SourceEntity, shooterEntity);
 
                 if (weaponCombo != null)
                 {
-                    SimpleImprovingTraitsModSystem.ProcessRangedDamage(shooterPlayer, weaponCombo, damage);
+                    SeraphLevelingModSystem.ProcessRangedDamage(shooterPlayer, weaponCombo, damage);
 
                     // Also track Precise damage if target is a mechanical creature
-                    if (SimpleImprovingTraitsModSystem.IsMechanicalCreature(__instance))
+                    if (SeraphLevelingModSystem.IsMechanicalCreature(__instance))
                     {
-                        SimpleImprovingTraitsModSystem.ProcessPreciseDamage(shooterPlayer, weaponCombo, damage);
+                        SeraphLevelingModSystem.ProcessPreciseDamage(shooterPlayer, weaponCombo, damage);
                     }
                 }
                 return; // Don't also count as melee
@@ -12744,16 +12929,16 @@ namespace SimpleImprovingTraits
             if (heldItem == null) return;
 
             string itemCode = heldItem.Code?.ToString();
-            string weaponType = SimpleImprovingTraitsModSystem.GetWeaponTypeFromCode(itemCode);
+            string weaponType = SeraphLevelingModSystem.GetWeaponTypeFromCode(itemCode);
 
             if (weaponType != null)
             {
-                SimpleImprovingTraitsModSystem.ProcessMeleeDamage(attackerPlayer, weaponType, damage);
+                SeraphLevelingModSystem.ProcessMeleeDamage(attackerPlayer, weaponType, damage);
 
                 // Also track Precise damage if target is a mechanical creature
-                if (SimpleImprovingTraitsModSystem.IsMechanicalCreature(__instance))
+                if (SeraphLevelingModSystem.IsMechanicalCreature(__instance))
                 {
-                    SimpleImprovingTraitsModSystem.ProcessPreciseDamage(attackerPlayer, weaponType, damage);
+                    SeraphLevelingModSystem.ProcessPreciseDamage(attackerPlayer, weaponType, damage);
                 }
             }
         }
@@ -12801,7 +12986,7 @@ namespace SimpleImprovingTraits
                 if (slot?.Itemstack?.Collectible == null) continue;
 
                 string itemCode = slot.Itemstack.Collectible.Code?.ToString();
-                string armorType = SimpleImprovingTraitsModSystem.GetArmorType(itemCode);
+                string armorType = SeraphLevelingModSystem.GetArmorType(itemCode);
 
                 if (armorType == null) continue; // Not armor
 
@@ -12847,7 +13032,7 @@ namespace SimpleImprovingTraits
 
                 if (damageBlocked > 0)
                 {
-                    SimpleImprovingTraitsModSystem.ProcessArmorDamageBlocked(player, damageBlocked, itemCode);
+                    SeraphLevelingModSystem.ProcessArmorDamageBlocked(player, damageBlocked, itemCode);
                 }
             }
         }
@@ -12872,12 +13057,12 @@ namespace SimpleImprovingTraits
                 if (serverPlayer == null) return;
 
                 // Call the Resourceful progression handler
-                SimpleImprovingTraitsModSystem.ProcessAnimalHarvested(serverPlayer);
+                SeraphLevelingModSystem.ProcessAnimalHarvested(serverPlayer);
             }
             catch (Exception ex)
             {
                 // Silently ignore errors to avoid breaking the game
-                System.Diagnostics.Debug.WriteLine($"[SimpleImprovingTraits] Error in SetHarvested_Postfix: {ex.Message}");
+                System.Diagnostics.Debug.WriteLine($"[SeraphLeveling] Error in SetHarvested_Postfix: {ex.Message}");
             }
         }
     }
@@ -12933,11 +13118,11 @@ namespace SimpleImprovingTraits
 
                 // Update last repair time and give credit
                 LastRepairTime[playerKey] = currentTick;
-                SimpleImprovingTraitsModSystem.ProcessMenderRepair(player);
+                SeraphLevelingModSystem.ProcessMenderRepair(player);
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"[SimpleImprovingTraits] Error in OnHeldInteractStop_Postfix: {ex.Message}");
+                System.Diagnostics.Debug.WriteLine($"[SeraphLeveling] Error in OnHeldInteractStop_Postfix: {ex.Message}");
             }
         }
 
@@ -13001,7 +13186,7 @@ namespace SimpleImprovingTraits
                                         currentTick - lastTime >= MIN_REPAIR_INTERVAL * 50)
                                     {
                                         LastRepairTime[playerKey] = currentTick;
-                                        SimpleImprovingTraitsModSystem.ProcessMenderRepair(serverPlayer);
+                                        SeraphLevelingModSystem.ProcessMenderRepair(serverPlayer);
                                     }
                                     break;
                                 }
@@ -13015,7 +13200,7 @@ namespace SimpleImprovingTraits
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"[SimpleImprovingTraits] Error in OnModifiedInInventorySlot_Postfix: {ex.Message}");
+                System.Diagnostics.Debug.WriteLine($"[SeraphLeveling] Error in OnModifiedInInventorySlot_Postfix: {ex.Message}");
             }
         }
 
@@ -13060,11 +13245,11 @@ namespace SimpleImprovingTraits
 
                 // Update last repair time and give credit
                 LastRepairTime[playerKey] = currentTick;
-                SimpleImprovingTraitsModSystem.ProcessMenderRepair(player);
+                SeraphLevelingModSystem.ProcessMenderRepair(player);
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"[SimpleImprovingTraits] Error in OnHeldInteractStep_Postfix: {ex.Message}");
+                System.Diagnostics.Debug.WriteLine($"[SeraphLeveling] Error in OnHeldInteractStep_Postfix: {ex.Message}");
             }
         }
     }
@@ -13102,12 +13287,12 @@ namespace SimpleImprovingTraits
                 // Check if this repair just completed (FullyRepaired is now true)
                 if (repairState >= repairRequired)
                 {
-                    SimpleImprovingTraitsModSystem.ProcessTranslocatorRepair(serverPlayer);
+                    SeraphLevelingModSystem.ProcessTranslocatorRepair(serverPlayer);
                 }
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"[SimpleImprovingTraits] Error in DoRepair_Postfix: {ex.Message}");
+                System.Diagnostics.Debug.WriteLine($"[SeraphLeveling] Error in DoRepair_Postfix: {ex.Message}");
             }
         }
     }

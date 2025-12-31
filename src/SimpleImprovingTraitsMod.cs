@@ -940,7 +940,7 @@ namespace SimpleImprovingTraits
         // Switching pickaxe types resets the increment counter back to base
         public static int BaseBlocksPerIncrement = 100;  // Base points needed for first credit
         public static int IncrementStep = 100;           // How much more points each subsequent credit needs
-        public static int MaxMiningSpeedPercent = 150;   // 150% max bonus
+        public static int MaxMiningSpeedPercent = 50;    // 50% max bonus
         public static int OreMultiplier = 5;             // Ore blocks count for 5x points
 
         // Keys for melee damage progression system
@@ -9882,7 +9882,7 @@ namespace SimpleImprovingTraits
             // Mining defaults
             BaseBlocksPerIncrement = 100;
             IncrementStep = 100;
-            MaxMiningSpeedPercent = 150;
+            MaxMiningSpeedPercent = 50;
             OreMultiplier = 5;
 
             // Melee defaults

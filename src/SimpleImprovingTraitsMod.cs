@@ -1404,6 +1404,58 @@ namespace SimpleImprovingTraits
         public static ConcurrentDictionary<string, ClaustrophobicRemovalProgressData> ClaustrophobicRemovalProgress = new ConcurrentDictionary<string, ClaustrophobicRemovalProgressData>();
         private static volatile bool pendingClaustrophobicRemovalProgressSave = false;
 
+        // =========================================================================
+        // NEGATIVE TRAIT CONSTANTS - Used for cancellation calculations
+        // =========================================================================
+
+        // Farsighted (Hunter): -15% melee damage
+        public const int VANILLA_FARSIGHTED_MELEE_PENALTY = 15;
+        public const string WATCHED_FARSIGHTED_REMAINING = "sitFarsightedRemaining";
+
+        // Nervous (Malefactor, Clockmaker): -15% melee damage
+        public const int VANILLA_NERVOUS_MELEE_PENALTY = 15;
+        public const string WATCHED_NERVOUS_REMAINING = "sitNervousRemaining";
+
+        // Nearsighted (Blackguard): -15% ranged damage
+        public const int VANILLA_NEARSIGHTED_RANGED_PENALTY = 15;
+        public const string WATCHED_NEARSIGHTED_REMAINING = "sitNearsightedRemaining";
+
+        // Frail (Malefactor, Clockmaker): -2.5 HP, -25% ranged distance
+        public const float VANILLA_FRAIL_HP_PENALTY = 2.5f;
+        public const int VANILLA_FRAIL_DISTANCE_PENALTY = 25;
+        public const string WATCHED_FRAIL_HP_REMAINING = "sitFrailHpRemaining";
+        public const string WATCHED_FRAIL_DISTANCE_REMAINING = "sitFrailDistanceRemaining";
+
+        // Civil (Tailor): -10% loot from foraging
+        public const int VANILLA_CIVIL_FORAGING_PENALTY = 10;
+        public const string WATCHED_CIVIL_REMAINING = "sitCivilRemaining";
+
+        // Weak (Tailor): -2 HP, -10% mining speed
+        public const int VANILLA_WEAK_HP_PENALTY = 2;
+        public const int VANILLA_WEAK_MINING_PENALTY = 10;
+        public const string WATCHED_WEAK_HP_REMAINING = "sitWeakHpRemaining";
+        public const string WATCHED_WEAK_MINING_REMAINING = "sitWeakMiningRemaining";
+
+        // Kind (Tailor): -10% animal loot, -25% harvesting speed
+        public const int VANILLA_KIND_LOOT_PENALTY = 10;
+        public const int VANILLA_KIND_SPEED_PENALTY = 25;
+        public const string WATCHED_KIND_LOOT_REMAINING = "sitKindLootRemaining";
+        public const string WATCHED_KIND_SPEED_REMAINING = "sitKindSpeedRemaining";
+
+        // Heavyhanded (Blackguard): -10% vessel loot, -15% foraging, -20% wild crop
+        public const int VANILLA_HEAVYHANDED_VESSEL_PENALTY = 10;
+        public const int VANILLA_HEAVYHANDED_FORAGING_PENALTY = 15;
+        public const int VANILLA_HEAVYHANDED_WILD_CROP_PENALTY = 20;
+        public const string WATCHED_HEAVYHANDED_VESSEL_REMAINING = "sitHeavyhandedVesselRemaining";
+        public const string WATCHED_HEAVYHANDED_FORAGING_REMAINING = "sitHeavyhandedForagingRemaining";
+        public const string WATCHED_HEAVYHANDED_WILD_CROP_REMAINING = "sitHeavyhandedWildCropRemaining";
+
+        // Claustrophobic (Hunter): -15% ore drop, -10% mining speed - already defined above
+        public const int VANILLA_CLAUSTROPHOBIC_ORE_PENALTY = 15;
+        public const int VANILLA_CLAUSTROPHOBIC_MINING_PENALTY = 10;
+        public const string WATCHED_CLAUSTROPHOBIC_ORE_REMAINING = "sitClaustrophobicOreRemaining";
+        public const string WATCHED_CLAUSTROPHOBIC_MINING_REMAINING = "sitClaustrophobicMiningRemaining";
+
         private const string CONFIG_SAVE_KEY = "sitConfig";
 
         // Vanilla Hardy trait mining speed bonus (used for cap calculations)
@@ -1898,6 +1950,13 @@ namespace SimpleImprovingTraits
                     .RequiresPrivilege(Privilege.controlserver)
                     .RequiresPlayer()
                     .HandleWith(OnTraitClaustrophobicUnlockCommand)
+                .EndSubCommand()
+                // Reset all traits
+                .BeginSubCommand("reset")
+                    .WithDescription("Reset all trait progression to 0 (admin only)")
+                    .RequiresPrivilege(Privilege.controlserver)
+                    .RequiresPlayer()
+                    .HandleWith(OnTraitResetCommand)
                 .EndSubCommand();
 
             // Hook into block breaking for mining progression
@@ -1997,7 +2056,8 @@ namespace SimpleImprovingTraits
                 "  /trait armorlevel [level] - Set your armor durability level (admin)\n" +
                 "  /trait armorwalkspeedlevel [level] - Set walk speed penalty reduction level (admin)\n" +
                 "  /trait armordurabilitymax [percent] - Get or set max durability bonus (admin)\n" +
-                "  /trait armorwalkspeedmax [percent] - Get or set max walk speed reduction (admin)");
+                "  /trait armorwalkspeedmax [percent] - Get or set max walk speed reduction (admin)\n" +
+                "  /trait reset - Reset all trait progression to 0 (admin)");
         }
 
         /// <summary>
@@ -3482,6 +3542,192 @@ namespace SimpleImprovingTraits
             return characterClass.Equals("blackguard", StringComparison.OrdinalIgnoreCase);
         }
 
+        // =========================================================================
+        // NEGATIVE TRAIT DETECTION METHODS
+        // =========================================================================
+
+        /// <summary>
+        /// Checks if the player's class has the vanilla Farsighted trait (Hunter).
+        /// </summary>
+        public static bool PlayerHasVanillaFarsighted(EntityPlayer entity)
+        {
+            if (entity == null) return false;
+            string[] classTraits = entity.WatchedAttributes.GetStringArray("characterTraits", null);
+            if (classTraits != null)
+            {
+                foreach (string trait in classTraits)
+                {
+                    if (trait.Equals("farsighted", StringComparison.OrdinalIgnoreCase))
+                        return true;
+                }
+            }
+            string characterClass = entity.WatchedAttributes.GetString("characterClass", "");
+            return characterClass.Equals("hunter", StringComparison.OrdinalIgnoreCase);
+        }
+
+        /// <summary>
+        /// Checks if the player's class has the vanilla Nervous trait (Malefactor, Clockmaker).
+        /// </summary>
+        public static bool PlayerHasVanillaNervous(EntityPlayer entity)
+        {
+            if (entity == null) return false;
+            string[] classTraits = entity.WatchedAttributes.GetStringArray("characterTraits", null);
+            if (classTraits != null)
+            {
+                foreach (string trait in classTraits)
+                {
+                    if (trait.Equals("nervous", StringComparison.OrdinalIgnoreCase))
+                        return true;
+                }
+            }
+            string characterClass = entity.WatchedAttributes.GetString("characterClass", "");
+            return characterClass.Equals("malefactor", StringComparison.OrdinalIgnoreCase) ||
+                   characterClass.Equals("clockmaker", StringComparison.OrdinalIgnoreCase);
+        }
+
+        /// <summary>
+        /// Checks if the player's class has the vanilla Nearsighted trait (Blackguard).
+        /// </summary>
+        public static bool PlayerHasVanillaNearsighted(EntityPlayer entity)
+        {
+            if (entity == null) return false;
+            string[] classTraits = entity.WatchedAttributes.GetStringArray("characterTraits", null);
+            if (classTraits != null)
+            {
+                foreach (string trait in classTraits)
+                {
+                    if (trait.Equals("nearsighted", StringComparison.OrdinalIgnoreCase))
+                        return true;
+                }
+            }
+            string characterClass = entity.WatchedAttributes.GetString("characterClass", "");
+            return characterClass.Equals("blackguard", StringComparison.OrdinalIgnoreCase);
+        }
+
+        /// <summary>
+        /// Checks if the player's class has the vanilla Frail trait (Malefactor, Clockmaker).
+        /// </summary>
+        public static bool PlayerHasVanillaFrail(EntityPlayer entity)
+        {
+            if (entity == null) return false;
+            string[] classTraits = entity.WatchedAttributes.GetStringArray("characterTraits", null);
+            if (classTraits != null)
+            {
+                foreach (string trait in classTraits)
+                {
+                    if (trait.Equals("frail", StringComparison.OrdinalIgnoreCase))
+                        return true;
+                }
+            }
+            string characterClass = entity.WatchedAttributes.GetString("characterClass", "");
+            return characterClass.Equals("malefactor", StringComparison.OrdinalIgnoreCase) ||
+                   characterClass.Equals("clockmaker", StringComparison.OrdinalIgnoreCase);
+        }
+
+        /// <summary>
+        /// Checks if the player's class has the vanilla Civil trait (Tailor).
+        /// </summary>
+        public static bool PlayerHasVanillaCivil(EntityPlayer entity)
+        {
+            if (entity == null) return false;
+            string[] classTraits = entity.WatchedAttributes.GetStringArray("characterTraits", null);
+            if (classTraits != null)
+            {
+                foreach (string trait in classTraits)
+                {
+                    if (trait.Equals("civil", StringComparison.OrdinalIgnoreCase))
+                        return true;
+                }
+            }
+            string characterClass = entity.WatchedAttributes.GetString("characterClass", "");
+            return characterClass.Equals("tailor", StringComparison.OrdinalIgnoreCase);
+        }
+
+        /// <summary>
+        /// Checks if the player's class has the vanilla Weak trait (Tailor).
+        /// </summary>
+        public static bool PlayerHasVanillaWeak(EntityPlayer entity)
+        {
+            if (entity == null) return false;
+            string[] classTraits = entity.WatchedAttributes.GetStringArray("characterTraits", null);
+            if (classTraits != null)
+            {
+                foreach (string trait in classTraits)
+                {
+                    if (trait.Equals("weak", StringComparison.OrdinalIgnoreCase))
+                        return true;
+                }
+            }
+            string characterClass = entity.WatchedAttributes.GetString("characterClass", "");
+            return characterClass.Equals("tailor", StringComparison.OrdinalIgnoreCase);
+        }
+
+        /// <summary>
+        /// Checks if the player's class has the vanilla Kind trait (Tailor).
+        /// </summary>
+        public static bool PlayerHasVanillaKind(EntityPlayer entity)
+        {
+            if (entity == null) return false;
+            string[] classTraits = entity.WatchedAttributes.GetStringArray("characterTraits", null);
+            if (classTraits != null)
+            {
+                foreach (string trait in classTraits)
+                {
+                    if (trait.Equals("kind", StringComparison.OrdinalIgnoreCase))
+                        return true;
+                }
+            }
+            string characterClass = entity.WatchedAttributes.GetString("characterClass", "");
+            return characterClass.Equals("tailor", StringComparison.OrdinalIgnoreCase);
+        }
+
+        /// <summary>
+        /// Checks if the player's class has the vanilla Heavyhanded trait (Blackguard).
+        /// </summary>
+        public static bool PlayerHasVanillaHeavyhanded(EntityPlayer entity)
+        {
+            if (entity == null) return false;
+            string[] classTraits = entity.WatchedAttributes.GetStringArray("characterTraits", null);
+            if (classTraits != null)
+            {
+                foreach (string trait in classTraits)
+                {
+                    if (trait.Equals("heavyhanded", StringComparison.OrdinalIgnoreCase))
+                        return true;
+                }
+            }
+            string characterClass = entity.WatchedAttributes.GetString("characterClass", "");
+            return characterClass.Equals("blackguard", StringComparison.OrdinalIgnoreCase);
+        }
+
+        /// <summary>
+        /// Checks if the player's class has the vanilla Claustrophobic trait (Hunter).
+        /// </summary>
+        public static bool PlayerHasVanillaClaustrophobic(EntityPlayer entity)
+        {
+            if (entity == null) return false;
+            string[] classTraits = entity.WatchedAttributes.GetStringArray("characterTraits", null);
+            if (classTraits != null)
+            {
+                foreach (string trait in classTraits)
+                {
+                    if (trait.Equals("claustrophobic", StringComparison.OrdinalIgnoreCase))
+                        return true;
+                }
+            }
+            string characterClass = entity.WatchedAttributes.GetString("characterClass", "");
+            return characterClass.Equals("hunter", StringComparison.OrdinalIgnoreCase);
+        }
+
+        /// <summary>
+        /// Calculate the remaining penalty for a negative trait after applying progression bonus.
+        /// Returns the remaining penalty (0 or positive), or 0 if fully cancelled.
+        /// </summary>
+        public static int CalculateRemainingPenalty(int basePenalty, int progressionBonus)
+        {
+            return Math.Max(0, basePenalty - progressionBonus);
+        }
+
         /// <summary>
         /// Calculate armor durability bonus as an integer percentage.
         /// Accounts for vanilla Soldier trait (+15% armor durability).
@@ -3935,11 +4181,12 @@ namespace SimpleImprovingTraits
             // If credits increased, update the stat and notify player
             if (playerProgress.TotalCredits > oldCredits)
             {
-                int actualBonusPercent = ApplyMiningBonus(byPlayer, playerProgress.TotalCredits);
+                ApplyMiningBonus(byPlayer, playerProgress.TotalCredits);
 
-                // Notify player of level up with actual applied bonus (respects caps)
+                // Notify player of level up with the level as the bonus (the raw mining speed improvement)
+                // This shows the true progress even when negative traits are still being cancelled
                 byPlayer.SendMessage(GlobalConstants.GeneralChatGroup,
-                    Lang.Get("simpleimprovingtraits:message-mining-level-up", playerProgress.TotalCredits, actualBonusPercent),
+                    Lang.Get("simpleimprovingtraits:message-mining-level-up", playerProgress.TotalCredits, playerProgress.TotalCredits),
                     EnumChatType.Notification);
 
                 // Check for trait unlocks that depend on mining level
@@ -4310,6 +4557,7 @@ namespace SimpleImprovingTraits
 
         /// <summary>
         /// Apply the mining speed bonus to a player based on their level.
+        /// Also handles Weak negative trait cancellation.
         /// Also syncs the level and bonus to WatchedAttributes for client display,
         /// and adds/removes the mining mastery trait from extraTraits.
         /// Returns the actual applied bonus percentage (0-100 scale).
@@ -4320,30 +4568,74 @@ namespace SimpleImprovingTraits
 
             // Check if player has vanilla Hardy (affects bonus cap)
             bool hasVanillaHardy = PlayerHasVanillaHardy(player.Entity);
+            bool hasWeak = PlayerHasVanillaWeak(player.Entity);
+            bool hasClaustrophobic = PlayerHasVanillaClaustrophobic(player.Entity);
+
+            ServerApi.Logger.Debug($"[SimpleImprovingTraits] ApplyMiningBonus: player={player.PlayerName}, level={level}, hasClaustrophobic={hasClaustrophobic}, class={player.Entity.WatchedAttributes.GetString("characterClass", "unknown")}");
+
             int vanillaHardyBonus = hasVanillaHardy ? VANILLA_HARDY_MINING_BONUS : 0;
 
-            // Calculate raw bonus from level (1% per level)
-            float rawBonus = level * 0.01f;
+            // Calculate remaining negative trait penalties
+            int weakMiningRemaining = hasWeak ? CalculateRemainingPenalty(VANILLA_WEAK_MINING_PENALTY, level) : 0;
+            int claustrophobicMiningRemaining = hasClaustrophobic ? CalculateRemainingPenalty(VANILLA_CLAUSTROPHOBIC_MINING_PENALTY, level) : 0;
+            // Ore penalty is tied to mining penalty - when mining penalty is cancelled (at level 10), ore is also cancelled
+            int claustrophobicOreRemaining = claustrophobicMiningRemaining > 0 ? VANILLA_CLAUSTROPHOBIC_ORE_PENALTY : 0;
+
+            ServerApi.Logger.Debug($"[SimpleImprovingTraits] Claustrophobic penalties: miningRemaining={claustrophobicMiningRemaining}, oreRemaining={claustrophobicOreRemaining}");
+
+            // Calculate net bonus after cancelling negative traits
+            // Negative trait penalty must be fully cancelled before bonus starts showing
+            int totalNegativePenalty = 0;
+            if (hasWeak) totalNegativePenalty += VANILLA_WEAK_MINING_PENALTY;
+            if (hasClaustrophobic) totalNegativePenalty += VANILLA_CLAUSTROPHOBIC_MINING_PENALTY;
+
+            int netLevel = Math.Max(0, level - totalNegativePenalty);
 
             // Cap earned bonus so total (vanilla + earned) doesn't exceed MaxMiningSpeedPercent
-            float maxEarnableBonus = (MaxMiningSpeedPercent - vanillaHardyBonus) / 100f;
-            float bonus = Math.Min(rawBonus, Math.Max(0, maxEarnableBonus));
+            int maxEarnableBonus = MaxMiningSpeedPercent - vanillaHardyBonus;
+            int bonusPercent = Math.Min(netLevel, Math.Max(0, maxEarnableBonus));
+
+            float bonus = bonusPercent * 0.01f;
 
             // Set the mining speed stat (persistent = false since we reapply on join)
             player.Entity.Stats.Set("miningSpeedMul", MINING_STAT_CODE, 1f + bonus, false);
 
-            int bonusPercent = (int)(bonus * 100);
+            // When Claustrophobic mining penalty is fully cancelled, also negate the ore drop penalty
+            if (hasClaustrophobic)
+            {
+                if (claustrophobicMiningRemaining == 0)
+                {
+                    // Negate the -15% ore drop penalty by applying +15%
+                    player.Entity.Stats.Set("oreDropRate", "sitClaustrophobicOreCancel", 1f + (VANILLA_CLAUSTROPHOBIC_ORE_PENALTY * 0.01f), false);
+                }
+                else
+                {
+                    // Remove the ore cancellation stat if penalty is still active
+                    player.Entity.Stats.Remove("oreDropRate", "sitClaustrophobicOreCancel");
+                }
+            }
 
             // Sync level and bonus to WatchedAttributes for client-side display
             player.Entity.WatchedAttributes.SetInt(WATCHED_MINING_LEVEL, level);
             player.Entity.WatchedAttributes.SetInt(WATCHED_MINING_BONUS, bonusPercent);
             player.Entity.WatchedAttributes.SetBool("sitHasVanillaHardy", hasVanillaHardy);
 
-            // Add our trait to extraTraits only if player doesn't already have Hardy
-            // (if they have Hardy, we update the existing trait display instead of adding duplicate)
-            UpdateExtraTrait(player.Entity, MINING_TRAIT_CODE, level > 0 && !hasVanillaHardy);
+            // Sync negative trait status
+            player.Entity.WatchedAttributes.SetBool("sitHasWeak", hasWeak);
+            player.Entity.WatchedAttributes.SetInt(WATCHED_WEAK_MINING_REMAINING, weakMiningRemaining);
+            player.Entity.WatchedAttributes.SetBool("sitHasClaustrophobic", hasClaustrophobic);
+            player.Entity.WatchedAttributes.SetInt(WATCHED_CLAUSTROPHOBIC_MINING_REMAINING, claustrophobicMiningRemaining);
+            player.Entity.WatchedAttributes.SetInt(WATCHED_CLAUSTROPHOBIC_ORE_REMAINING, claustrophobicOreRemaining);
+
+            // Add our trait to extraTraits only if:
+            // - Player doesn't already have Hardy AND
+            // - All negative mining penalties are cancelled (bonusPercent > 0)
+            UpdateExtraTrait(player.Entity, MINING_TRAIT_CODE, bonusPercent > 0 && !hasVanillaHardy);
 
             player.Entity.WatchedAttributes.MarkPathDirty(WATCHED_MINING_LEVEL);
+            player.Entity.WatchedAttributes.MarkPathDirty("sitHasClaustrophobic");
+            player.Entity.WatchedAttributes.MarkPathDirty(WATCHED_CLAUSTROPHOBIC_MINING_REMAINING);
+            player.Entity.WatchedAttributes.MarkPathDirty(WATCHED_CLAUSTROPHOBIC_ORE_REMAINING);
 
             return bonusPercent;
         }
@@ -4674,6 +4966,7 @@ namespace SimpleImprovingTraits
 
         /// <summary>
         /// Static version of ApplyMeleeBonus for use from Harmony patches.
+        /// Also handles Farsighted and Nervous negative trait cancellation.
         /// </summary>
         private static int ApplyMeleeBonusStatic(IServerPlayer player, int level)
         {
@@ -4681,32 +4974,55 @@ namespace SimpleImprovingTraits
 
             // Check if player has vanilla Soldier (affects bonus cap)
             bool hasVanillaSoldier = PlayerHasVanillaSoldierStatic(player.Entity);
+            bool hasFarsighted = PlayerHasVanillaFarsighted(player.Entity);
+            bool hasNervous = PlayerHasVanillaNervous(player.Entity);
+
             int vanillaSoldierBonus = hasVanillaSoldier ? VANILLA_SOLDIER_MELEE_BONUS : 0;
 
-            // Calculate raw bonus from level (1% per level)
-            float rawBonus = level * 0.01f;
+            // Calculate remaining negative trait penalties
+            int farsightedRemaining = hasFarsighted ? CalculateRemainingPenalty(VANILLA_FARSIGHTED_MELEE_PENALTY, level) : 0;
+            int nervousRemaining = hasNervous ? CalculateRemainingPenalty(VANILLA_NERVOUS_MELEE_PENALTY, level) : 0;
+
+            // Calculate net bonus after cancelling negative traits
+            int netBonusPercent = level;
+            if (hasFarsighted)
+            {
+                // Farsighted penalty is cancelled first, then bonus starts
+                netBonusPercent = Math.Max(0, level - VANILLA_FARSIGHTED_MELEE_PENALTY);
+            }
+            if (hasNervous)
+            {
+                // Nervous penalty is cancelled first, then bonus starts
+                netBonusPercent = Math.Max(0, level - VANILLA_NERVOUS_MELEE_PENALTY);
+            }
 
             // Cap earned bonus so total (vanilla + earned) doesn't exceed MaxMeleeDamagePercent
-            float maxEarnableBonus = (MaxMeleeDamagePercent - vanillaSoldierBonus) / 100f;
-            float bonus = Math.Min(rawBonus, Math.Max(0, maxEarnableBonus));
+            int maxEarnableBonus = MaxMeleeDamagePercent - vanillaSoldierBonus;
+            netBonusPercent = Math.Min(netBonusPercent, Math.Max(0, maxEarnableBonus));
+
+            float bonus = netBonusPercent * 0.01f;
 
             // Set the melee damage stat (persistent = false since we reapply on join)
             // Note: meleeWeaponsDamage is an additive stat, so we just add the bonus (not 1 + bonus)
             player.Entity.Stats.Set("meleeWeaponsDamage", MELEE_STAT_CODE, bonus, false);
 
-            int bonusPercent = (int)(bonus * 100);
-
             // Sync level and bonus to WatchedAttributes for client-side display
             player.Entity.WatchedAttributes.SetInt(WATCHED_MELEE_LEVEL, level);
-            player.Entity.WatchedAttributes.SetInt(WATCHED_MELEE_BONUS, bonusPercent);
+            player.Entity.WatchedAttributes.SetInt(WATCHED_MELEE_BONUS, netBonusPercent);
             player.Entity.WatchedAttributes.SetBool("sitHasVanillaSoldier", hasVanillaSoldier);
+
+            // Sync negative trait status
+            player.Entity.WatchedAttributes.SetBool("sitHasFarsighted", hasFarsighted);
+            player.Entity.WatchedAttributes.SetInt(WATCHED_FARSIGHTED_REMAINING, farsightedRemaining);
+            player.Entity.WatchedAttributes.SetBool("sitHasNervous", hasNervous);
+            player.Entity.WatchedAttributes.SetInt(WATCHED_NERVOUS_REMAINING, nervousRemaining);
 
             // Add our trait to extraTraits only if player doesn't already have Soldier
             UpdateExtraTraitStatic(player.Entity, MELEE_TRAIT_CODE, level > 0 && !hasVanillaSoldier);
 
             player.Entity.WatchedAttributes.MarkPathDirty(WATCHED_MELEE_LEVEL);
 
-            return bonusPercent;
+            return netBonusPercent;
         }
 
         /// <summary>
@@ -4945,6 +5261,7 @@ namespace SimpleImprovingTraits
 
         /// <summary>
         /// Static version of ApplyRangedBonus for use from Harmony patches.
+        /// Also handles Nearsighted and Frail negative trait cancellation.
         /// Returns (damageBonus, accuracyBonus, distanceBonus) as percentages.
         /// </summary>
         public static (int damage, int accuracy, int distance) ApplyRangedBonusStatic(IServerPlayer player, int level)
@@ -4953,20 +5270,45 @@ namespace SimpleImprovingTraits
 
             // Check if player has vanilla Focused (affects bonus caps)
             bool hasVanillaFocused = PlayerHasVanillaFocusedStatic(player.Entity);
+            bool hasNearsighted = PlayerHasVanillaNearsighted(player.Entity);
+            bool hasFrail = PlayerHasVanillaFrail(player.Entity);
+
             int vanillaDamage = hasVanillaFocused ? VANILLA_FOCUSED_DAMAGE_BONUS : 0;
             int vanillaAccuracy = hasVanillaFocused ? VANILLA_FOCUSED_ACCURACY_BONUS : 0;
             int vanillaDistance = hasVanillaFocused ? VANILLA_FOCUSED_DISTANCE_BONUS : 0;
 
-            // Calculate earnable bonuses (each stat capped individually)
-            float earnableDamage = Math.Max(0, (MaxRangedDamagePercent - vanillaDamage) / 100f);
-            float earnableAccuracy = Math.Max(0, (MaxRangedAccuracyPercent - vanillaAccuracy) / 100f);
-            float earnableDistance = Math.Max(0, (MaxRangedDistancePercent - vanillaDistance) / 100f);
+            // Calculate remaining negative trait penalties
+            int nearsightedRemaining = hasNearsighted ? CalculateRemainingPenalty(VANILLA_NEARSIGHTED_RANGED_PENALTY, level) : 0;
+            int frailDistanceRemaining = hasFrail ? CalculateRemainingPenalty(VANILLA_FRAIL_DISTANCE_PENALTY, level) : 0;
 
-            // Calculate actual bonuses from level
-            float rawBonus = level * 0.01f;
-            float damageBonus = Math.Min(rawBonus, earnableDamage);
-            float accuracyBonus = Math.Min(rawBonus, earnableAccuracy);
-            float distanceBonus = Math.Min(rawBonus, earnableDistance);
+            // Calculate net bonus after cancelling negative traits
+            int netDamageLevel = level;
+            int netDistanceLevel = level;
+
+            if (hasNearsighted)
+            {
+                // Nearsighted penalty is cancelled first, then damage bonus starts
+                netDamageLevel = Math.Max(0, level - VANILLA_NEARSIGHTED_RANGED_PENALTY);
+            }
+            if (hasFrail)
+            {
+                // Frail distance penalty is cancelled first, then distance bonus starts
+                netDistanceLevel = Math.Max(0, level - VANILLA_FRAIL_DISTANCE_PENALTY);
+            }
+
+            // Calculate earnable bonuses (each stat capped individually)
+            int earnableDamage = Math.Max(0, MaxRangedDamagePercent - vanillaDamage);
+            int earnableAccuracy = Math.Max(0, MaxRangedAccuracyPercent - vanillaAccuracy);
+            int earnableDistance = Math.Max(0, MaxRangedDistancePercent - vanillaDistance);
+
+            // Calculate actual bonuses from level (using net level after penalty cancellation)
+            int damagePct = Math.Min(netDamageLevel, earnableDamage);
+            int accuracyPct = Math.Min(level, earnableAccuracy);
+            int distancePct = Math.Min(netDistanceLevel, earnableDistance);
+
+            float damageBonus = damagePct * 0.01f;
+            float accuracyBonus = accuracyPct * 0.01f;
+            float distanceBonus = distancePct * 0.01f;
 
             // Set the ranged stats (persistent = false since we reapply on join)
             // Note: All ranged stats are additive (0 = no change, not 1.0)
@@ -4983,16 +5325,18 @@ namespace SimpleImprovingTraits
                 ServerApi?.Logger.Debug($"[SimpleImprovingTraits] Applied ranged stats to {player.PlayerName}: Damage={damageBonus:F2}, Accuracy={accuracyBonus:F2}, Distance={distanceBonus:F2}");
             }
 
-            int damagePct = (int)(damageBonus * 100);
-            int accuracyPct = (int)(accuracyBonus * 100);
-            int distancePct = (int)(distanceBonus * 100);
-
             // Sync level and bonuses to WatchedAttributes for client-side display
             player.Entity.WatchedAttributes.SetInt(WATCHED_RANGED_LEVEL, level);
             player.Entity.WatchedAttributes.SetInt(WATCHED_RANGED_DAMAGE_BONUS, damagePct);
             player.Entity.WatchedAttributes.SetInt(WATCHED_RANGED_ACCURACY_BONUS, accuracyPct);
             player.Entity.WatchedAttributes.SetInt(WATCHED_RANGED_DISTANCE_BONUS, distancePct);
             player.Entity.WatchedAttributes.SetBool("sitHasVanillaFocused", hasVanillaFocused);
+
+            // Sync negative trait status
+            player.Entity.WatchedAttributes.SetBool("sitHasNearsighted", hasNearsighted);
+            player.Entity.WatchedAttributes.SetInt(WATCHED_NEARSIGHTED_REMAINING, nearsightedRemaining);
+            player.Entity.WatchedAttributes.SetBool("sitHasFrail", hasFrail);
+            player.Entity.WatchedAttributes.SetInt(WATCHED_FRAIL_DISTANCE_REMAINING, frailDistanceRemaining);
 
             // Add our trait to extraTraits only if player doesn't already have Focused
             UpdateExtraTraitStatic(player.Entity, RANGED_TRAIT_CODE, level > 0 && !hasVanillaFocused);
@@ -7756,13 +8100,31 @@ namespace SimpleImprovingTraits
 
         /// <summary>
         /// Apply pilferer bonus.
+        /// Also handles Heavyhanded vessel loot negative trait cancellation.
         /// </summary>
         private static int ApplyPilfererBonusStatic(IServerPlayer player, int level)
         {
             if (player?.Entity == null) return 0;
 
             bool hasVanillaPilferer = PlayerHasVanillaPilfererStatic(player.Entity);
-            int bonusPercent = CalculatePilfererBonusPercent(level, player.Entity);
+            bool hasHeavyhanded = PlayerHasVanillaHeavyhanded(player.Entity);
+
+            // Calculate remaining Heavyhanded vessel penalty
+            int heavyhandedVesselRemaining = hasHeavyhanded ? CalculateRemainingPenalty(VANILLA_HEAVYHANDED_VESSEL_PENALTY, level) : 0;
+
+            // Calculate net bonus after cancelling negative traits
+            int netLevel = level;
+            if (hasHeavyhanded)
+            {
+                // Heavyhanded vessel penalty is cancelled first, then bonus starts
+                netLevel = Math.Max(0, level - VANILLA_HEAVYHANDED_VESSEL_PENALTY);
+            }
+
+            // Apply vanilla caps if player has Pilferer trait
+            int vanillaBonus = hasVanillaPilferer ? VANILLA_PILFERER_RUSTY_GEAR_BONUS : 0;
+            int maxEarnable = Math.Max(0, MaxPilfererPercent - vanillaBonus);
+            int bonusPercent = Math.Min(netLevel, maxEarnable);
+
             float bonus = bonusPercent * 0.01f;
 
             // Apply to pilferer-related stats
@@ -7774,6 +8136,10 @@ namespace SimpleImprovingTraits
             player.Entity.WatchedAttributes.SetInt(WATCHED_PILFERER_LEVEL, level);
             player.Entity.WatchedAttributes.SetInt(WATCHED_PILFERER_BONUS, bonusPercent);
             player.Entity.WatchedAttributes.SetBool("sitHasVanillaPilferer", hasVanillaPilferer);
+
+            // Sync negative trait status (Heavyhanded vessel part)
+            player.Entity.WatchedAttributes.SetInt(WATCHED_HEAVYHANDED_VESSEL_REMAINING, heavyhandedVesselRemaining);
+
             player.Entity.WatchedAttributes.MarkPathDirty(WATCHED_PILFERER_LEVEL);
 
             // Update extraTraits
@@ -8000,14 +8366,39 @@ namespace SimpleImprovingTraits
 
         /// <summary>
         /// Apply resourceful bonus.
+        /// Also handles Kind negative trait cancellation.
         /// </summary>
         private static void ApplyResourcefulBonusStatic(IServerPlayer player, int level)
         {
             if (player?.Entity == null) return;
 
             bool hasVanillaResourceful = PlayerHasVanillaResourcefulStatic(player.Entity);
-            int lootBonusPercent = CalculateResourcefulLootBonusPercent(level, player.Entity);
-            int speedBonusPercent = CalculateResourcefulSpeedBonusPercent(level, player.Entity);
+            bool hasKind = PlayerHasVanillaKind(player.Entity);
+
+            // Calculate remaining Kind penalties
+            int kindLootRemaining = hasKind ? CalculateRemainingPenalty(VANILLA_KIND_LOOT_PENALTY, level) : 0;
+            int kindSpeedRemaining = hasKind ? CalculateRemainingPenalty(VANILLA_KIND_SPEED_PENALTY, level) : 0;
+
+            // Calculate net bonus after cancelling negative traits
+            int netLootLevel = level;
+            int netSpeedLevel = level;
+
+            if (hasKind)
+            {
+                // Kind penalties are cancelled first, then bonuses start
+                netLootLevel = Math.Max(0, level - VANILLA_KIND_LOOT_PENALTY);
+                netSpeedLevel = Math.Max(0, level - VANILLA_KIND_SPEED_PENALTY);
+            }
+
+            // Apply vanilla caps if player has Resourceful trait
+            int vanillaLootBonus = hasVanillaResourceful ? VANILLA_RESOURCEFUL_LOOT_BONUS : 0;
+            int vanillaSpeedBonus = hasVanillaResourceful ? VANILLA_RESOURCEFUL_SPEED_BONUS : 0;
+
+            int maxEarnableLoot = Math.Max(0, MaxResourcefulLootPercent - vanillaLootBonus);
+            int maxEarnableSpeed = Math.Max(0, MaxResourcefulSpeedPercent - vanillaSpeedBonus);
+
+            int lootBonusPercent = Math.Min(netLootLevel, maxEarnableLoot);
+            int speedBonusPercent = Math.Min(netSpeedLevel, maxEarnableSpeed);
 
             float lootBonus = lootBonusPercent * 0.01f;
             float speedBonus = speedBonusPercent * 0.01f;
@@ -8023,6 +8414,12 @@ namespace SimpleImprovingTraits
             player.Entity.WatchedAttributes.SetInt(WATCHED_RESOURCEFUL_LOOT_BONUS, lootBonusPercent);
             player.Entity.WatchedAttributes.SetInt(WATCHED_RESOURCEFUL_SPEED_BONUS, speedBonusPercent);
             player.Entity.WatchedAttributes.SetBool("sitHasVanillaResourceful", hasVanillaResourceful);
+
+            // Sync negative trait status
+            player.Entity.WatchedAttributes.SetBool("sitHasKind", hasKind);
+            player.Entity.WatchedAttributes.SetInt(WATCHED_KIND_LOOT_REMAINING, kindLootRemaining);
+            player.Entity.WatchedAttributes.SetInt(WATCHED_KIND_SPEED_REMAINING, kindSpeedRemaining);
+
             player.Entity.WatchedAttributes.MarkPathDirty(WATCHED_RESOURCEFUL_LEVEL);
 
             // Update extraTraits
@@ -8210,17 +8607,54 @@ namespace SimpleImprovingTraits
 
         /// <summary>
         /// Apply forager bonus.
+        /// Also handles Civil and Heavyhanded negative trait cancellation.
         /// </summary>
         private static void ApplyForagerBonusStatic(IServerPlayer player, int level)
         {
             if (player?.Entity == null) return;
 
             bool hasVanillaForager = PlayerHasVanillaForagerStatic(player.Entity);
+            bool hasCivil = PlayerHasVanillaCivil(player.Entity);
+            bool hasHeavyhanded = PlayerHasVanillaHeavyhanded(player.Entity);
+
             int lootBonusPercent = CalculateForagerLootBonusPercent(level, player.Entity);
             int wildCropBonusPercent = CalculateForagerWildCropBonusPercent(level, player.Entity);
 
-            float lootBonus = lootBonusPercent * 0.01f;
-            float wildCropBonus = wildCropBonusPercent * 0.01f;
+            // Calculate remaining negative trait penalties
+            int civilRemaining = hasCivil ? CalculateRemainingPenalty(VANILLA_CIVIL_FORAGING_PENALTY, level) : 0;
+            int heavyhandedForagingRemaining = hasHeavyhanded ? CalculateRemainingPenalty(VANILLA_HEAVYHANDED_FORAGING_PENALTY, level) : 0;
+            int heavyhandedWildCropRemaining = hasHeavyhanded ? CalculateRemainingPenalty(VANILLA_HEAVYHANDED_WILD_CROP_PENALTY, level) : 0;
+
+            // Calculate net bonus (earned bonus - remaining penalty)
+            // For Civil: need to earn level > 10 to start gaining bonus
+            // For Heavyhanded: need to earn level > 15 for foraging, > 20 for wild crop
+            int netLootBonus = lootBonusPercent;
+            int netWildCropBonus = wildCropBonusPercent;
+
+            if (hasCivil)
+            {
+                // Civil penalty is cancelled first, then bonus starts
+                netLootBonus = Math.Max(0, level - VANILLA_CIVIL_FORAGING_PENALTY);
+                if (!hasVanillaForager)
+                {
+                    netLootBonus = Math.Min(netLootBonus, MaxForagerLootPercent);
+                }
+            }
+
+            if (hasHeavyhanded)
+            {
+                // Heavyhanded penalties are cancelled first
+                netLootBonus = Math.Max(0, level - VANILLA_HEAVYHANDED_FORAGING_PENALTY);
+                netWildCropBonus = Math.Max(0, level - VANILLA_HEAVYHANDED_WILD_CROP_PENALTY);
+                if (!hasVanillaForager)
+                {
+                    netLootBonus = Math.Min(netLootBonus, MaxForagerLootPercent);
+                    netWildCropBonus = Math.Min(netWildCropBonus, MaxForagerWildCropPercent);
+                }
+            }
+
+            float lootBonus = netLootBonus * 0.01f;
+            float wildCropBonus = netWildCropBonus * 0.01f;
 
             // Apply to forager-related stats
             player.Entity.Stats.Set("forageDropRate", FORAGER_LOOT_STAT_CODE, 1f + lootBonus, false);
@@ -8228,9 +8662,17 @@ namespace SimpleImprovingTraits
 
             // Sync to WatchedAttributes
             player.Entity.WatchedAttributes.SetInt(WATCHED_FORAGER_LEVEL, level);
-            player.Entity.WatchedAttributes.SetInt(WATCHED_FORAGER_LOOT_BONUS, lootBonusPercent);
-            player.Entity.WatchedAttributes.SetInt(WATCHED_FORAGER_WILD_CROP_BONUS, wildCropBonusPercent);
+            player.Entity.WatchedAttributes.SetInt(WATCHED_FORAGER_LOOT_BONUS, netLootBonus);
+            player.Entity.WatchedAttributes.SetInt(WATCHED_FORAGER_WILD_CROP_BONUS, netWildCropBonus);
             player.Entity.WatchedAttributes.SetBool("sitHasVanillaForager", hasVanillaForager);
+
+            // Sync negative trait status
+            player.Entity.WatchedAttributes.SetBool("sitHasCivil", hasCivil);
+            player.Entity.WatchedAttributes.SetInt(WATCHED_CIVIL_REMAINING, civilRemaining);
+            player.Entity.WatchedAttributes.SetBool("sitHasHeavyhanded", hasHeavyhanded);
+            player.Entity.WatchedAttributes.SetInt(WATCHED_HEAVYHANDED_FORAGING_REMAINING, heavyhandedForagingRemaining);
+            player.Entity.WatchedAttributes.SetInt(WATCHED_HEAVYHANDED_WILD_CROP_REMAINING, heavyhandedWildCropRemaining);
+
             player.Entity.WatchedAttributes.MarkPathDirty(WATCHED_FORAGER_LEVEL);
 
             // Update extraTraits
@@ -8832,6 +9274,205 @@ namespace SimpleImprovingTraits
             ApplyClaustrophobicRemovalStatic(player, removed);
 
             return TextCommandResult.Success($"Claustrophobic trait {(removed ? "removed" : "restored")}.");
+        }
+
+        /// <summary>
+        /// Handler for /trait reset command.
+        /// Resets all trait progression to 0 for the calling player.
+        /// </summary>
+        private TextCommandResult OnTraitResetCommand(TextCommandCallingArgs args)
+        {
+            IServerPlayer player = args.Caller.Player as IServerPlayer;
+            if (player?.Entity == null) return TextCommandResult.Error("Player not found.");
+
+            string playerUid = player.PlayerUID;
+
+            // Reset Mining
+            if (MiningProgress.TryGetValue(playerUid, out var miningProg))
+            {
+                miningProg.TotalCredits = 0;
+                miningProg.PickaxeProgress.Clear();
+                pendingMiningProgressSave = true;
+            }
+            ApplyMiningBonus(player, 0);
+
+            // Reset Melee
+            if (MeleeProgress.TryGetValue(playerUid, out var meleeProg))
+            {
+                meleeProg.TotalCredits = 0;
+                meleeProg.WeaponProgress.Clear();
+                pendingMeleeProgressSave = true;
+            }
+            ApplyMeleeBonusStatic(player, 0);
+
+            // Reset Ranged
+            if (RangedProgress.TryGetValue(playerUid, out var rangedProg))
+            {
+                rangedProg.TotalCredits = 0;
+                rangedProg.WeaponProgress.Clear();
+                pendingRangedProgressSave = true;
+            }
+            ApplyRangedBonusStatic(player, 0);
+
+            // Reset Walking
+            if (WalkingProgress.TryGetValue(playerUid, out var walkingProg))
+            {
+                walkingProg.TotalCredits = 0;
+                walkingProg.BlocksInIncrement = 0;
+                walkingProg.CurrentIncrementSize = 1000; // Default base
+                pendingWalkingProgressSave = true;
+            }
+            ApplyWalkingBonusStatic(player, 0);
+
+            // Reset Hunger
+            if (HungerProgress.TryGetValue(playerUid, out var hungerProg))
+            {
+                hungerProg.TotalCredits = 0;
+                hungerProg.SecondsInIncrement = 0;
+                hungerProg.CurrentIncrementSize = 300; // Default base (5 minutes)
+                pendingHungerProgressSave = true;
+            }
+            ApplyHungerBonusStatic(player, 0);
+
+            // Reset Armor
+            if (ArmorProgress.TryGetValue(playerUid, out var armorProg))
+            {
+                armorProg.TotalDurabilityCredits = 0;
+                armorProg.TotalWalkSpeedCredits = 0;
+                armorProg.ArmorProgress.Clear();
+                pendingArmorProgressSave = true;
+            }
+            ApplyArmorBonusesStatic(player, 0, 0);
+
+            // Reset Clothier
+            if (ClothierProgress.TryGetValue(playerUid, out var clothierProg))
+            {
+                clothierProg.SewingKitUnlocked = false;
+                clothierProg.UniqueClothesWorn.Clear();
+                pendingClothierProgressSave = true;
+            }
+            ApplyClothierBonusStatic(player, clothierProg ?? new ClothierProgressData());
+
+            // Reset Mender
+            if (MenderProgress.TryGetValue(playerUid, out var menderProg))
+            {
+                menderProg.TotalCredits = 0;
+                menderProg.RepairsInIncrement = 0;
+                menderProg.CurrentIncrementSize = 5; // Default base
+                pendingMenderProgressSave = true;
+            }
+            ApplyMenderBonusStatic(player, 0);
+
+            // Reset Pilferer
+            if (PilfererProgress.TryGetValue(playerUid, out var pilfererProg))
+            {
+                pilfererProg.TotalCredits = 0;
+                pilfererProg.PointsInIncrement = 0;
+                pilfererProg.CurrentIncrementSize = 10; // Default base
+                pilfererProg.OpenedChestPositions.Clear();
+                pendingPilfererProgressSave = true;
+            }
+            ApplyPilfererBonusStatic(player, 0);
+
+            // Reset Resourceful
+            if (ResourcefulProgress.TryGetValue(playerUid, out var resourcefulProg))
+            {
+                resourcefulProg.TotalCredits = 0;
+                resourcefulProg.AnimalsInIncrement = 0;
+                resourcefulProg.CurrentIncrementSize = 10; // Default base
+                pendingResourcefulProgressSave = true;
+            }
+            ApplyResourcefulBonusStatic(player, 0);
+
+            // Reset Forager
+            if (ForagerProgress.TryGetValue(playerUid, out var foragerProg))
+            {
+                foragerProg.TotalCredits = 0;
+                foragerProg.CropsInIncrement = 0;
+                foragerProg.CurrentIncrementSize = 10; // Default base
+                pendingForagerProgressSave = true;
+            }
+            ApplyForagerBonusStatic(player, 0);
+
+            // Reset Furtive
+            if (FurtiveProgress.TryGetValue(playerUid, out var furtiveProg))
+            {
+                furtiveProg.TotalCredits = 0;
+                furtiveProg.BlocksInIncrement = 0;
+                furtiveProg.CurrentIncrementSize = 100; // Default base
+                pendingFurtiveProgressSave = true;
+            }
+            ApplyFurtiveBonusStatic(player, 0);
+
+            // Reset Precise
+            if (PreciseProgress.TryGetValue(playerUid, out var preciseProg))
+            {
+                preciseProg.TotalCredits = 0;
+                preciseProg.WeaponProgress.Clear();
+                pendingPreciseProgressSave = true;
+            }
+            ApplyPreciseBonusStatic(player, 0);
+
+            // Reset Technical
+            if (TechnicalProgress.TryGetValue(playerUid, out var technicalProg))
+            {
+                technicalProg.TranslocatorsRepaired = 0;
+                technicalProg.IsUnlocked = false;
+                pendingTechnicalProgressSave = true;
+            }
+            ApplyTechnicalBonusStatic(player, false);
+
+            // Reset Hardy Health
+            if (HardyHealthProgress.TryGetValue(playerUid, out var hardyHealthProg))
+            {
+                hardyHealthProg.IsUnlocked = false;
+                pendingHardyHealthProgressSave = true;
+            }
+            ApplyHardyHealthBonusStatic(player, false);
+
+            // Reset Bowyer
+            if (BowyerProgress.TryGetValue(playerUid, out var bowyerProg))
+            {
+                bowyerProg.IsUnlocked = false;
+                bowyerProg.TotalBowDamage = 0;
+                pendingBowyerProgressSave = true;
+            }
+            ApplyBowyerBonusStatic(player, false);
+
+            // Reset Improviser
+            if (ImproviserProgress.TryGetValue(playerUid, out var improviserProg))
+            {
+                improviserProg.IsUnlocked = false;
+                improviserProg.TotalRockDamage = 0;
+                pendingImproviserProgressSave = true;
+            }
+            ApplyImproviserBonusStatic(player, false);
+
+            // Reset Tinkerer
+            if (TinkererProgress.TryGetValue(playerUid, out var tinkererProg))
+            {
+                tinkererProg.IsUnlocked = false;
+                pendingTinkererProgressSave = true;
+            }
+            ApplyTinkererBonusStatic(player, false);
+
+            // Reset Merciless
+            if (MercilessProgress.TryGetValue(playerUid, out var mercilessProg))
+            {
+                mercilessProg.IsUnlocked = false;
+                pendingMercilessProgressSave = true;
+            }
+            ApplyMercilessBonusStatic(player, false);
+
+            // Reset Claustrophobic Removal
+            if (ClaustrophobicRemovalProgress.TryGetValue(playerUid, out var claustrophobicProg))
+            {
+                claustrophobicProg.IsRemoved = false;
+                pendingClaustrophobicRemovalProgressSave = true;
+            }
+            ApplyClaustrophobicRemovalStatic(player, false);
+
+            return TextCommandResult.Success("All trait progression has been reset to 0.");
         }
 
         // =========================================================================
@@ -10432,6 +11073,10 @@ namespace SimpleImprovingTraits
             EntityPlayer eplr = ClientApi.World?.Player?.Entity;
             if (eplr == null) return;
 
+            // Log the raw result string to see exact format (escape special chars for visibility)
+            string escapedResult = __result?.Replace("\n", "\\n").Replace("\r", "\\r") ?? "NULL";
+            ClientApi.Logger.Debug($"[SimpleImprovingTraits] RAW getClassTraitText result: {escapedResult}");
+
             // Get mining progression data
             int miningLevel = eplr.WatchedAttributes.GetInt(SimpleImprovingTraitsModSystem.WATCHED_MINING_LEVEL, 0);
             int miningBonus = eplr.WatchedAttributes.GetInt(SimpleImprovingTraitsModSystem.WATCHED_MINING_BONUS, 0);
@@ -10463,16 +11108,22 @@ namespace SimpleImprovingTraits
 
             ClientApi.Logger.Debug($"[SimpleImprovingTraits] getClassTraitText postfix called. Mining: Level={miningLevel}, Bonus={miningBonus}%, HasHardy={hasVanillaHardy} | Melee: Level={meleeLevel}, Bonus={meleeBonus}%, HasSoldier={hasVanillaSoldier} | Ranged: Level={rangedLevel}, HasFocused={hasVanillaFocused} | Walking: Level={walkingLevel}, HasFleetfooted={hasVanillaFleetfooted} | Armor: Dur={armorDurabilityLevel}, Walk={armorWalkSpeedLevel}");
 
-            // Get the "no traits" message
+            // Get the "no traits" message - vanilla uses this for classes like Commoner
             string noTraitsMsg = Lang.Get("charactersheet-notraits");
 
+            ClientApi.Logger.Debug($"[SimpleImprovingTraits] Original result: '{__result}', noTraitsMsg: '{noTraitsMsg}'");
+
             // Check if we have NO real traits (only "no traits" message or empty)
+            // Use Contains to handle cases where the message might have formatting
             bool hasNoTraits = string.IsNullOrEmpty(__result) ||
                                __result.Trim() == noTraitsMsg.Trim() ||
-                               __result == noTraitsMsg;
+                               __result == noTraitsMsg ||
+                               __result.Contains(noTraitsMsg) ||
+                               __result.Contains("No positive or negative traits");
 
             // Process mining progression (Hardy trait)
-            if (miningLevel > 0)
+            // Only show Hardy when miningBonus > 0 (after negative traits are cancelled)
+            if (miningBonus > 0)
             {
                 string plainMiningTraitName = Lang.Get("simpleimprovingtraits:trait-sitminingmastery");
 
@@ -10495,31 +11146,35 @@ namespace SimpleImprovingTraits
                 else if (hasNoTraits)
                 {
                     // Commoner or other class with no traits - replace entirely with our dynamic Hardy
-                    __result = Lang.Get("simpleimprovingtraits:trait-hardy-dynamic", miningBonus);
+                    // Use mining-only format since we don't have Hardy Health yet
+                    __result = Lang.Get("simpleimprovingtraits:trait-hardy-mining-only-dynamic", miningBonus);
                     hasNoTraits = false; // We now have traits
                 }
                 else if (__result.Contains(plainMiningTraitName))
                 {
                     // We have our trait but no vanilla Hardy - replace plain name with dynamic version
                     __result = __result.Replace(plainMiningTraitName,
-                        Lang.Get("simpleimprovingtraits:trait-hardy-dynamic", miningBonus));
+                        Lang.Get("simpleimprovingtraits:trait-hardy-mining-only-dynamic", miningBonus));
                 }
                 else
                 {
                     // Has other traits but no Hardy at all - append our dynamic Hardy
-                    __result = __result + "\n" + Lang.Get("simpleimprovingtraits:trait-hardy-dynamic", miningBonus);
+                    __result = __result + "\n" + Lang.Get("simpleimprovingtraits:trait-hardy-mining-only-dynamic", miningBonus);
                 }
             }
 
             // Process melee progression (Soldier trait)
-            if (meleeLevel > 0)
+            // Only show Soldier melee when meleeBonus > 0 (after negative traits are cancelled)
+            if (meleeBonus > 0)
             {
                 string plainMeleeTraitName = Lang.Get("simpleimprovingtraits:trait-sitmeleemastery");
 
                 // Re-check hasNoTraits after mining processing
                 hasNoTraits = string.IsNullOrEmpty(__result) ||
                               __result.Trim() == noTraitsMsg.Trim() ||
-                              __result == noTraitsMsg;
+                              __result == noTraitsMsg ||
+                              __result.Contains(noTraitsMsg) ||
+                              __result.Contains("No positive or negative traits");
 
                 if (hasVanillaSoldier)
                 {
@@ -10556,14 +11211,17 @@ namespace SimpleImprovingTraits
             }
 
             // Process ranged progression (Focused trait)
-            if (rangedLevel > 0)
+            // Only show Focused when any bonus > 0 (after negative traits are cancelled for that stat)
+            if (rangedDamageBonus > 0 || rangedAccuracyBonus > 0 || rangedDistanceBonus > 0)
             {
                 string plainRangedTraitName = Lang.Get("simpleimprovingtraits:trait-sitrangedmastery");
 
                 // Re-check hasNoTraits after melee processing
                 hasNoTraits = string.IsNullOrEmpty(__result) ||
                               __result.Trim() == noTraitsMsg.Trim() ||
-                              __result == noTraitsMsg;
+                              __result == noTraitsMsg ||
+                              __result.Contains(noTraitsMsg) ||
+                              __result.Contains("No positive or negative traits");
 
                 if (hasVanillaFocused)
                 {
@@ -10620,7 +11278,9 @@ namespace SimpleImprovingTraits
                 // Re-check hasNoTraits after ranged processing
                 hasNoTraits = string.IsNullOrEmpty(__result) ||
                               __result.Trim() == noTraitsMsg.Trim() ||
-                              __result == noTraitsMsg;
+                              __result == noTraitsMsg ||
+                              __result.Contains(noTraitsMsg) ||
+                              __result.Contains("No positive or negative traits");
 
                 if (hasVanillaFleetfooted)
                 {
@@ -10662,7 +11322,9 @@ namespace SimpleImprovingTraits
                 // Re-check hasNoTraits after walking processing
                 hasNoTraits = string.IsNullOrEmpty(__result) ||
                               __result.Trim() == noTraitsMsg.Trim() ||
-                              __result == noTraitsMsg;
+                              __result == noTraitsMsg ||
+                              __result.Contains(noTraitsMsg) ||
+                              __result.Contains("No positive or negative traits");
 
                 // Calculate combined bonuses
                 int totalDurabilityBonus = armorDurabilityBonus;
@@ -10729,7 +11391,9 @@ namespace SimpleImprovingTraits
                 // Re-check hasNoTraits after armor processing
                 hasNoTraits = string.IsNullOrEmpty(__result) ||
                               __result.Trim() == noTraitsMsg.Trim() ||
-                              __result == noTraitsMsg;
+                              __result == noTraitsMsg ||
+                              __result.Contains(noTraitsMsg) ||
+                              __result.Contains("No positive or negative traits");
 
                 if (hasNoTraits)
                 {
@@ -10757,7 +11421,9 @@ namespace SimpleImprovingTraits
                 // Re-check hasNoTraits
                 hasNoTraits = string.IsNullOrEmpty(__result) ||
                               __result.Trim() == noTraitsMsg.Trim() ||
-                              __result == noTraitsMsg;
+                              __result == noTraitsMsg ||
+                              __result.Contains(noTraitsMsg) ||
+                              __result.Contains("No positive or negative traits");
 
                 if (hasVanillaMender)
                 {
@@ -10785,15 +11451,19 @@ namespace SimpleImprovingTraits
             int pilfererLevel = eplr.WatchedAttributes.GetInt(SimpleImprovingTraitsModSystem.WATCHED_PILFERER_LEVEL, 0);
             int pilfererBonus = eplr.WatchedAttributes.GetInt(SimpleImprovingTraitsModSystem.WATCHED_PILFERER_BONUS, 0);
             bool hasVanillaPilferer = eplr.WatchedAttributes.GetBool("sitHasVanillaPilferer", false);
-            if (pilfererLevel > 0)
+            // Only show Pilferer when bonus > 0 (after Heavyhanded vessel penalty is cancelled)
+            if (pilfererBonus > 0)
             {
                 string plainPilfererTraitName = Lang.Get("simpleimprovingtraits:trait-sitpilferermastery");
-                string dynamicPilfererTrait = Lang.Get("simpleimprovingtraits:trait-pilferer-dynamic", pilfererBonus);
+                // Pilferer uses the same bonus for all 3 stats (vessel drops, rusty gear, vessel collection)
+                string dynamicPilfererTrait = Lang.Get("simpleimprovingtraits:trait-pilferer-dynamic", pilfererBonus, pilfererBonus, pilfererBonus);
 
                 // Re-check hasNoTraits
                 hasNoTraits = string.IsNullOrEmpty(__result) ||
                               __result.Trim() == noTraitsMsg.Trim() ||
-                              __result == noTraitsMsg;
+                              __result == noTraitsMsg ||
+                              __result.Contains(noTraitsMsg) ||
+                              __result.Contains("No positive or negative traits");
 
                 if (hasVanillaPilferer)
                 {
@@ -10814,6 +11484,7 @@ namespace SimpleImprovingTraits
                 else if (hasNoTraits)
                 {
                     __result = dynamicPilfererTrait;
+                    hasNoTraits = false;
                 }
                 else if (__result.Contains(plainPilfererTraitName))
                 {
@@ -10830,7 +11501,8 @@ namespace SimpleImprovingTraits
             int resourcefulLootBonus = eplr.WatchedAttributes.GetInt(SimpleImprovingTraitsModSystem.WATCHED_RESOURCEFUL_LOOT_BONUS, 0);
             int resourcefulSpeedBonus = eplr.WatchedAttributes.GetInt(SimpleImprovingTraitsModSystem.WATCHED_RESOURCEFUL_SPEED_BONUS, 0);
             bool hasVanillaResourceful = eplr.WatchedAttributes.GetBool("sitHasVanillaResourceful", false);
-            if (resourcefulLevel > 0)
+            // Only show Resourceful when any bonus > 0 (after Kind penalty is cancelled)
+            if (resourcefulLootBonus > 0 || resourcefulSpeedBonus > 0)
             {
                 string plainResourcefulTraitName = Lang.Get("simpleimprovingtraits:trait-sitresourcefulmastery");
                 string dynamicResourcefulTrait = Lang.Get("simpleimprovingtraits:trait-resourceful-dynamic", resourcefulLootBonus, resourcefulSpeedBonus);
@@ -10838,7 +11510,9 @@ namespace SimpleImprovingTraits
                 // Re-check hasNoTraits
                 hasNoTraits = string.IsNullOrEmpty(__result) ||
                               __result.Trim() == noTraitsMsg.Trim() ||
-                              __result == noTraitsMsg;
+                              __result == noTraitsMsg ||
+                              __result.Contains(noTraitsMsg) ||
+                              __result.Contains("No positive or negative traits");
 
                 if (hasVanillaResourceful)
                 {
@@ -10871,7 +11545,8 @@ namespace SimpleImprovingTraits
             int foragerLootBonus = eplr.WatchedAttributes.GetInt(SimpleImprovingTraitsModSystem.WATCHED_FORAGER_LOOT_BONUS, 0);
             int foragerWildCropBonus = eplr.WatchedAttributes.GetInt(SimpleImprovingTraitsModSystem.WATCHED_FORAGER_WILD_CROP_BONUS, 0);
             bool hasVanillaForager = eplr.WatchedAttributes.GetBool("sitHasVanillaForager", false);
-            if (foragerLevel > 0)
+            // Only show Forager when any bonus > 0 (after Civil/Heavyhanded penalties are cancelled)
+            if (foragerLootBonus > 0 || foragerWildCropBonus > 0)
             {
                 string plainForagerTraitName = Lang.Get("simpleimprovingtraits:trait-sitforagermastery");
                 string dynamicForagerTrait = Lang.Get("simpleimprovingtraits:trait-forager-dynamic", foragerLootBonus, foragerWildCropBonus);
@@ -10879,7 +11554,9 @@ namespace SimpleImprovingTraits
                 // Re-check hasNoTraits
                 hasNoTraits = string.IsNullOrEmpty(__result) ||
                               __result.Trim() == noTraitsMsg.Trim() ||
-                              __result == noTraitsMsg;
+                              __result == noTraitsMsg ||
+                              __result.Contains(noTraitsMsg) ||
+                              __result.Contains("No positive or negative traits");
 
                 if (hasVanillaForager)
                 {
@@ -10919,7 +11596,9 @@ namespace SimpleImprovingTraits
                 // Re-check hasNoTraits
                 hasNoTraits = string.IsNullOrEmpty(__result) ||
                               __result.Trim() == noTraitsMsg.Trim() ||
-                              __result == noTraitsMsg;
+                              __result == noTraitsMsg ||
+                              __result.Contains(noTraitsMsg) ||
+                              __result.Contains("No positive or negative traits");
 
                 if (hasVanillaFurtive)
                 {
@@ -10955,7 +11634,9 @@ namespace SimpleImprovingTraits
                 // Re-check hasNoTraits
                 hasNoTraits = string.IsNullOrEmpty(__result) ||
                               __result.Trim() == noTraitsMsg.Trim() ||
-                              __result == noTraitsMsg;
+                              __result == noTraitsMsg ||
+                              __result.Contains(noTraitsMsg) ||
+                              __result.Contains("No positive or negative traits");
 
                 if (hasVanillaPrecise)
                 {
@@ -10990,7 +11671,9 @@ namespace SimpleImprovingTraits
                 // Re-check hasNoTraits
                 hasNoTraits = string.IsNullOrEmpty(__result) ||
                               __result.Trim() == noTraitsMsg.Trim() ||
-                              __result == noTraitsMsg;
+                              __result == noTraitsMsg ||
+                              __result.Contains(noTraitsMsg) ||
+                              __result.Contains("No positive or negative traits");
 
                 if (hasNoTraits)
                 {
@@ -11016,7 +11699,9 @@ namespace SimpleImprovingTraits
                 // Re-check hasNoTraits
                 hasNoTraits = string.IsNullOrEmpty(__result) ||
                               __result.Trim() == noTraitsMsg.Trim() ||
-                              __result == noTraitsMsg;
+                              __result == noTraitsMsg ||
+                              __result.Contains(noTraitsMsg) ||
+                              __result.Contains("No positive or negative traits");
 
                 if (hasNoTraits)
                 {
@@ -11042,7 +11727,9 @@ namespace SimpleImprovingTraits
                 // Re-check hasNoTraits
                 hasNoTraits = string.IsNullOrEmpty(__result) ||
                               __result.Trim() == noTraitsMsg.Trim() ||
-                              __result == noTraitsMsg;
+                              __result == noTraitsMsg ||
+                              __result.Contains(noTraitsMsg) ||
+                              __result.Contains("No positive or negative traits");
 
                 if (hasNoTraits)
                 {
@@ -11068,7 +11755,9 @@ namespace SimpleImprovingTraits
                 // Re-check hasNoTraits
                 hasNoTraits = string.IsNullOrEmpty(__result) ||
                               __result.Trim() == noTraitsMsg.Trim() ||
-                              __result == noTraitsMsg;
+                              __result == noTraitsMsg ||
+                              __result.Contains(noTraitsMsg) ||
+                              __result.Contains("No positive or negative traits");
 
                 if (hasNoTraits)
                 {
@@ -11094,7 +11783,9 @@ namespace SimpleImprovingTraits
                 // Re-check hasNoTraits
                 hasNoTraits = string.IsNullOrEmpty(__result) ||
                               __result.Trim() == noTraitsMsg.Trim() ||
-                              __result == noTraitsMsg;
+                              __result == noTraitsMsg ||
+                              __result.Contains(noTraitsMsg) ||
+                              __result.Contains("No positive or negative traits");
 
                 if (hasNoTraits)
                 {
@@ -11120,7 +11811,9 @@ namespace SimpleImprovingTraits
                 // Re-check hasNoTraits
                 hasNoTraits = string.IsNullOrEmpty(__result) ||
                               __result.Trim() == noTraitsMsg.Trim() ||
-                              __result == noTraitsMsg;
+                              __result == noTraitsMsg ||
+                              __result.Contains(noTraitsMsg) ||
+                              __result.Contains("No positive or negative traits");
 
                 if (hasNoTraits)
                 {
@@ -11146,7 +11839,9 @@ namespace SimpleImprovingTraits
                 // Re-check hasNoTraits
                 hasNoTraits = string.IsNullOrEmpty(__result) ||
                               __result.Trim() == noTraitsMsg.Trim() ||
-                              __result == noTraitsMsg;
+                              __result == noTraitsMsg ||
+                              __result.Contains(noTraitsMsg) ||
+                              __result.Contains("No positive or negative traits");
 
                 if (hasNoTraits)
                 {
@@ -11162,29 +11857,286 @@ namespace SimpleImprovingTraits
                 }
             }
 
-            // Process Claustrophobic Removed trait (penalty removal)
-            bool claustrophobicRemoved = eplr.WatchedAttributes.GetBool(SimpleImprovingTraitsModSystem.WATCHED_CLAUSTROPHOBIC_REMOVED, false);
-            if (claustrophobicRemoved)
+            // Note: Claustrophobic Removed trait display was removed in favor of progressive cancellation
+            // Claustrophobic is now handled in the negative trait section below - it progressively
+            // decreases with mining level (1-10) and is replaced by Hardy when cancelled
+
+            // =========================================================================
+            // NEGATIVE TRAIT DISPLAY HANDLING
+            // Display negative traits with remaining penalty, or remove when cancelled
+            // =========================================================================
+
+            // Civil trait (Tailor) - foraging loot penalty
+            bool hasCivil = eplr.WatchedAttributes.GetBool("sitHasCivil", false);
+            int civilRemaining = eplr.WatchedAttributes.GetInt(SimpleImprovingTraitsModSystem.WATCHED_CIVIL_REMAINING, 0);
+            if (hasCivil)
             {
-                string plainClaustrophobicTraitName = Lang.Get("simpleimprovingtraits:trait-sitclaustrophobicremoved");
-                string dynamicClaustrophobicTrait = Lang.Get("simpleimprovingtraits:trait-claustrophobic-removed-dynamic");
-
-                // Re-check hasNoTraits
-                hasNoTraits = string.IsNullOrEmpty(__result) ||
-                              __result.Trim() == noTraitsMsg.Trim() ||
-                              __result == noTraitsMsg;
-
-                if (hasNoTraits)
+                // Vanilla format: <font color="#ff8484">• Civil </font> <font opacity="0.6">(-10% loot from foraging)</font>
+                if (civilRemaining > 0)
                 {
-                    __result = dynamicClaustrophobicTrait;
-                }
-                else if (__result.Contains(plainClaustrophobicTraitName))
-                {
-                    __result = __result.Replace(plainClaustrophobicTraitName, dynamicClaustrophobicTrait);
+                    string dynamicCivilTrait = Lang.Get("simpleimprovingtraits:trait-civil-dynamic", civilRemaining);
+                    __result = System.Text.RegularExpressions.Regex.Replace(__result,
+                        @"<font color=""#ff8484"">• Civil </font> <font opacity=""0\.6"">\(-\d+% loot from foraging\)</font>",
+                        dynamicCivilTrait);
                 }
                 else
                 {
-                    __result = __result + "\n" + dynamicClaustrophobicTrait;
+                    __result = System.Text.RegularExpressions.Regex.Replace(__result,
+                        @"\n?<font color=""#ff8484"">• Civil </font> <font opacity=""0\.6"">\(-\d+% loot from foraging\)</font>\n?",
+                        "\n");
+                }
+            }
+
+            // Weak trait (Tailor) - HP and mining speed penalty
+            // Vanilla format: <font color="#ff8484">• Weak </font> <font opacity="0.6">(-2 health points, -10% mining speed)</font>
+            bool hasWeak = eplr.WatchedAttributes.GetBool("sitHasWeak", false);
+            int weakMiningRemaining = eplr.WatchedAttributes.GetInt(SimpleImprovingTraitsModSystem.WATCHED_WEAK_MINING_REMAINING, 0);
+            if (hasWeak)
+            {
+                if (weakMiningRemaining > 0)
+                {
+                    string dynamicWeakTrait = Lang.Get("simpleimprovingtraits:trait-weak-mining-only-dynamic", weakMiningRemaining);
+                    __result = System.Text.RegularExpressions.Regex.Replace(__result,
+                        @"<font color=""#ff8484"">• Weak </font> <font opacity=""0\.6"">\(-\d+ health points, -\d+% mining speed\)</font>",
+                        dynamicWeakTrait);
+                }
+                else
+                {
+                    __result = System.Text.RegularExpressions.Regex.Replace(__result,
+                        @"\n?<font color=""#ff8484"">• Weak </font> <font opacity=""0\.6"">\(-\d+ health points, -\d+% mining speed\)</font>\n?",
+                        "\n");
+                }
+            }
+
+            // Kind trait (Tailor) - animal loot and harvesting speed penalty
+            // Vanilla format: <font color="#ff8484">• Kind </font> <font opacity="0.6">(-10% animal loot, -25% harvesting speed)</font>
+            bool hasKind = eplr.WatchedAttributes.GetBool("sitHasKind", false);
+            int kindLootRemaining = eplr.WatchedAttributes.GetInt(SimpleImprovingTraitsModSystem.WATCHED_KIND_LOOT_REMAINING, 0);
+            int kindSpeedRemaining = eplr.WatchedAttributes.GetInt(SimpleImprovingTraitsModSystem.WATCHED_KIND_SPEED_REMAINING, 0);
+            if (hasKind)
+            {
+                if (kindLootRemaining > 0 || kindSpeedRemaining > 0)
+                {
+                    string dynamicKindTrait;
+                    if (kindLootRemaining > 0 && kindSpeedRemaining > 0)
+                    {
+                        dynamicKindTrait = Lang.Get("simpleimprovingtraits:trait-kind-dynamic", kindLootRemaining, kindSpeedRemaining);
+                    }
+                    else if (kindLootRemaining > 0)
+                    {
+                        dynamicKindTrait = Lang.Get("simpleimprovingtraits:trait-kind-loot-only-dynamic", kindLootRemaining);
+                    }
+                    else
+                    {
+                        dynamicKindTrait = Lang.Get("simpleimprovingtraits:trait-kind-speed-only-dynamic", kindSpeedRemaining);
+                    }
+                    __result = System.Text.RegularExpressions.Regex.Replace(__result,
+                        @"<font color=""#ff8484"">• Kind </font> <font opacity=""0\.6"">\(-\d+% animal loot, -\d+% harvesting speed\)</font>",
+                        dynamicKindTrait);
+                }
+                else
+                {
+                    __result = System.Text.RegularExpressions.Regex.Replace(__result,
+                        @"\n?<font color=""#ff8484"">• Kind </font> <font opacity=""0\.6"">\(-\d+% animal loot, -\d+% harvesting speed\)</font>\n?",
+                        "\n");
+                }
+            }
+
+            // Farsighted trait (Hunter) - melee damage penalty
+            // Vanilla format: <font color="#ff8484">• Farsighted </font> <font opacity="0.6">(-15% melee damage)</font>
+            bool hasFarsighted = eplr.WatchedAttributes.GetBool("sitHasFarsighted", false);
+            int farsightedRemaining = eplr.WatchedAttributes.GetInt(SimpleImprovingTraitsModSystem.WATCHED_FARSIGHTED_REMAINING, 0);
+            if (hasFarsighted)
+            {
+                if (farsightedRemaining > 0)
+                {
+                    string dynamicFarsightedTrait = Lang.Get("simpleimprovingtraits:trait-farsighted-dynamic", farsightedRemaining);
+                    __result = System.Text.RegularExpressions.Regex.Replace(__result,
+                        @"<font color=""#ff8484"">• Farsighted </font> <font opacity=""0\.6"">\(-\d+% melee damage\)</font>",
+                        dynamicFarsightedTrait);
+                }
+                else
+                {
+                    __result = System.Text.RegularExpressions.Regex.Replace(__result,
+                        @"\n?<font color=""#ff8484"">• Farsighted </font> <font opacity=""0\.6"">\(-\d+% melee damage\)</font>\n?",
+                        "\n");
+                }
+            }
+
+            // Nervous trait (Malefactor, Clockmaker) - melee damage penalty
+            // Vanilla format: <font color="#ff8484">• Nervous </font> <font opacity="0.6">(-15% melee damage)</font>
+            bool hasNervous = eplr.WatchedAttributes.GetBool("sitHasNervous", false);
+            int nervousRemaining = eplr.WatchedAttributes.GetInt(SimpleImprovingTraitsModSystem.WATCHED_NERVOUS_REMAINING, 0);
+            if (hasNervous)
+            {
+                if (nervousRemaining > 0)
+                {
+                    string dynamicNervousTrait = Lang.Get("simpleimprovingtraits:trait-nervous-dynamic", nervousRemaining);
+                    __result = System.Text.RegularExpressions.Regex.Replace(__result,
+                        @"<font color=""#ff8484"">• Nervous </font> <font opacity=""0\.6"">\(-\d+% melee damage\)</font>",
+                        dynamicNervousTrait);
+                }
+                else
+                {
+                    __result = System.Text.RegularExpressions.Regex.Replace(__result,
+                        @"\n?<font color=""#ff8484"">• Nervous </font> <font opacity=""0\.6"">\(-\d+% melee damage\)</font>\n?",
+                        "\n");
+                }
+            }
+
+            // Nearsighted trait (Blackguard) - ranged damage penalty
+            // Vanilla format: <font color="#ff8484">• Nearsighted </font> <font opacity="0.6">(-15% ranged damage)</font>
+            bool hasNearsighted = eplr.WatchedAttributes.GetBool("sitHasNearsighted", false);
+            int nearsightedRemaining = eplr.WatchedAttributes.GetInt(SimpleImprovingTraitsModSystem.WATCHED_NEARSIGHTED_REMAINING, 0);
+            if (hasNearsighted)
+            {
+                if (nearsightedRemaining > 0)
+                {
+                    string dynamicNearsightedTrait = Lang.Get("simpleimprovingtraits:trait-nearsighted-dynamic", nearsightedRemaining);
+                    __result = System.Text.RegularExpressions.Regex.Replace(__result,
+                        @"<font color=""#ff8484"">• Nearsighted </font> <font opacity=""0\.6"">\(-\d+% ranged damage\)</font>",
+                        dynamicNearsightedTrait);
+                }
+                else
+                {
+                    // Remove Nearsighted trait completely
+                    __result = System.Text.RegularExpressions.Regex.Replace(__result,
+                        @"\n?<font color=""#ff8484"">• Nearsighted </font> <font opacity=""0\.6"">\(-\d+% ranged damage\)</font>\n?",
+                        "\n");
+                }
+            }
+
+            // Frail trait (Malefactor, Clockmaker) - HP and ranged distance penalty
+            // Vanilla format: <font color="#ff8484">• Frail </font> <font opacity="0.6">(-2.5 health points, -25% ranged distance)</font>
+            bool hasFrail = eplr.WatchedAttributes.GetBool("sitHasFrail", false);
+            int frailDistanceRemaining = eplr.WatchedAttributes.GetInt(SimpleImprovingTraitsModSystem.WATCHED_FRAIL_DISTANCE_REMAINING, 0);
+            if (hasFrail)
+            {
+                if (frailDistanceRemaining > 0)
+                {
+                    // Show Frail with remaining distance penalty (HP still shown)
+                    string dynamicFrailTrait = Lang.Get("simpleimprovingtraits:trait-frail-dynamic", 2.5f, frailDistanceRemaining);
+                    __result = System.Text.RegularExpressions.Regex.Replace(__result,
+                        @"<font color=""#ff8484"">• Frail </font> <font opacity=""0\.6"">\(-[\d\.]+ health points, -\d+% ranged distance\)</font>",
+                        dynamicFrailTrait);
+                }
+                else
+                {
+                    // Show only HP penalty (distance cancelled)
+                    string dynamicFrailTrait = Lang.Get("simpleimprovingtraits:trait-frail-hp-only-dynamic", 2.5f);
+                    __result = System.Text.RegularExpressions.Regex.Replace(__result,
+                        @"<font color=""#ff8484"">• Frail </font> <font opacity=""0\.6"">\(-[\d\.]+ health points, -\d+% ranged distance\)</font>",
+                        dynamicFrailTrait);
+                }
+            }
+
+            // Heavyhanded trait (Blackguard) - vessel, foraging, wild crop penalties
+            // Vanilla format: <font color="#ff8484">• Heavyhanded </font> <font opacity="0.6">(-10% cracked vessel loot, -15% loot from foraging, -20% wild crop drop rate)</font>
+            bool hasHeavyhanded = eplr.WatchedAttributes.GetBool("sitHasHeavyhanded", false);
+            int heavyhandedVesselRemaining = eplr.WatchedAttributes.GetInt(SimpleImprovingTraitsModSystem.WATCHED_HEAVYHANDED_VESSEL_REMAINING, 0);
+            int heavyhandedForagingRemaining = eplr.WatchedAttributes.GetInt(SimpleImprovingTraitsModSystem.WATCHED_HEAVYHANDED_FORAGING_REMAINING, 0);
+            int heavyhandedWildCropRemaining = eplr.WatchedAttributes.GetInt(SimpleImprovingTraitsModSystem.WATCHED_HEAVYHANDED_WILD_CROP_REMAINING, 0);
+            if (hasHeavyhanded)
+            {
+                if (heavyhandedVesselRemaining > 0 || heavyhandedForagingRemaining > 0 || heavyhandedWildCropRemaining > 0)
+                {
+                    // Build partial description
+                    var parts = new System.Collections.Generic.List<string>();
+                    if (heavyhandedVesselRemaining > 0) parts.Add($"-{heavyhandedVesselRemaining}% cracked vessel loot");
+                    if (heavyhandedForagingRemaining > 0) parts.Add($"-{heavyhandedForagingRemaining}% loot from foraging");
+                    if (heavyhandedWildCropRemaining > 0) parts.Add($"-{heavyhandedWildCropRemaining}% wild crop drop rate");
+
+                    string partialDescription = string.Join(", ", parts);
+                    string dynamicHeavyhandedTrait = Lang.Get("simpleimprovingtraits:trait-heavyhanded-partial-dynamic", partialDescription);
+                    __result = System.Text.RegularExpressions.Regex.Replace(__result,
+                        @"<font color=""#ff8484"">• Heavyhanded </font> <font opacity=""0\.6"">\(-\d+% cracked vessel loot, -\d+% loot from foraging, -\d+% wild crop drop rate\)</font>",
+                        dynamicHeavyhandedTrait);
+                }
+                else
+                {
+                    // Remove Heavyhanded trait completely
+                    __result = System.Text.RegularExpressions.Regex.Replace(__result,
+                        @"\n?<font color=""#ff8484"">• Heavyhanded </font> <font opacity=""0\.6"">\(-\d+% cracked vessel loot, -\d+% loot from foraging, -\d+% wild crop drop rate\)</font>\n?",
+                        "\n");
+                }
+            }
+
+            // Ravenous trait (Blackguard) - hunger rate penalty
+            // Already handled by Hunger progression system
+
+            // Claustrophobic trait (Hunter) - ore drop and mining speed penalties
+            // Mining penalty decreases progressively with mining level (1-10)
+            // At level 10, both mining and ore penalties are cancelled, and Hardy bonus starts showing
+            bool hasClaustrophobic = eplr.WatchedAttributes.GetBool("sitHasClaustrophobic", false);
+            int claustrophobicMiningRemaining = eplr.WatchedAttributes.GetInt(SimpleImprovingTraitsModSystem.WATCHED_CLAUSTROPHOBIC_MINING_REMAINING, 0);
+
+            ClientApi.Logger.Debug($"[SimpleImprovingTraits] Claustrophobic check: hasClaustrophobic={hasClaustrophobic}, miningRemaining={claustrophobicMiningRemaining}");
+            ClientApi.Logger.Debug($"[SimpleImprovingTraits] Result contains 'Claustrophobic': {__result.Contains("Claustrophobic")}");
+
+            if (hasClaustrophobic)
+            {
+                if (claustrophobicMiningRemaining > 0)
+                {
+                    // Show both ore drop (-15%) and mining speed penalties while being reduced
+                    // Ore penalty stays at -15% until fully cancelled, mining speed decreases progressively
+                    string dynamicClaustrophobicTrait = Lang.Get("simpleimprovingtraits:trait-claustrophobic-dynamic",
+                        SimpleImprovingTraitsModSystem.VANILLA_CLAUSTROPHOBIC_ORE_PENALTY, claustrophobicMiningRemaining);
+                    ClientApi.Logger.Debug($"[SimpleImprovingTraits] Replacing Claustrophobic with: {dynamicClaustrophobicTrait}");
+
+                    // Vanilla format: <font color="#ff8484">• Claustrophobic </font> <font opacity="0.6">(-15% ore drop rate, -10% mining speed)</font>
+                    string beforeReplace = __result;
+                    __result = System.Text.RegularExpressions.Regex.Replace(__result,
+                        @"<font color=""#ff8484"">• Claustrophobic </font> <font opacity=""0\.6"">\(-\d+% ore drop rate, -\d+% mining speed\)</font>",
+                        dynamicClaustrophobicTrait);
+
+                    if (__result == beforeReplace)
+                    {
+                        ClientApi.Logger.Debug("[SimpleImprovingTraits] Primary regex did not match, trying alternative patterns");
+                        // Try without bullet
+                        __result = System.Text.RegularExpressions.Regex.Replace(__result,
+                            @"<font color=""#ff8484"">Claustrophobic</font>.*?\(-\d+% ore drop rate, -\d+% mining speed\).*?</font>",
+                            dynamicClaustrophobicTrait);
+                    }
+
+                    if (__result == beforeReplace)
+                    {
+                        // Try simple pattern without font tags
+                        __result = System.Text.RegularExpressions.Regex.Replace(__result,
+                            @"Claustrophobic.*?\(-\d+% ore drop rate, -\d+% mining speed\)",
+                            dynamicClaustrophobicTrait);
+                    }
+
+                    ClientApi.Logger.Debug($"[SimpleImprovingTraits] After replacement: {(__result != beforeReplace ? "SUCCESS" : "FAILED")}");
+                }
+                else
+                {
+                    // Both penalties cancelled at level 10 - remove Claustrophobic entirely (Hardy will show instead)
+                    ClientApi.Logger.Debug("[SimpleImprovingTraits] Trying to remove Claustrophobic (level >= 10)");
+                    string beforeReplace = __result;
+
+                    // Vanilla format: <font color="#ff8484">• Claustrophobic </font> <font opacity="0.6">(-15% ore drop rate, -10% mining speed)</font>
+                    __result = System.Text.RegularExpressions.Regex.Replace(__result,
+                        @"\n?<font color=""#ff8484"">• Claustrophobic </font> <font opacity=""0\.6"">\(-\d+% ore drop rate, -\d+% mining speed\)</font>\n?",
+                        "\n");
+
+                    if (__result == beforeReplace)
+                    {
+                        ClientApi.Logger.Debug("[SimpleImprovingTraits] Primary removal regex did not match, trying alternatives");
+                        // Try broader pattern
+                        __result = System.Text.RegularExpressions.Regex.Replace(__result,
+                            @"\n?<font color=""#ff8484"">.*?Claustrophobic.*?</font>.*?\(-\d+% ore drop rate, -\d+% mining speed\).*?</font>\n?",
+                            "\n");
+                    }
+
+                    if (__result == beforeReplace)
+                    {
+                        // Try without font tags at all
+                        __result = System.Text.RegularExpressions.Regex.Replace(__result,
+                            @"\n?.*?Claustrophobic.*?\(-\d+% ore drop rate, -\d+% mining speed\).*?\n?",
+                            "\n");
+                    }
+
+                    ClientApi.Logger.Debug($"[SimpleImprovingTraits] Removal result: {(__result != beforeReplace ? "SUCCESS" : "FAILED")}");
                 }
             }
 

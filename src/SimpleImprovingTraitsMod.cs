@@ -961,7 +961,7 @@ namespace SimpleImprovingTraits
         // Switching weapon types resets the increment counter back to base
         public static int BaseDamagePerIncrement = 100;   // Base damage needed for first credit
         public static int MeleeIncrementStep = 100;       // How much more damage each subsequent credit needs
-        public static int MaxMeleeDamagePercent = 150;    // 150% max bonus
+        public static int MaxMeleeDamagePercent = 50;     // 50% max bonus
 
         // Vanilla Soldier trait melee damage bonus (used for cap calculations)
         public const int VANILLA_SOLDIER_MELEE_BONUS = 30;
@@ -994,7 +994,7 @@ namespace SimpleImprovingTraits
         // Switching weapon combinations resets the increment counter back to base
         public static int BaseRangedDamagePerIncrement = 100;   // Base damage needed for first credit
         public static int RangedIncrementStep = 100;             // How much more damage each subsequent credit needs
-        public static int MaxRangedDamagePercent = 130;          // 130% max bonus for damage
+        public static int MaxRangedDamagePercent = 50;           // 50% max bonus for damage
         public static int MaxRangedAccuracyPercent = 50;         // 50% max bonus for accuracy
         public static int MaxRangedDistancePercent = 50;         // 50% max bonus for distance
 
@@ -1098,7 +1098,7 @@ namespace SimpleImprovingTraits
         public static int BaseRepairsPerIncrement = 1;             // Base repairs for first credit
         public static int ArmorRepairIncrementStep = 1;            // How many more repairs each subsequent credit needs
 
-        // First-equip bonuses (durability only):
+        // First-equip bonuses (durability):
         // +1% for light armor and chain, +2% for brigandine, +3% for scale and plate
         public const int FIRST_EQUIP_LIGHT_BONUS = 1;
         public const int FIRST_EQUIP_CHAIN_BONUS = 1;
@@ -1106,8 +1106,16 @@ namespace SimpleImprovingTraits
         public const int FIRST_EQUIP_SCALE_BONUS = 3;
         public const int FIRST_EQUIP_PLATE_BONUS = 3;
 
+        // First-equip bonuses (walk speed penalty reduction):
+        // Same values as durability - grants walk speed bonus on first equip
+        public const int FIRST_EQUIP_WALKSPEED_LIGHT_BONUS = 1;
+        public const int FIRST_EQUIP_WALKSPEED_CHAIN_BONUS = 1;
+        public const int FIRST_EQUIP_WALKSPEED_BRIGANDINE_BONUS = 2;
+        public const int FIRST_EQUIP_WALKSPEED_SCALE_BONUS = 3;
+        public const int FIRST_EQUIP_WALKSPEED_PLATE_BONUS = 3;
+
         // Max bonuses
-        public static int MaxArmorDurabilityPercent = 150;         // 150% max armor durability bonus
+        public static int MaxArmorDurabilityPercent = 50;          // 50% max armor durability bonus
         public static int MaxArmorWalkSpeedPercent = 50;           // 50% max walk speed penalty reduction
 
         // Vanilla Soldier trait armor bonuses (used for cap calculations)
@@ -1500,8 +1508,8 @@ namespace SimpleImprovingTraits
                     .HandleWith(OnTraitMiningBaseCommand)
                 .EndSubCommand()
                 .BeginSubCommand("mininglevel")
-                    .WithDescription("Set your mining level (admin only)")
-                    .WithArgs(api.ChatCommands.Parsers.Int("level"))
+                    .WithDescription("Get or set your mining level (admin only)")
+                    .WithArgs(api.ChatCommands.Parsers.OptionalInt("level"))
                     .RequiresPrivilege(Privilege.controlserver)
                     .RequiresPlayer()
                     .HandleWith(OnTraitMiningLevelCommand)
@@ -1531,8 +1539,8 @@ namespace SimpleImprovingTraits
                     .HandleWith(OnTraitMeleeBaseCommand)
                 .EndSubCommand()
                 .BeginSubCommand("meleelevel")
-                    .WithDescription("Set your melee level (admin only)")
-                    .WithArgs(api.ChatCommands.Parsers.Int("level"))
+                    .WithDescription("Get or set your melee level (admin only)")
+                    .WithArgs(api.ChatCommands.Parsers.OptionalInt("level"))
                     .RequiresPrivilege(Privilege.controlserver)
                     .RequiresPlayer()
                     .HandleWith(OnTraitMeleeLevelCommand)
@@ -1562,8 +1570,8 @@ namespace SimpleImprovingTraits
                     .HandleWith(OnTraitRangedBaseCommand)
                 .EndSubCommand()
                 .BeginSubCommand("rangedlevel")
-                    .WithDescription("Set your ranged level (admin only)")
-                    .WithArgs(api.ChatCommands.Parsers.Int("level"))
+                    .WithDescription("Get or set your ranged level (admin only)")
+                    .WithArgs(api.ChatCommands.Parsers.OptionalInt("level"))
                     .RequiresPrivilege(Privilege.controlserver)
                     .RequiresPlayer()
                     .HandleWith(OnTraitRangedLevelCommand)
@@ -1605,8 +1613,8 @@ namespace SimpleImprovingTraits
                     .HandleWith(OnTraitWalkingBaseCommand)
                 .EndSubCommand()
                 .BeginSubCommand("walkinglevel")
-                    .WithDescription("Set your walking level (admin only)")
-                    .WithArgs(api.ChatCommands.Parsers.Int("level"))
+                    .WithDescription("Get or set your walking level (admin only)")
+                    .WithArgs(api.ChatCommands.Parsers.OptionalInt("level"))
                     .RequiresPrivilege(Privilege.controlserver)
                     .RequiresPlayer()
                     .HandleWith(OnTraitWalkingLevelCommand)
@@ -1636,8 +1644,8 @@ namespace SimpleImprovingTraits
                     .HandleWith(OnTraitHungerBaseCommand)
                 .EndSubCommand()
                 .BeginSubCommand("hungerlevel")
-                    .WithDescription("Set your hunger level (admin only)")
-                    .WithArgs(api.ChatCommands.Parsers.Int("level"))
+                    .WithDescription("Get or set your hunger level (admin only)")
+                    .WithArgs(api.ChatCommands.Parsers.OptionalInt("level"))
                     .RequiresPrivilege(Privilege.controlserver)
                     .RequiresPlayer()
                     .HandleWith(OnTraitHungerLevelCommand)
@@ -1661,15 +1669,15 @@ namespace SimpleImprovingTraits
                     .HandleWith(OnTraitArmorCommand)
                 .EndSubCommand()
                 .BeginSubCommand("armorlevel")
-                    .WithDescription("Set your armor durability level (admin only)")
-                    .WithArgs(api.ChatCommands.Parsers.Int("level"))
+                    .WithDescription("Get or set your armor durability level (admin only)")
+                    .WithArgs(api.ChatCommands.Parsers.OptionalInt("level"))
                     .RequiresPrivilege(Privilege.controlserver)
                     .RequiresPlayer()
                     .HandleWith(OnTraitArmorLevelCommand)
                 .EndSubCommand()
                 .BeginSubCommand("armorwalkspeedlevel")
-                    .WithDescription("Set your armor walk speed penalty reduction level (admin only)")
-                    .WithArgs(api.ChatCommands.Parsers.Int("level"))
+                    .WithDescription("Get or set your armor walk speed penalty reduction level (admin only)")
+                    .WithArgs(api.ChatCommands.Parsers.OptionalInt("level"))
                     .RequiresPrivilege(Privilege.controlserver)
                     .RequiresPlayer()
                     .HandleWith(OnTraitArmorWalkSpeedLevelCommand)
@@ -1718,8 +1726,8 @@ namespace SimpleImprovingTraits
                     .HandleWith(OnTraitClothierRequiredCommand)
                 .EndSubCommand()
                 .BeginSubCommand("clothierlevel")
-                    .WithDescription("Set your clothier progress (unique clothes count) (admin only)")
-                    .WithArgs(api.ChatCommands.Parsers.Int("level"))
+                    .WithDescription("Get or set your clothier progress (unique clothes count) (admin only)")
+                    .WithArgs(api.ChatCommands.Parsers.OptionalInt("level"))
                     .RequiresPrivilege(Privilege.controlserver)
                     .RequiresPlayer()
                     .HandleWith(OnTraitClothierLevelCommand)
@@ -1738,8 +1746,8 @@ namespace SimpleImprovingTraits
                     .HandleWith(OnTraitMenderBaseCommand)
                 .EndSubCommand()
                 .BeginSubCommand("menderlevel")
-                    .WithDescription("Set your mender level (admin only)")
-                    .WithArgs(api.ChatCommands.Parsers.Int("level"))
+                    .WithDescription("Get or set your mender level (admin only)")
+                    .WithArgs(api.ChatCommands.Parsers.OptionalInt("level"))
                     .RequiresPrivilege(Privilege.controlserver)
                     .RequiresPlayer()
                     .HandleWith(OnTraitMenderLevelCommand)
@@ -1764,8 +1772,8 @@ namespace SimpleImprovingTraits
                     .HandleWith(OnTraitPilfererBaseCommand)
                 .EndSubCommand()
                 .BeginSubCommand("pilfererlevel")
-                    .WithDescription("Set your pilferer level (admin only)")
-                    .WithArgs(api.ChatCommands.Parsers.Int("level"))
+                    .WithDescription("Get or set your pilferer level (admin only)")
+                    .WithArgs(api.ChatCommands.Parsers.OptionalInt("level"))
                     .RequiresPrivilege(Privilege.controlserver)
                     .RequiresPlayer()
                     .HandleWith(OnTraitPilfererLevelCommand)
@@ -1790,8 +1798,8 @@ namespace SimpleImprovingTraits
                     .HandleWith(OnTraitResourcefulBaseCommand)
                 .EndSubCommand()
                 .BeginSubCommand("resourcefullevel")
-                    .WithDescription("Set your resourceful level (admin only)")
-                    .WithArgs(api.ChatCommands.Parsers.Int("level"))
+                    .WithDescription("Get or set your resourceful level (admin only)")
+                    .WithArgs(api.ChatCommands.Parsers.OptionalInt("level"))
                     .RequiresPrivilege(Privilege.controlserver)
                     .RequiresPlayer()
                     .HandleWith(OnTraitResourcefulLevelCommand)
@@ -1816,8 +1824,8 @@ namespace SimpleImprovingTraits
                     .HandleWith(OnTraitForagerBaseCommand)
                 .EndSubCommand()
                 .BeginSubCommand("foragerlevel")
-                    .WithDescription("Set your forager level (admin only)")
-                    .WithArgs(api.ChatCommands.Parsers.Int("level"))
+                    .WithDescription("Get or set your forager level (admin only)")
+                    .WithArgs(api.ChatCommands.Parsers.OptionalInt("level"))
                     .RequiresPrivilege(Privilege.controlserver)
                     .RequiresPlayer()
                     .HandleWith(OnTraitForagerLevelCommand)
@@ -1836,8 +1844,8 @@ namespace SimpleImprovingTraits
                     .HandleWith(OnTraitFurtiveCommand)
                 .EndSubCommand()
                 .BeginSubCommand("furtivelevel")
-                    .WithDescription("Set your furtive level (admin only)")
-                    .WithArgs(api.ChatCommands.Parsers.Int("level"))
+                    .WithDescription("Get or set your furtive level (admin only)")
+                    .WithArgs(api.ChatCommands.Parsers.OptionalInt("level"))
                     .RequiresPrivilege(Privilege.controlserver)
                     .RequiresPlayer()
                     .HandleWith(OnTraitFurtiveLevelCommand)
@@ -1850,8 +1858,8 @@ namespace SimpleImprovingTraits
                     .HandleWith(OnTraitPreciseCommand)
                 .EndSubCommand()
                 .BeginSubCommand("preciselevel")
-                    .WithDescription("Set your precise level (admin only)")
-                    .WithArgs(api.ChatCommands.Parsers.Int("level"))
+                    .WithDescription("Get or set your precise level (admin only)")
+                    .WithArgs(api.ChatCommands.Parsers.OptionalInt("level"))
                     .RequiresPrivilege(Privilege.controlserver)
                     .RequiresPlayer()
                     .HandleWith(OnTraitPreciseLevelCommand)
@@ -1960,6 +1968,12 @@ namespace SimpleImprovingTraits
                     .RequiresPrivilege(Privilege.controlserver)
                     .RequiresPlayer()
                     .HandleWith(OnTraitResetCommand)
+                .EndSubCommand()
+                // Reset all config values to defaults
+                .BeginSubCommand("resetconfig")
+                    .WithDescription("Reset all trait config values (base, increment, max) to defaults (admin only)")
+                    .RequiresPrivilege(Privilege.controlserver)
+                    .HandleWith(OnTraitResetConfigCommand)
                 .EndSubCommand();
 
             // Hook into block breaking for mining progression
@@ -2031,36 +2045,37 @@ namespace SimpleImprovingTraits
                 "  /trait mining - View your mining progression stats\n" +
                 "  /trait miningbase [value] - Get or set base points for first credit (admin)\n" +
                 "  /trait miningincrement [value] - Get or set increment step per credit (admin)\n" +
-                "  /trait mininglevel [level] - Set your mining level (admin)\n" +
+                "  /trait mininglevel [level] - Get or set your mining level (admin)\n" +
                 "  /trait miningmax [percent] - Get or set max mining speed bonus (admin)\n" +
                 "  /trait melee - View your melee damage progression stats\n" +
                 "  /trait meleebase [value] - Get or set base damage for first credit (admin)\n" +
                 "  /trait meleeincrement [value] - Get or set melee increment step per credit (admin)\n" +
-                "  /trait meleelevel [level] - Set your melee level (admin)\n" +
+                "  /trait meleelevel [level] - Get or set your melee level (admin)\n" +
                 "  /trait meleemax [percent] - Get or set max melee damage bonus (admin)\n" +
                 "  /trait ranged - View your ranged damage progression stats\n" +
                 "  /trait rangedbase [value] - Get or set base damage for first credit (admin)\n" +
                 "  /trait rangedincrement [value] - Get or set ranged increment step per credit (admin)\n" +
-                "  /trait rangedlevel [level] - Set your ranged level (admin)\n" +
+                "  /trait rangedlevel [level] - Get or set your ranged level (admin)\n" +
                 "  /trait rangedmax [percent] - Get or set max ranged damage bonus (admin)\n" +
                 "  /trait rangedmaxacc [percent] - Get or set max ranged accuracy bonus (admin)\n" +
                 "  /trait rangedmaxdist [percent] - Get or set max ranged distance bonus (admin)\n" +
                 "  /trait walking - View your walking speed progression stats\n" +
                 "  /trait walkingbase [value] - Get or set base blocks for first credit (admin)\n" +
                 "  /trait walkingincrement [value] - Get or set walking increment step per credit (admin)\n" +
-                "  /trait walkinglevel [level] - Set your walking level (admin)\n" +
+                "  /trait walkinglevel [level] - Get or set your walking level (admin)\n" +
                 "  /trait walkingmax [percent] - Get or set max walking speed bonus (admin)\n" +
                 "  /trait hunger - View your hunger rate progression stats\n" +
                 "  /trait hungerbase [value] - Get or set base seconds for first credit (admin)\n" +
                 "  /trait hungerincrement [value] - Get or set hunger increment step per credit (admin)\n" +
-                "  /trait hungerlevel [level] - Set your hunger level (admin)\n" +
+                "  /trait hungerlevel [level] - Get or set your hunger level (admin)\n" +
                 "  /trait hungermax [percent] - Get or set max hunger rate reduction (admin)\n" +
                 "  /trait armor - View your armor progression stats\n" +
-                "  /trait armorlevel [level] - Set your armor durability level (admin)\n" +
-                "  /trait armorwalkspeedlevel [level] - Set walk speed penalty reduction level (admin)\n" +
+                "  /trait armorlevel [level] - Get or set your armor durability level (admin)\n" +
+                "  /trait armorwalkspeedlevel [level] - Get or set walk speed penalty reduction level (admin)\n" +
                 "  /trait armordurabilitymax [percent] - Get or set max durability bonus (admin)\n" +
                 "  /trait armorwalkspeedmax [percent] - Get or set max walk speed reduction (admin)\n" +
-                "  /trait reset - Reset all trait progression to 0 (admin)");
+                "  /trait reset - Reset all trait progression to 0 (admin)\n" +
+                "  /trait resetconfig - Reset all config values to defaults (admin)");
         }
 
         /// <summary>
@@ -2166,8 +2181,8 @@ namespace SimpleImprovingTraits
 
         /// <summary>
         /// Handler for /trait mininglevel command.
-        /// Sets the player's mining credits (level) directly.
-        /// Note: This resets all per-pickaxe progress since we're setting credits directly.
+        /// Gets or sets the player's mining credits (level) directly.
+        /// Note: Setting resets all per-pickaxe progress since we're setting credits directly.
         /// </summary>
         private TextCommandResult OnTraitMiningLevelCommand(TextCommandCallingArgs args)
         {
@@ -2179,32 +2194,38 @@ namespace SimpleImprovingTraits
 
             // Get the player-specific max credits (accounts for Weak/Claustrophobic penalties)
             int maxCredits = GetMaxMiningCredits(player.Entity);
+            string playerUid = player.PlayerUID;
+            var progress = MiningProgress.GetOrAdd(playerUid, _ => new MiningProgressData());
 
-            int newCredits = (int)args[0];
+            int? newCredits = (int?)args[0];
 
-            if (newCredits < 0)
+            // If no value provided, show current level
+            if (!newCredits.HasValue)
+            {
+                int currentBonus = CalculateMiningBonusPercent(progress.TotalCredits);
+                return TextCommandResult.Success($"Current mining level: {progress.TotalCredits}/{maxCredits} (+{currentBonus}% mining speed)");
+            }
+
+            if (newCredits.Value < 0)
             {
                 return TextCommandResult.Error("Credits cannot be negative");
             }
 
-            if (newCredits > maxCredits)
+            if (newCredits.Value > maxCredits)
             {
                 return TextCommandResult.Error($"Credits cannot exceed max ({maxCredits})");
             }
 
             // Set the player's progress (clears per-pickaxe progress)
-            string playerUid = player.PlayerUID;
-            var progress = MiningProgress.GetOrAdd(playerUid, _ => new MiningProgressData());
-
-            progress.TotalCredits = newCredits;
+            progress.TotalCredits = newCredits.Value;
             progress.PickaxeProgress.Clear(); // Reset all pickaxe progress
 
             pendingMiningProgressSave = true;
 
             // Apply the bonus
-            int bonusPercent = ApplyMiningBonus(player, newCredits);
+            int bonusPercent = ApplyMiningBonus(player, newCredits.Value);
 
-            return TextCommandResult.Success($"Mining credits set to {newCredits} (+{bonusPercent}% mining speed). Per-pickaxe progress reset.");
+            return TextCommandResult.Success($"Mining credits set to {newCredits.Value} (+{bonusPercent}% mining speed). Per-pickaxe progress reset.");
         }
 
         /// <summary>
@@ -2401,8 +2422,8 @@ namespace SimpleImprovingTraits
 
         /// <summary>
         /// Handler for /trait meleelevel command.
-        /// Sets the player's melee credits (level) directly.
-        /// Note: This resets all per-weapon progress since we're setting credits directly.
+        /// Gets or sets the player's melee credits (level) directly.
+        /// Note: Setting resets all per-weapon progress since we're setting credits directly.
         /// </summary>
         private TextCommandResult OnTraitMeleeLevelCommand(TextCommandCallingArgs args)
         {
@@ -2414,35 +2435,41 @@ namespace SimpleImprovingTraits
 
             // Get the player-specific max credits (accounts for Farsighted/Nervous penalties)
             int maxCredits = GetMaxMeleeCredits(player.Entity);
+            string playerUid = player.PlayerUID;
+            var progress = MeleeProgress.GetOrAdd(playerUid, _ => new MeleeProgressData());
 
-            int newCredits = (int)args[0];
+            int? newCredits = (int?)args[0];
 
-            if (newCredits < 0)
+            // If no value provided, show current level
+            if (!newCredits.HasValue)
+            {
+                int currentBonus = CalculateMeleeBonusPercent(progress.TotalCredits);
+                return TextCommandResult.Success($"Current melee level: {progress.TotalCredits}/{maxCredits} (+{currentBonus}% melee damage)");
+            }
+
+            if (newCredits.Value < 0)
             {
                 return TextCommandResult.Error("Credits cannot be negative");
             }
 
-            if (newCredits > maxCredits)
+            if (newCredits.Value > maxCredits)
             {
                 return TextCommandResult.Error($"Credits cannot exceed max ({maxCredits})");
             }
 
             // Set the player's progress (clears per-weapon progress)
-            string playerUid = player.PlayerUID;
-            var progress = MeleeProgress.GetOrAdd(playerUid, _ => new MeleeProgressData());
-
-            progress.TotalCredits = newCredits;
+            progress.TotalCredits = newCredits.Value;
             progress.WeaponProgress.Clear(); // Reset all weapon progress
 
             pendingMeleeProgressSave = true;
 
             // Apply the bonus
-            int bonusPercent = ApplyMeleeBonusStatic(player, newCredits);
+            int bonusPercent = ApplyMeleeBonusStatic(player, newCredits.Value);
 
             // Check for trait unlocks that depend on melee level
             CheckMercilessUnlock(player);
 
-            return TextCommandResult.Success($"Melee credits set to {newCredits} (+{bonusPercent}% melee damage). Per-weapon progress reset.");
+            return TextCommandResult.Success($"Melee credits set to {newCredits.Value} (+{bonusPercent}% melee damage). Per-weapon progress reset.");
         }
 
         /// <summary>
@@ -2582,8 +2609,8 @@ namespace SimpleImprovingTraits
 
         /// <summary>
         /// Handler for /trait rangedlevel command.
-        /// Sets the player's ranged credits (level) directly.
-        /// Note: This resets all per-weapon progress since we're setting credits directly.
+        /// Gets or sets the player's ranged credits (level) directly.
+        /// Note: Setting resets all per-weapon progress since we're setting credits directly.
         /// </summary>
         private TextCommandResult OnTraitRangedLevelCommand(TextCommandCallingArgs args)
         {
@@ -2595,32 +2622,38 @@ namespace SimpleImprovingTraits
 
             // Get the player-specific max credits (accounts for Nearsighted/Frail penalties)
             int maxCredits = GetMaxRangedCredits(player.Entity);
+            string playerUid = player.PlayerUID;
+            var progress = RangedProgress.GetOrAdd(playerUid, _ => new RangedProgressData());
 
-            int newCredits = (int)args[0];
+            int? newCredits = (int?)args[0];
 
-            if (newCredits < 0)
+            // If no value provided, show current level
+            if (!newCredits.HasValue)
+            {
+                var (damageBonus, accuracyBonus, distanceBonus) = CalculateRangedBonusPercents(progress.TotalCredits, player.Entity);
+                return TextCommandResult.Success($"Current ranged level: {progress.TotalCredits}/{maxCredits} (+{damageBonus}% damage, +{accuracyBonus}% accuracy, +{distanceBonus}% distance)");
+            }
+
+            if (newCredits.Value < 0)
             {
                 return TextCommandResult.Error("Credits cannot be negative");
             }
 
-            if (newCredits > maxCredits)
+            if (newCredits.Value > maxCredits)
             {
                 return TextCommandResult.Error($"Credits cannot exceed max ({maxCredits})");
             }
 
             // Set the player's progress (clears per-weapon progress)
-            string playerUid = player.PlayerUID;
-            var progress = RangedProgress.GetOrAdd(playerUid, _ => new RangedProgressData());
-
-            progress.TotalCredits = newCredits;
+            progress.TotalCredits = newCredits.Value;
             progress.WeaponProgress.Clear(); // Reset all weapon progress
 
             pendingRangedProgressSave = true;
 
             // Apply the bonus
-            var (damageBonus, accuracyBonus, distanceBonus) = ApplyRangedBonusStatic(player, newCredits);
+            var (newDamageBonus, newAccuracyBonus, newDistanceBonus) = ApplyRangedBonusStatic(player, newCredits.Value);
 
-            return TextCommandResult.Success($"Ranged credits set to {newCredits} (+{damageBonus}% damage, +{accuracyBonus}% accuracy, +{distanceBonus}% distance). Per-weapon progress reset.");
+            return TextCommandResult.Success($"Ranged credits set to {newCredits.Value} (+{newDamageBonus}% damage, +{newAccuracyBonus}% accuracy, +{newDistanceBonus}% distance). Per-weapon progress reset.");
         }
 
         /// <summary>
@@ -2815,7 +2848,7 @@ namespace SimpleImprovingTraits
 
         /// <summary>
         /// Handler for /trait walkinglevel command.
-        /// Sets the player's walking credits (level) directly.
+        /// Gets or sets the player's walking credits (level) directly.
         /// </summary>
         private TextCommandResult OnTraitWalkingLevelCommand(TextCommandCallingArgs args)
         {
@@ -2825,36 +2858,43 @@ namespace SimpleImprovingTraits
                 return TextCommandResult.Error("Could not find player entity");
             }
 
-            int newCredits = (int)args[0];
-
-            if (newCredits < 0)
-            {
-                return TextCommandResult.Error("Credits cannot be negative");
-            }
-
-            if (newCredits > MaxWalkingSpeedPercent)
-            {
-                return TextCommandResult.Error($"Credits cannot exceed max ({MaxWalkingSpeedPercent})");
-            }
-
-            // Set the player's progress
             string playerUid = player.PlayerUID;
             var progress = WalkingProgress.GetOrAdd(playerUid, _ => new WalkingProgressData
             {
                 CurrentIncrementSize = BaseBlocksWalkedPerIncrement
             });
 
-            progress.TotalCredits = newCredits;
+            int? newCredits = (int?)args[0];
+
+            // If no value provided, show current level
+            if (!newCredits.HasValue)
+            {
+                int currentBonus = CalculateWalkingBonusPercent(progress.TotalCredits, player.Entity);
+                return TextCommandResult.Success($"Current walking level: {progress.TotalCredits}/{MaxWalkingSpeedPercent} (+{currentBonus}% walk speed)");
+            }
+
+            if (newCredits.Value < 0)
+            {
+                return TextCommandResult.Error("Credits cannot be negative");
+            }
+
+            if (newCredits.Value > MaxWalkingSpeedPercent)
+            {
+                return TextCommandResult.Error($"Credits cannot exceed max ({MaxWalkingSpeedPercent})");
+            }
+
+            // Set the player's progress
+            progress.TotalCredits = newCredits.Value;
             progress.BlocksInIncrement = 0;
             // Calculate what the increment size should be at this level
-            progress.CurrentIncrementSize = BaseBlocksWalkedPerIncrement + (newCredits * WalkingIncrementStep);
+            progress.CurrentIncrementSize = BaseBlocksWalkedPerIncrement + (newCredits.Value * WalkingIncrementStep);
 
             pendingWalkingProgressSave = true;
 
             // Apply the bonus
-            int bonusPercent = ApplyWalkingBonusStatic(player, newCredits);
+            int bonusPercent = ApplyWalkingBonusStatic(player, newCredits.Value);
 
-            return TextCommandResult.Success($"Walking credits set to {newCredits} (+{bonusPercent}% walk speed).");
+            return TextCommandResult.Success($"Walking credits set to {newCredits.Value} (+{bonusPercent}% walk speed).");
         }
 
         /// <summary>
@@ -2999,7 +3039,7 @@ namespace SimpleImprovingTraits
 
         /// <summary>
         /// Handler for /trait hungerlevel command.
-        /// Sets the player's hunger credits (level) directly.
+        /// Gets or sets the player's hunger credits (level) directly.
         /// </summary>
         private TextCommandResult OnTraitHungerLevelCommand(TextCommandCallingArgs args)
         {
@@ -3009,42 +3049,49 @@ namespace SimpleImprovingTraits
                 return TextCommandResult.Error("Could not find player entity");
             }
 
-            int newCredits = (int)args[0];
-
-            if (newCredits < 0)
-            {
-                return TextCommandResult.Error("Credits cannot be negative");
-            }
-
             // Calculate player-specific max credits
             int playerMaxCredits = CalculateMaxHungerCredits(player.Entity);
-
-            if (newCredits > playerMaxCredits)
-            {
-                return TextCommandResult.Error($"Credits cannot exceed max for this player ({playerMaxCredits})");
-            }
-
-            // Set the player's progress
             string playerUid = player.PlayerUID;
             var progress = HungerProgress.GetOrAdd(playerUid, _ => new HungerProgressData
             {
                 CurrentIncrementSize = BaseSecondsPerIncrement
             });
 
-            progress.TotalCredits = newCredits;
+            int? newCredits = (int?)args[0];
+
+            // If no value provided, show current level
+            if (!newCredits.HasValue)
+            {
+                bool hasRavenousCurrent = PlayerHasVanillaRavenousStatic(player.Entity);
+                int currentEffectiveRate = hasRavenousCurrent ? (130 - progress.TotalCredits) : (100 - progress.TotalCredits);
+                return TextCommandResult.Success($"Current hunger level: {progress.TotalCredits}/{playerMaxCredits} (-{progress.TotalCredits}% hunger rate, effective rate: {currentEffectiveRate}%)");
+            }
+
+            if (newCredits.Value < 0)
+            {
+                return TextCommandResult.Error("Credits cannot be negative");
+            }
+
+            if (newCredits.Value > playerMaxCredits)
+            {
+                return TextCommandResult.Error($"Credits cannot exceed max for this player ({playerMaxCredits})");
+            }
+
+            // Set the player's progress
+            progress.TotalCredits = newCredits.Value;
             progress.SecondsInIncrement = 0;
             // Calculate what the increment size should be at this level
-            progress.CurrentIncrementSize = BaseSecondsPerIncrement + (newCredits * HungerIncrementStep);
+            progress.CurrentIncrementSize = BaseSecondsPerIncrement + (newCredits.Value * HungerIncrementStep);
 
             pendingHungerProgressSave = true;
 
             // Apply the bonus
-            int bonusPercent = ApplyHungerBonusStatic(player, newCredits);
+            int bonusPercent = ApplyHungerBonusStatic(player, newCredits.Value);
 
             bool hasRavenous = PlayerHasVanillaRavenousStatic(player.Entity);
             int effectiveRate = hasRavenous ? (130 - bonusPercent) : (100 - bonusPercent);
 
-            return TextCommandResult.Success($"Hunger credits set to {newCredits}/{playerMaxCredits} (-{bonusPercent}% hunger rate, effective rate: {effectiveRate}%).");
+            return TextCommandResult.Success($"Hunger credits set to {newCredits.Value}/{playerMaxCredits} (-{bonusPercent}% hunger rate, effective rate: {effectiveRate}%).");
         }
 
         /// <summary>
@@ -3136,7 +3183,7 @@ namespace SimpleImprovingTraits
 
         /// <summary>
         /// Handler for /trait armorlevel command.
-        /// Sets the player's armor durability credits (level) directly.
+        /// Gets or sets the player's armor durability credits (level) directly.
         /// </summary>
         private TextCommandResult OnTraitArmorLevelCommand(TextCommandCallingArgs args)
         {
@@ -3146,38 +3193,45 @@ namespace SimpleImprovingTraits
                 return TextCommandResult.Error("Could not find player entity");
             }
 
-            int newCredits = (int)args[0];
+            string playerUid = player.PlayerUID;
+            var progress = ArmorProgress.GetOrAdd(playerUid, _ => new ArmorProgressData());
 
-            if (newCredits < 0)
+            int? newCredits = (int?)args[0];
+
+            // If no value provided, show current level
+            if (!newCredits.HasValue)
+            {
+                int currentBonus = CalculateArmorDurabilityBonusPercent(progress.TotalDurabilityCredits, player.Entity);
+                return TextCommandResult.Success($"Current armor durability level: {progress.TotalDurabilityCredits}/{MaxArmorDurabilityPercent} (+{currentBonus}% durability)");
+            }
+
+            if (newCredits.Value < 0)
             {
                 return TextCommandResult.Error("Credits cannot be negative");
             }
 
-            if (newCredits > MaxArmorDurabilityPercent)
+            if (newCredits.Value > MaxArmorDurabilityPercent)
             {
                 return TextCommandResult.Error($"Credits cannot exceed max ({MaxArmorDurabilityPercent})");
             }
 
-            string playerUid = player.PlayerUID;
-            var progress = ArmorProgress.GetOrAdd(playerUid, _ => new ArmorProgressData());
-
-            progress.TotalDurabilityCredits = newCredits;
+            progress.TotalDurabilityCredits = newCredits.Value;
             pendingArmorProgressSave = true;
 
             ApplyArmorBonusesStatic(player, progress.TotalDurabilityCredits, progress.TotalWalkSpeedCredits);
 
-            int bonusPercent = CalculateArmorDurabilityBonusPercent(newCredits, player.Entity);
+            int bonusPercent = CalculateArmorDurabilityBonusPercent(newCredits.Value, player.Entity);
 
             // Check for trait unlocks that depend on armor durability
             CheckHardyHealthUnlock(player);
             CheckMercilessUnlock(player);
 
-            return TextCommandResult.Success($"Armor durability credits set to {newCredits} (+{bonusPercent}% durability).");
+            return TextCommandResult.Success($"Armor durability credits set to {newCredits.Value} (+{bonusPercent}% durability).");
         }
 
         /// <summary>
         /// Handler for /trait armorwalkspeedlevel command.
-        /// Sets the player's armor walk speed penalty reduction credits (level) directly.
+        /// Gets or sets the player's armor walk speed penalty reduction credits (level) directly.
         /// </summary>
         private TextCommandResult OnTraitArmorWalkSpeedLevelCommand(TextCommandCallingArgs args)
         {
@@ -3187,29 +3241,36 @@ namespace SimpleImprovingTraits
                 return TextCommandResult.Error("Could not find player entity");
             }
 
-            int newCredits = (int)args[0];
+            string playerUid = player.PlayerUID;
+            var progress = ArmorProgress.GetOrAdd(playerUid, _ => new ArmorProgressData());
 
-            if (newCredits < 0)
+            int? newCredits = (int?)args[0];
+
+            // If no value provided, show current level
+            if (!newCredits.HasValue)
+            {
+                int currentBonus = CalculateArmorWalkSpeedBonusPercent(progress.TotalWalkSpeedCredits, player.Entity);
+                return TextCommandResult.Success($"Current armor walk speed penalty reduction level: {progress.TotalWalkSpeedCredits}/{MaxArmorWalkSpeedPercent} (-{currentBonus}% penalty)");
+            }
+
+            if (newCredits.Value < 0)
             {
                 return TextCommandResult.Error("Credits cannot be negative");
             }
 
-            if (newCredits > MaxArmorWalkSpeedPercent)
+            if (newCredits.Value > MaxArmorWalkSpeedPercent)
             {
                 return TextCommandResult.Error($"Credits cannot exceed max ({MaxArmorWalkSpeedPercent})");
             }
 
-            string playerUid = player.PlayerUID;
-            var progress = ArmorProgress.GetOrAdd(playerUid, _ => new ArmorProgressData());
-
-            progress.TotalWalkSpeedCredits = newCredits;
+            progress.TotalWalkSpeedCredits = newCredits.Value;
             pendingArmorProgressSave = true;
 
             ApplyArmorBonusesStatic(player, progress.TotalDurabilityCredits, progress.TotalWalkSpeedCredits);
 
-            int bonusPercent = CalculateArmorWalkSpeedBonusPercent(newCredits, player.Entity);
+            int bonusPercent = CalculateArmorWalkSpeedBonusPercent(newCredits.Value, player.Entity);
 
-            return TextCommandResult.Success($"Armor walk speed penalty reduction credits set to {newCredits} (-{bonusPercent}% penalty).");
+            return TextCommandResult.Success($"Armor walk speed penalty reduction credits set to {newCredits.Value} (-{bonusPercent}% penalty).");
         }
 
         /// <summary>
@@ -3910,6 +3971,22 @@ namespace SimpleImprovingTraits
         }
 
         /// <summary>
+        /// Gets the first-equip walk speed penalty reduction bonus for an armor type.
+        /// </summary>
+        public static int GetFirstEquipWalkSpeedBonus(string armorType)
+        {
+            switch (armorType?.ToLowerInvariant())
+            {
+                case "plate": return FIRST_EQUIP_WALKSPEED_PLATE_BONUS;
+                case "scale": return FIRST_EQUIP_WALKSPEED_SCALE_BONUS;
+                case "brigandine": return FIRST_EQUIP_WALKSPEED_BRIGANDINE_BONUS;
+                case "chain": return FIRST_EQUIP_WALKSPEED_CHAIN_BONUS;
+                case "light":
+                default: return FIRST_EQUIP_WALKSPEED_LIGHT_BONUS;
+            }
+        }
+
+        /// <summary>
         /// Initialize armor tracking for a player by checking their currently equipped armor.
         /// </summary>
         private void InitializePlayerArmorTracking(IServerPlayer player)
@@ -4016,45 +4093,31 @@ namespace SimpleImprovingTraits
                         {
                             pieceProgress.HasBeenEquipped = true;
                             string armorType = GetArmorType(itemCode);
+
+                            // Grant durability bonus
                             int firstEquipBonus = GetFirstEquipBonus(armorType);
-                            armorProgress.TotalDurabilityCredits += firstEquipBonus;
+                            int oldDurability = armorProgress.TotalDurabilityCredits;
+                            armorProgress.TotalDurabilityCredits = Math.Min(armorProgress.TotalDurabilityCredits + firstEquipBonus, MaxArmorDurabilityPercent);
+                            int actualDurabilityBonus = armorProgress.TotalDurabilityCredits - oldDurability;
+
+                            // Grant walk speed penalty reduction bonus (same values as durability)
+                            int walkSpeedEquipBonus = GetFirstEquipWalkSpeedBonus(armorType);
+                            int oldWalkSpeed = armorProgress.TotalWalkSpeedCredits;
+                            armorProgress.TotalWalkSpeedCredits = Math.Min(armorProgress.TotalWalkSpeedCredits + walkSpeedEquipBonus, MaxArmorWalkSpeedPercent);
+                            int actualWalkSpeedBonus = armorProgress.TotalWalkSpeedCredits - oldWalkSpeed;
+
                             pendingArmorProgressSave = true;
 
                             ApplyArmorBonusesStatic(player, armorProgress.TotalDurabilityCredits, armorProgress.TotalWalkSpeedCredits);
 
-                            player.SendMessage(GlobalConstants.GeneralChatGroup,
-                                Lang.Get("simpleimprovingtraits:message-armor-first-equip", firstEquipBonus),
-                                EnumChatType.Notification);
+                            // Send message with both bonuses
+                            if (actualDurabilityBonus > 0 || actualWalkSpeedBonus > 0)
+                            {
+                                player.SendMessage(GlobalConstants.GeneralChatGroup,
+                                    Lang.Get("simpleimprovingtraits:message-armor-first-equip-both", actualDurabilityBonus, actualWalkSpeedBonus),
+                                    EnumChatType.Notification);
+                            }
                         }
-                    }
-
-                    // Track time worn for this armor piece
-                    var progress = armorProgress.GetArmorProgress(itemCode);
-                    int oldWalkSpeedCredits = armorProgress.TotalWalkSpeedCredits;
-
-                    progress.SecondsWornInIncrement += dt;
-
-                    // Check if we've earned a time credit
-                    while (progress.SecondsWornInIncrement >= progress.CurrentTimeIncrementSize &&
-                           armorProgress.TotalWalkSpeedCredits < MaxArmorWalkSpeedPercent)
-                    {
-                        progress.TimeCredits++;
-                        armorProgress.TotalWalkSpeedCredits++;
-                        progress.SecondsWornInIncrement -= progress.CurrentTimeIncrementSize;
-                        progress.CurrentTimeIncrementSize += ArmorTimeIncrementStep;
-                        pendingArmorProgressSave = true;
-
-                        ServerApi.Logger.Debug($"[SimpleImprovingTraits] Player {player.PlayerName} earned time credit {progress.TimeCredits} with {itemCode}");
-                    }
-
-                    if (armorProgress.TotalWalkSpeedCredits > oldWalkSpeedCredits)
-                    {
-                        ApplyArmorBonusesStatic(player, armorProgress.TotalDurabilityCredits, armorProgress.TotalWalkSpeedCredits);
-
-                        int walkSpeedBonus = CalculateArmorWalkSpeedBonusPercent(armorProgress.TotalWalkSpeedCredits, player.Entity);
-                        player.SendMessage(GlobalConstants.GeneralChatGroup,
-                            Lang.Get("simpleimprovingtraits:message-armor-time-level-up", armorProgress.TotalWalkSpeedCredits, walkSpeedBonus),
-                            EnumChatType.Notification);
                     }
                 }
 
@@ -7027,38 +7090,47 @@ namespace SimpleImprovingTraits
 
         /// <summary>
         /// Handler for /trait clothierlevel command.
-        /// Sets the player's clothier progress (unique clothes count).
+        /// Gets or sets the player's clothier progress (unique clothes count).
         /// </summary>
         private TextCommandResult OnTraitClothierLevelCommand(TextCommandCallingArgs args)
         {
             IServerPlayer player = args.Caller.Player as IServerPlayer;
             if (player?.Entity == null) return TextCommandResult.Error("Player not found.");
 
-            int newLevel = (int)args[0];
-            if (newLevel < 0)
-                return TextCommandResult.Error("Level must be 0 or greater.");
-
             var progress = ClothierProgress.GetOrAdd(player.PlayerUID, _ => new ClothierProgressData());
+
+            int? newLevel = (int?)args[0];
+
+            // If no value provided, show current level
+            if (!newLevel.HasValue)
+            {
+                int currentLevel = progress.UniqueClothesWorn.Count;
+                string status = progress.SewingKitUnlocked ? "Sewing kit UNLOCKED!" : $"{ClothierRequiredUniqueClothes - currentLevel} more needed to unlock.";
+                return TextCommandResult.Success($"Current clothier level: {currentLevel}/{ClothierRequiredUniqueClothes}. {status}");
+            }
+
+            if (newLevel.Value < 0)
+                return TextCommandResult.Error("Level must be 0 or greater.");
 
             // Clear the existing clothes set
             progress.UniqueClothesWorn.Clear();
 
             // Add placeholder entries up to the desired level
-            for (int i = 0; i < newLevel; i++)
+            for (int i = 0; i < newLevel.Value; i++)
             {
                 progress.UniqueClothesWorn.Add($"__placeholder_cloth_{i}");
             }
 
             // Set unlock status based on whether we've reached the required amount
-            progress.SewingKitUnlocked = newLevel >= ClothierRequiredUniqueClothes;
+            progress.SewingKitUnlocked = newLevel.Value >= ClothierRequiredUniqueClothes;
 
             pendingClothierProgressSave = true;
 
             // Apply the bonus (this updates WatchedAttributes and extraTraits)
             ApplyClothierBonusStatic(player, progress);
 
-            string status = progress.SewingKitUnlocked ? "Sewing kit UNLOCKED!" : $"{ClothierRequiredUniqueClothes - newLevel} more needed to unlock.";
-            return TextCommandResult.Success($"Clothier level set to {newLevel}/{ClothierRequiredUniqueClothes}. {status}");
+            string newStatus = progress.SewingKitUnlocked ? "Sewing kit UNLOCKED!" : $"{ClothierRequiredUniqueClothes - newLevel.Value} more needed to unlock.";
+            return TextCommandResult.Success($"Clothier level set to {newLevel.Value}/{ClothierRequiredUniqueClothes}. {newStatus}");
         }
 
         /// <summary>
@@ -7978,23 +8050,33 @@ namespace SimpleImprovingTraits
 
         /// <summary>
         /// Handler for /trait menderlevel command.
+        /// Gets or sets the player's mender level.
         /// </summary>
         private TextCommandResult OnTraitMenderLevelCommand(TextCommandCallingArgs args)
         {
             IServerPlayer player = args.Caller.Player as IServerPlayer;
             if (player?.Entity == null) return TextCommandResult.Error("Player not found.");
 
-            int newLevel = (int)args[0];
-            if (newLevel < 0 || newLevel > MaxMenderPercent)
+            var progress = MenderProgress.GetOrAdd(player.PlayerUID, _ => new MenderProgressData());
+
+            int? newLevel = (int?)args[0];
+
+            // If no value provided, show current level
+            if (!newLevel.HasValue)
+            {
+                int currentBonus = CalculateMenderBonusPercent(progress.TotalCredits, player.Entity);
+                return TextCommandResult.Success($"Current mender level: {progress.TotalCredits}/{MaxMenderPercent} (+{currentBonus}% durability)");
+            }
+
+            if (newLevel.Value < 0 || newLevel.Value > MaxMenderPercent)
                 return TextCommandResult.Error($"Level must be between 0 and {MaxMenderPercent}.");
 
-            var progress = MenderProgress.GetOrAdd(player.PlayerUID, _ => new MenderProgressData());
-            progress.TotalCredits = newLevel;
+            progress.TotalCredits = newLevel.Value;
             progress.RepairsInIncrement = 0;
             progress.CurrentIncrementSize = BaseMenderRepairsPerIncrement;
 
             // Recalculate increment size for this level
-            for (int i = 0; i < newLevel; i++)
+            for (int i = 0; i < newLevel.Value; i++)
             {
                 progress.CurrentIncrementSize += MenderIncrementStep;
             }
@@ -8002,7 +8084,7 @@ namespace SimpleImprovingTraits
             pendingMenderProgressSave = true;
 
             int bonusPercent = ApplyMenderBonusStatic(player, progress.TotalCredits);
-            return TextCommandResult.Success($"Mender level set to {newLevel} (+{bonusPercent}% durability).");
+            return TextCommandResult.Success($"Mender level set to {newLevel.Value} (+{bonusPercent}% durability).");
         }
 
         /// <summary>
@@ -8174,6 +8256,7 @@ namespace SimpleImprovingTraits
 
         /// <summary>
         /// Handler for /trait pilfererlevel command.
+        /// Gets or sets the player's pilferer level.
         /// </summary>
         private TextCommandResult OnTraitPilfererLevelCommand(TextCommandCallingArgs args)
         {
@@ -8183,16 +8266,25 @@ namespace SimpleImprovingTraits
             // Get the player-specific max credits (accounts for Heavyhanded penalty)
             int maxCredits = GetMaxPilfererCredits(player.Entity);
 
-            int newLevel = (int)args[0];
-            if (newLevel < 0 || newLevel > maxCredits)
+            var progress = PilfererProgress.GetOrAdd(player.PlayerUID, _ => new PilfererProgressData());
+
+            int? newLevel = (int?)args[0];
+
+            // If no value provided, show current level
+            if (!newLevel.HasValue)
+            {
+                int currentBonus = CalculatePilfererBonusPercent(progress.TotalCredits, player.Entity);
+                return TextCommandResult.Success($"Current pilferer level: {progress.TotalCredits}/{maxCredits} (+{currentBonus}% bonuses)");
+            }
+
+            if (newLevel.Value < 0 || newLevel.Value > maxCredits)
                 return TextCommandResult.Error($"Level must be between 0 and {maxCredits}.");
 
-            var progress = PilfererProgress.GetOrAdd(player.PlayerUID, _ => new PilfererProgressData());
-            progress.TotalCredits = newLevel;
+            progress.TotalCredits = newLevel.Value;
             progress.PointsInIncrement = 0;
             progress.CurrentIncrementSize = BasePilfererPointsPerIncrement;
 
-            for (int i = 0; i < newLevel; i++)
+            for (int i = 0; i < newLevel.Value; i++)
             {
                 progress.CurrentIncrementSize += PilfererIncrementStep;
             }
@@ -8200,7 +8292,7 @@ namespace SimpleImprovingTraits
             pendingPilfererProgressSave = true;
 
             int bonusPercent = ApplyPilfererBonusStatic(player, progress.TotalCredits);
-            return TextCommandResult.Success($"Pilferer level set to {newLevel} (+{bonusPercent}% bonuses).");
+            return TextCommandResult.Success($"Pilferer level set to {newLevel.Value} (+{bonusPercent}% bonuses).");
         }
 
         /// <summary>
@@ -8458,6 +8550,7 @@ namespace SimpleImprovingTraits
 
         /// <summary>
         /// Handler for /trait resourcefullevel command.
+        /// Gets or sets the player's resourceful level.
         /// </summary>
         private TextCommandResult OnTraitResourcefulLevelCommand(TextCommandCallingArgs args)
         {
@@ -8467,16 +8560,25 @@ namespace SimpleImprovingTraits
             // Get the player-specific max credits (accounts for Kind penalty)
             int maxCredits = GetMaxResourcefulCredits(player.Entity);
 
-            int newLevel = (int)args[0];
-            if (newLevel < 0 || newLevel > maxCredits)
+            var progress = ResourcefulProgress.GetOrAdd(player.PlayerUID, _ => new ResourcefulProgressData());
+
+            int? newLevel = (int?)args[0];
+
+            // If no value provided, show current level
+            if (!newLevel.HasValue)
+            {
+                int lootBonus = CalculateResourcefulLootBonusPercent(progress.TotalCredits, player.Entity);
+                return TextCommandResult.Success($"Current resourceful level: {progress.TotalCredits}/{maxCredits} (+{lootBonus}% loot)");
+            }
+
+            if (newLevel.Value < 0 || newLevel.Value > maxCredits)
                 return TextCommandResult.Error($"Level must be between 0 and {maxCredits}.");
 
-            var progress = ResourcefulProgress.GetOrAdd(player.PlayerUID, _ => new ResourcefulProgressData());
-            progress.TotalCredits = newLevel;
+            progress.TotalCredits = newLevel.Value;
             progress.AnimalsInIncrement = 0;
             progress.CurrentIncrementSize = BaseResourcefulAnimalsPerIncrement;
 
-            for (int i = 0; i < newLevel; i++)
+            for (int i = 0; i < newLevel.Value; i++)
             {
                 progress.CurrentIncrementSize += ResourcefulIncrementStep;
             }
@@ -8484,8 +8586,8 @@ namespace SimpleImprovingTraits
             pendingResourcefulProgressSave = true;
 
             ApplyResourcefulBonusStatic(player, progress.TotalCredits);
-            int lootBonus = CalculateResourcefulLootBonusPercent(progress.TotalCredits, player.Entity);
-            return TextCommandResult.Success($"Resourceful level set to {newLevel} (+{lootBonus}% loot).");
+            int newLootBonus = CalculateResourcefulLootBonusPercent(progress.TotalCredits, player.Entity);
+            return TextCommandResult.Success($"Resourceful level set to {newLevel.Value} (+{newLootBonus}% loot).");
         }
 
         /// <summary>
@@ -8745,6 +8847,7 @@ namespace SimpleImprovingTraits
 
         /// <summary>
         /// Handler for /trait foragerlevel command.
+        /// Gets or sets the player's forager level.
         /// </summary>
         private TextCommandResult OnTraitForagerLevelCommand(TextCommandCallingArgs args)
         {
@@ -8754,16 +8857,26 @@ namespace SimpleImprovingTraits
             // Get the player-specific max credits (accounts for Civil/Heavyhanded penalties)
             int maxCredits = GetMaxForagerCredits(player.Entity);
 
-            int newLevel = (int)args[0];
-            if (newLevel < 0 || newLevel > maxCredits)
+            var progress = ForagerProgress.GetOrAdd(player.PlayerUID, _ => new ForagerProgressData());
+
+            int? newLevel = (int?)args[0];
+
+            // If no value provided, show current level
+            if (!newLevel.HasValue)
+            {
+                int netLootBonus = player.Entity.WatchedAttributes.GetInt(WATCHED_FORAGER_LOOT_BONUS, 0);
+                int netWildCropBonus = player.Entity.WatchedAttributes.GetInt(WATCHED_FORAGER_WILD_CROP_BONUS, 0);
+                return TextCommandResult.Success($"Current forager level: {progress.TotalCredits}/{maxCredits} (+{netLootBonus}% loot, +{netWildCropBonus}% wild crop)");
+            }
+
+            if (newLevel.Value < 0 || newLevel.Value > maxCredits)
                 return TextCommandResult.Error($"Level must be between 0 and {maxCredits}.");
 
-            var progress = ForagerProgress.GetOrAdd(player.PlayerUID, _ => new ForagerProgressData());
-            progress.TotalCredits = newLevel;
+            progress.TotalCredits = newLevel.Value;
             progress.CropsInIncrement = 0;
             progress.CurrentIncrementSize = BaseForagerCropsPerIncrement;
 
-            for (int i = 0; i < newLevel; i++)
+            for (int i = 0; i < newLevel.Value; i++)
             {
                 progress.CurrentIncrementSize += ForagerIncrementStep;
             }
@@ -8772,9 +8885,9 @@ namespace SimpleImprovingTraits
 
             ApplyForagerBonusStatic(player, progress.TotalCredits);
             // Use net bonuses from WatchedAttributes which accounts for Civil/Heavyhanded penalties
-            int netLootBonus = player.Entity.WatchedAttributes.GetInt(WATCHED_FORAGER_LOOT_BONUS, 0);
-            int netWildCropBonus = player.Entity.WatchedAttributes.GetInt(WATCHED_FORAGER_WILD_CROP_BONUS, 0);
-            return TextCommandResult.Success($"Forager level set to {newLevel} (+{netLootBonus}% loot, +{netWildCropBonus}% wild crop).");
+            int newNetLootBonus = player.Entity.WatchedAttributes.GetInt(WATCHED_FORAGER_LOOT_BONUS, 0);
+            int newNetWildCropBonus = player.Entity.WatchedAttributes.GetInt(WATCHED_FORAGER_WILD_CROP_BONUS, 0);
+            return TextCommandResult.Success($"Forager level set to {newLevel.Value} (+{newNetLootBonus}% loot, +{newNetWildCropBonus}% wild crop).");
         }
 
         /// <summary>
@@ -9112,26 +9225,37 @@ namespace SimpleImprovingTraits
 
         /// <summary>
         /// Handler for /trait furtivelevel command.
+        /// Gets or sets the player's furtive level.
         /// </summary>
         private TextCommandResult OnTraitFurtiveLevelCommand(TextCommandCallingArgs args)
         {
             IServerPlayer player = args.Caller.Player as IServerPlayer;
             if (player?.Entity == null) return TextCommandResult.Error("Player not found.");
 
-            int newLevel = (int)args[0];
-            if (newLevel < 0 || newLevel > MaxFurtivePercent)
-                return TextCommandResult.Error($"Level must be between 0 and {MaxFurtivePercent}.");
-
             string playerUid = player.PlayerUID;
             var progress = FurtiveProgress.GetOrAdd(playerUid, _ => new FurtiveProgressData());
-            progress.TotalCredits = newLevel;
+
+            int? newLevel = (int?)args[0];
+
+            // If no value provided, show current level
+            if (!newLevel.HasValue)
+            {
+                bool hasVanillaFurtive = PlayerHasVanillaFurtiveStatic(player.Entity);
+                int currentBonus = hasVanillaFurtive ? VANILLA_FURTIVE_DETECTION_REDUCTION : progress.TotalCredits;
+                return TextCommandResult.Success($"Current furtive level: {progress.TotalCredits}/{MaxFurtivePercent} (-{currentBonus}% detection)");
+            }
+
+            if (newLevel.Value < 0 || newLevel.Value > MaxFurtivePercent)
+                return TextCommandResult.Error($"Level must be between 0 and {MaxFurtivePercent}.");
+
+            progress.TotalCredits = newLevel.Value;
             progress.BlocksInIncrement = 0;
-            progress.CurrentIncrementSize = BaseFurtiveSneakBlocksPerIncrement + (newLevel * FurtiveIncrementStep);
+            progress.CurrentIncrementSize = BaseFurtiveSneakBlocksPerIncrement + (newLevel.Value * FurtiveIncrementStep);
 
             pendingFurtiveProgressSave = true;
-            int bonusPercent = ApplyFurtiveBonusStatic(player, newLevel);
+            int bonusPercent = ApplyFurtiveBonusStatic(player, newLevel.Value);
 
-            return TextCommandResult.Success($"Furtive level set to {newLevel} (-{bonusPercent}% detection).");
+            return TextCommandResult.Success($"Furtive level set to {newLevel.Value} (-{bonusPercent}% detection).");
         }
 
         /// <summary>
@@ -9175,28 +9299,39 @@ namespace SimpleImprovingTraits
 
         /// <summary>
         /// Handler for /trait preciselevel command.
+        /// Gets or sets the player's precise level.
         /// </summary>
         private TextCommandResult OnTraitPreciseLevelCommand(TextCommandCallingArgs args)
         {
             IServerPlayer player = args.Caller.Player as IServerPlayer;
             if (player?.Entity == null) return TextCommandResult.Error("Player not found.");
 
-            int newLevel = (int)args[0];
-            if (newLevel < 0 || newLevel > MaxPrecisePercent)
-                return TextCommandResult.Error($"Level must be between 0 and {MaxPrecisePercent}.");
-
             string playerUid = player.PlayerUID;
             var progress = PreciseProgress.GetOrAdd(playerUid, _ => new PreciseProgressData());
-            progress.TotalCredits = newLevel;
+
+            int? newLevel = (int?)args[0];
+
+            // If no value provided, show current level
+            if (!newLevel.HasValue)
+            {
+                bool hasVanillaPrecise = PlayerHasVanillaPreciseStatic(player.Entity);
+                int currentBonus = hasVanillaPrecise ? VANILLA_PRECISE_MECHANICAL_DAMAGE_BONUS : progress.TotalCredits;
+                return TextCommandResult.Success($"Current precise level: {progress.TotalCredits}/{MaxPrecisePercent} (+{currentBonus}% mechanical damage)");
+            }
+
+            if (newLevel.Value < 0 || newLevel.Value > MaxPrecisePercent)
+                return TextCommandResult.Error($"Level must be between 0 and {MaxPrecisePercent}.");
+
+            progress.TotalCredits = newLevel.Value;
             progress.WeaponProgress.Clear();
 
             pendingPreciseProgressSave = true;
-            int bonusPercent = ApplyPreciseBonusStatic(player, newLevel);
+            int bonusPercent = ApplyPreciseBonusStatic(player, newLevel.Value);
 
             // Check for trait unlocks that depend on precise level
             CheckTinkererUnlock(player);
 
-            return TextCommandResult.Success($"Precise level set to {newLevel} (+{bonusPercent}% mechanical damage).");
+            return TextCommandResult.Success($"Precise level set to {newLevel.Value} (+{bonusPercent}% mechanical damage).");
         }
 
         /// <summary>
@@ -9736,6 +9871,99 @@ namespace SimpleImprovingTraits
             ApplyClaustrophobicRemovalStatic(player, false);
 
             return TextCommandResult.Success("All trait progression has been reset to 0.");
+        }
+
+        /// <summary>
+        /// Handler for /trait resetconfig command.
+        /// Resets all trait configuration values (base, increment, max) to their defaults.
+        /// </summary>
+        private TextCommandResult OnTraitResetConfigCommand(TextCommandCallingArgs args)
+        {
+            // Mining defaults
+            BaseBlocksPerIncrement = 100;
+            IncrementStep = 100;
+            MaxMiningSpeedPercent = 150;
+            OreMultiplier = 5;
+
+            // Melee defaults
+            BaseDamagePerIncrement = 100;
+            MeleeIncrementStep = 100;
+            MaxMeleeDamagePercent = 50;
+
+            // Ranged defaults
+            BaseRangedDamagePerIncrement = 100;
+            RangedIncrementStep = 100;
+            MaxRangedDamagePercent = 50;
+            MaxRangedAccuracyPercent = 50;
+            MaxRangedDistancePercent = 50;
+
+            // Walking defaults
+            BaseBlocksWalkedPerIncrement = 1000;
+            WalkingIncrementStep = 1000;
+            MaxWalkingSpeedPercent = 15;
+
+            // Hunger defaults
+            BaseSecondsPerIncrement = 300;
+            HungerIncrementStep = 60;
+            MaxHungerReductionPercent = 25;
+
+            // Armor defaults
+            BaseSecondsInArmorPerIncrement = 86400;
+            ArmorTimeIncrementStep = 86400;
+            BaseDamageBlockedPerIncrement = 100;
+            ArmorDamageIncrementStep = 100;
+            BaseRepairsPerIncrement = 1;
+            ArmorRepairIncrementStep = 1;
+            MaxArmorDurabilityPercent = 50;
+            MaxArmorWalkSpeedPercent = 50;
+
+            // Clothier defaults
+            ClothierRequiredUniqueClothes = 20;
+
+            // Mender defaults
+            BaseMenderRepairsPerIncrement = 5;
+            MenderIncrementStep = 1;
+            MaxMenderPercent = 20;
+
+            // Pilferer defaults
+            BasePilfererPointsPerIncrement = 10;
+            PilfererIncrementStep = 10;
+            MaxPilfererPercent = 20;
+
+            // Resourceful defaults
+            BaseResourcefulAnimalsPerIncrement = 10;
+            ResourcefulIncrementStep = 10;
+            MaxResourcefulLootPercent = 20;
+            MaxResourcefulSpeedPercent = 25;
+
+            // Forager defaults
+            BaseForagerCropsPerIncrement = 10;
+            ForagerIncrementStep = 10;
+            MaxForagerLootPercent = 20;
+            MaxForagerWildCropPercent = 20;
+
+            // Furtive defaults
+            BaseFurtiveSneakBlocksPerIncrement = 100;
+            FurtiveIncrementStep = 100;
+            MaxFurtivePercent = 35;
+
+            // Precise defaults
+            BasePreciseDamagePerIncrement = 100;
+            PreciseIncrementStep = 100;
+            MaxPrecisePercent = 30;
+
+            // Technical defaults
+            TechnicalRequiredTranslocatorRepairs = 5;
+
+            // Hardy Health defaults
+            HardyHealthMiningThreshold = 110;
+            HardyHealthArmorDurabilityThreshold = 10;
+            HardyHealthBonus = 5;
+
+            // Save config
+            pendingConfigSave = true;
+
+            return TextCommandResult.Success("All trait configuration values have been reset to defaults.");
         }
 
         // =========================================================================

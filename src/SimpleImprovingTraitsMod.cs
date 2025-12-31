@@ -11881,9 +11881,10 @@ namespace SimpleImprovingTraits
                 }
                 else
                 {
+                    // Remove Civil trait completely - use empty string, cleanup at end handles newlines
                     __result = System.Text.RegularExpressions.Regex.Replace(__result,
-                        @"\n?<font color=""#ff8484"">• Civil </font> <font opacity=""0\.6"">\(-\d+% loot from foraging\)</font>\n?",
-                        "\n");
+                        @"\n?<font color=""#ff8484"">• Civil </font> <font opacity=""0\.6"">\(-\d+% loot from foraging\)</font>",
+                        "");
                 }
             }
 
@@ -11902,9 +11903,10 @@ namespace SimpleImprovingTraits
                 }
                 else
                 {
+                    // Remove Weak trait completely - use empty string, cleanup at end handles newlines
                     __result = System.Text.RegularExpressions.Regex.Replace(__result,
-                        @"\n?<font color=""#ff8484"">• Weak </font> <font opacity=""0\.6"">\(-\d+ health points, -\d+% mining speed\)</font>\n?",
-                        "\n");
+                        @"\n?<font color=""#ff8484"">• Weak </font> <font opacity=""0\.6"">\(-\d+ health points, -\d+% mining speed\)</font>",
+                        "");
                 }
             }
 
@@ -11936,9 +11938,10 @@ namespace SimpleImprovingTraits
                 }
                 else
                 {
+                    // Remove Kind trait completely - use empty string, cleanup at end handles newlines
                     __result = System.Text.RegularExpressions.Regex.Replace(__result,
-                        @"\n?<font color=""#ff8484"">• Kind </font> <font opacity=""0\.6"">\(-\d+% animal loot, -\d+% harvesting speed\)</font>\n?",
-                        "\n");
+                        @"\n?<font color=""#ff8484"">• Kind </font> <font opacity=""0\.6"">\(-\d+% animal loot, -\d+% harvesting speed\)</font>",
+                        "");
                 }
             }
 
@@ -11957,9 +11960,10 @@ namespace SimpleImprovingTraits
                 }
                 else
                 {
+                    // Remove Farsighted trait completely - use empty string, cleanup at end handles newlines
                     __result = System.Text.RegularExpressions.Regex.Replace(__result,
-                        @"\n?<font color=""#ff8484"">• Farsighted </font> <font opacity=""0\.6"">\(-\d+% melee damage\)</font>\n?",
-                        "\n");
+                        @"\n?<font color=""#ff8484"">• Farsighted </font> <font opacity=""0\.6"">\(-\d+% melee damage\)</font>",
+                        "");
                 }
             }
 
@@ -11978,9 +11982,10 @@ namespace SimpleImprovingTraits
                 }
                 else
                 {
+                    // Remove Nervous trait completely - use empty string, cleanup at end handles newlines
                     __result = System.Text.RegularExpressions.Regex.Replace(__result,
-                        @"\n?<font color=""#ff8484"">• Nervous </font> <font opacity=""0\.6"">\(-\d+% melee damage\)</font>\n?",
-                        "\n");
+                        @"\n?<font color=""#ff8484"">• Nervous </font> <font opacity=""0\.6"">\(-\d+% melee damage\)</font>",
+                        "");
                 }
             }
 
@@ -11999,10 +12004,10 @@ namespace SimpleImprovingTraits
                 }
                 else
                 {
-                    // Remove Nearsighted trait completely
+                    // Remove Nearsighted trait completely - use empty string, cleanup at end handles newlines
                     __result = System.Text.RegularExpressions.Regex.Replace(__result,
-                        @"\n?<font color=""#ff8484"">• Nearsighted </font> <font opacity=""0\.6"">\(-\d+% ranged damage\)</font>\n?",
-                        "\n");
+                        @"\n?<font color=""#ff8484"">• Nearsighted </font> <font opacity=""0\.6"">\(-\d+% ranged damage\)</font>",
+                        "");
                 }
             }
 
@@ -12054,10 +12059,10 @@ namespace SimpleImprovingTraits
                 }
                 else
                 {
-                    // Remove Heavyhanded trait completely
+                    // Remove Heavyhanded trait completely - use empty string, cleanup at end handles newlines
                     __result = System.Text.RegularExpressions.Regex.Replace(__result,
-                        @"\n?<font color=""#ff8484"">• Heavyhanded </font> <font opacity=""0\.6"">\(-\d+% cracked vessel loot, -\d+% loot from foraging, -\d+% wild crop drop rate\)</font>\n?",
-                        "\n");
+                        @"\n?<font color=""#ff8484"">• Heavyhanded </font> <font opacity=""0\.6"">\(-\d+% cracked vessel loot, -\d+% loot from foraging, -\d+% wild crop drop rate\)</font>",
+                        "");
                 }
             }
 
@@ -12115,36 +12120,49 @@ namespace SimpleImprovingTraits
                     string beforeReplace = __result;
 
                     // Vanilla format: <font color="#ff8484">• Claustrophobic </font> <font opacity="0.6">(-15% ore drop rate, -10% mining speed)</font>
+                    // Use empty string replacement, cleanup at end handles newlines
                     __result = System.Text.RegularExpressions.Regex.Replace(__result,
-                        @"\n?<font color=""#ff8484"">• Claustrophobic </font> <font opacity=""0\.6"">\(-\d+% ore drop rate, -\d+% mining speed\)</font>\n?",
-                        "\n");
+                        @"\n?<font color=""#ff8484"">• Claustrophobic </font> <font opacity=""0\.6"">\(-\d+% ore drop rate, -\d+% mining speed\)</font>",
+                        "");
 
                     if (__result == beforeReplace)
                     {
                         ClientApi.Logger.Debug("[SimpleImprovingTraits] Primary removal regex did not match, trying alternatives");
                         // Try broader pattern
                         __result = System.Text.RegularExpressions.Regex.Replace(__result,
-                            @"\n?<font color=""#ff8484"">.*?Claustrophobic.*?</font>.*?\(-\d+% ore drop rate, -\d+% mining speed\).*?</font>\n?",
-                            "\n");
+                            @"\n?<font color=""#ff8484"">.*?Claustrophobic.*?</font>.*?\(-\d+% ore drop rate, -\d+% mining speed\).*?</font>",
+                            "");
                     }
 
                     if (__result == beforeReplace)
                     {
                         // Try without font tags at all
                         __result = System.Text.RegularExpressions.Regex.Replace(__result,
-                            @"\n?.*?Claustrophobic.*?\(-\d+% ore drop rate, -\d+% mining speed\).*?\n?",
-                            "\n");
+                            @"\n?.*?Claustrophobic.*?\(-\d+% ore drop rate, -\d+% mining speed\).*?",
+                            "");
                     }
 
                     ClientApi.Logger.Debug($"[SimpleImprovingTraits] Removal result: {(__result != beforeReplace ? "SUCCESS" : "FAILED")}");
                 }
             }
 
-            // Clean up any double newlines that might have been introduced
-            while (__result.Contains("\n\n"))
+            // Clean up any newline issues that might have been introduced
+            // First normalize line endings (handle \r\n, \r, and \n)
+            __result = __result.Replace("\r\n", "\n").Replace("\r", "\n");
+
+            // Remove any lines that are empty or whitespace-only
+            var lines = __result.Split('\n');
+            var nonEmptyLines = new System.Collections.Generic.List<string>();
+            foreach (var line in lines)
             {
-                __result = __result.Replace("\n\n", "\n");
+                if (!string.IsNullOrWhiteSpace(line))
+                {
+                    nonEmptyLines.Add(line.Trim());
+                }
             }
+            __result = string.Join("\n", nonEmptyLines);
+
+            // Final trim
             __result = __result.Trim();
 
             ClientApi.Logger.Debug($"[SimpleImprovingTraits] Modified result: {__result}");

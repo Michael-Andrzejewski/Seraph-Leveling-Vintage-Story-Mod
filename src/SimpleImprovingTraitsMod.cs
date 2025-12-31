@@ -2368,6 +2368,9 @@ namespace SimpleImprovingTraits
             // Apply the bonus
             int bonusPercent = ApplyMeleeBonusStatic(player, newCredits);
 
+            // Check for trait unlocks that depend on melee level
+            CheckMercilessUnlock(player);
+
             return TextCommandResult.Success($"Melee credits set to {newCredits} (+{bonusPercent}% melee damage). Per-weapon progress reset.");
         }
 
@@ -3089,6 +3092,10 @@ namespace SimpleImprovingTraits
             ApplyArmorBonusesStatic(player, progress.TotalDurabilityCredits, progress.TotalWalkSpeedCredits);
 
             int bonusPercent = CalculateArmorDurabilityBonusPercent(newCredits, player.Entity);
+
+            // Check for trait unlocks that depend on armor durability
+            CheckHardyHealthUnlock(player);
+            CheckMercilessUnlock(player);
 
             return TextCommandResult.Success($"Armor durability credits set to {newCredits} (+{bonusPercent}% durability).");
         }
@@ -7203,11 +7210,19 @@ namespace SimpleImprovingTraits
 
         /// <summary>
         /// Apply Tinkerer trait (unlocks tuning spear crafting).
+        /// Also adds "tinkerer" to extraTraits to unlock tuning spear recipes.
         /// </summary>
         private static void ApplyTinkererBonusStatic(IServerPlayer player, bool unlocked)
         {
             player.Entity.WatchedAttributes.SetBool(WATCHED_TINKERER_UNLOCKED, unlocked);
+
+            // Update extraTraits to show Tinkerer trait if unlocked (for UI display)
             UpdateExtraTraitStatic(player.Entity, TINKERER_TRAIT_CODE, unlocked);
+
+            // IMPORTANT: Add "tinkerer" to extraTraits to unlock tuning spear recipes
+            // The game's recipe system checks extraTraits for dynamically granted traits
+            // that unlock recipes via requiresTrait (e.g., the tuning spear requires "tinkerer")
+            UpdateExtraTraitStatic(player.Entity, "tinkerer", unlocked);
         }
 
         /// <summary>
@@ -7252,6 +7267,11 @@ namespace SimpleImprovingTraits
         {
             player.Entity.WatchedAttributes.SetBool(WATCHED_MERCILESS_UNLOCKED, unlocked);
             UpdateExtraTraitStatic(player.Entity, MERCILESS_TRAIT_CODE, unlocked);
+
+            // IMPORTANT: Add "merciless" to extraTraits to unlock shortsword/shield recipes
+            // The game's recipe system checks extraTraits for dynamically granted traits
+            // that unlock recipes via requiresTrait (e.g., shortsword/shield require "merciless")
+            UpdateExtraTraitStatic(player.Entity, "merciless", unlocked);
         }
 
         /// <summary>
@@ -8467,6 +8487,9 @@ namespace SimpleImprovingTraits
 
             pendingPreciseProgressSave = true;
             int bonusPercent = ApplyPreciseBonusStatic(player, newLevel);
+
+            // Check for trait unlocks that depend on precise level
+            CheckTinkererUnlock(player);
 
             return TextCommandResult.Success($"Precise level set to {newLevel} (+{bonusPercent}% mechanical damage).");
         }

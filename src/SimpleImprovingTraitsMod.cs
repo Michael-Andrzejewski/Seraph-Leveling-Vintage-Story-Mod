@@ -1063,6 +1063,7 @@ namespace SimpleImprovingTraits
         // Vanilla Ravenous trait hunger rate increase (used for cap calculations)
         // Blackguard has +30% hunger rate, so earning 25% brings them back to nearly normal
         public const int VANILLA_RAVENOUS_HUNGER_PENALTY = 30;
+        public const string WATCHED_RAVENOUS_REMAINING = "sitRavenousRemaining";
 
         // Storage for hunger progress - keyed by player UID
         public static ConcurrentDictionary<string, HungerProgressData> HungerProgress = new ConcurrentDictionary<string, HungerProgressData>();
@@ -1425,6 +1426,7 @@ namespace SimpleImprovingTraits
         public const int VANILLA_FRAIL_DISTANCE_PENALTY = 25;
         public const string WATCHED_FRAIL_HP_REMAINING = "sitFrailHpRemaining";
         public const string WATCHED_FRAIL_DISTANCE_REMAINING = "sitFrailDistanceRemaining";
+        public const string FRAIL_HP_CANCEL_STAT_CODE = "sitFrailHpCancel";
 
         // Civil (Tailor): -10% loot from foraging
         public const int VANILLA_CIVIL_FORAGING_PENALTY = 10;
@@ -1435,6 +1437,7 @@ namespace SimpleImprovingTraits
         public const int VANILLA_WEAK_MINING_PENALTY = 10;
         public const string WATCHED_WEAK_HP_REMAINING = "sitWeakHpRemaining";
         public const string WATCHED_WEAK_MINING_REMAINING = "sitWeakMiningRemaining";
+        public const string WEAK_HP_CANCEL_STAT_CODE = "sitWeakHpCancel";
 
         // Kind (Tailor): -10% animal loot, -25% harvesting speed
         public const int VANILLA_KIND_LOOT_PENALTY = 10;
@@ -2076,9 +2079,10 @@ namespace SimpleImprovingTraits
 
             int currentCredits = progress.TotalCredits;
             int bonusPercent = CalculateMiningBonusPercent(currentCredits);
+            int maxCredits = GetMaxMiningCredits(player.Entity);
 
             var sb = new StringBuilder();
-            sb.AppendLine($"Mining progression: {currentCredits}% / {MaxMiningSpeedPercent}%");
+            sb.AppendLine($"Mining progression: {currentCredits}% / {maxCredits}%");
             sb.AppendLine($"Current bonus: +{bonusPercent}% mining speed");
 
             if (progress.PickaxeProgress.Count > 0)
@@ -2100,7 +2104,7 @@ namespace SimpleImprovingTraits
                 sb.AppendLine("\nNo pickaxe progress yet. Mine stone/ore with a pickaxe to start!");
             }
 
-            if (currentCredits >= MaxMiningSpeedPercent)
+            if (currentCredits >= maxCredits)
             {
                 sb.Insert(0, "=== MAXED OUT ===\n");
             }
@@ -2173,6 +2177,9 @@ namespace SimpleImprovingTraits
                 return TextCommandResult.Error("Could not find player entity");
             }
 
+            // Get the player-specific max credits (accounts for Weak/Claustrophobic penalties)
+            int maxCredits = GetMaxMiningCredits(player.Entity);
+
             int newCredits = (int)args[0];
 
             if (newCredits < 0)
@@ -2180,9 +2187,9 @@ namespace SimpleImprovingTraits
                 return TextCommandResult.Error("Credits cannot be negative");
             }
 
-            if (newCredits > MaxMiningSpeedPercent)
+            if (newCredits > maxCredits)
             {
-                return TextCommandResult.Error($"Credits cannot exceed max ({MaxMiningSpeedPercent})");
+                return TextCommandResult.Error($"Credits cannot exceed max ({maxCredits})");
             }
 
             // Set the player's progress (clears per-pickaxe progress)
@@ -2307,9 +2314,10 @@ namespace SimpleImprovingTraits
 
             int currentCredits = progress.TotalCredits;
             int bonusPercent = CalculateMeleeBonusPercent(currentCredits);
+            int maxCredits = GetMaxMeleeCredits(player.Entity);
 
             var sb = new StringBuilder();
-            sb.AppendLine($"Melee progression: {currentCredits}% / {MaxMeleeDamagePercent}%");
+            sb.AppendLine($"Melee progression: {currentCredits}% / {maxCredits}%");
             sb.AppendLine($"Current bonus: +{bonusPercent}% melee damage");
 
             if (progress.WeaponProgress.Count > 0)
@@ -2331,7 +2339,7 @@ namespace SimpleImprovingTraits
                 sb.AppendLine("\nNo weapon progress yet. Deal damage with swords, falx, or spears to start!");
             }
 
-            if (currentCredits >= MaxMeleeDamagePercent)
+            if (currentCredits >= maxCredits)
             {
                 sb.Insert(0, "=== MAXED OUT ===\n");
             }
@@ -2404,6 +2412,9 @@ namespace SimpleImprovingTraits
                 return TextCommandResult.Error("Could not find player entity");
             }
 
+            // Get the player-specific max credits (accounts for Farsighted/Nervous penalties)
+            int maxCredits = GetMaxMeleeCredits(player.Entity);
+
             int newCredits = (int)args[0];
 
             if (newCredits < 0)
@@ -2411,9 +2422,9 @@ namespace SimpleImprovingTraits
                 return TextCommandResult.Error("Credits cannot be negative");
             }
 
-            if (newCredits > MaxMeleeDamagePercent)
+            if (newCredits > maxCredits)
             {
-                return TextCommandResult.Error($"Credits cannot exceed max ({MaxMeleeDamagePercent})");
+                return TextCommandResult.Error($"Credits cannot exceed max ({maxCredits})");
             }
 
             // Set the player's progress (clears per-weapon progress)
@@ -2485,9 +2496,10 @@ namespace SimpleImprovingTraits
 
             int currentCredits = progress.TotalCredits;
             var (damageBonus, accuracyBonus, distanceBonus) = CalculateRangedBonusPercents(currentCredits, player.Entity as EntityPlayer);
+            int maxCredits = GetMaxRangedCredits(player.Entity as EntityPlayer);
 
             var sb = new StringBuilder();
-            sb.AppendLine($"Ranged progression: {currentCredits} credits / {MaxRangedDamagePercent} max");
+            sb.AppendLine($"Ranged progression: {currentCredits} credits / {maxCredits} max");
             sb.AppendLine($"Current bonuses: +{damageBonus}% damage, +{accuracyBonus}% accuracy, +{distanceBonus}% distance");
 
             if (progress.WeaponProgress.Count > 0)
@@ -2508,7 +2520,7 @@ namespace SimpleImprovingTraits
                 sb.AppendLine("\nNo weapon progress yet. Deal ranged damage with bows or slings to start!");
             }
 
-            if (currentCredits >= MaxRangedDamagePercent)
+            if (currentCredits >= maxCredits)
             {
                 sb.Insert(0, "=== MAXED OUT ===\n");
             }
@@ -2581,6 +2593,9 @@ namespace SimpleImprovingTraits
                 return TextCommandResult.Error("Could not find player entity");
             }
 
+            // Get the player-specific max credits (accounts for Nearsighted/Frail penalties)
+            int maxCredits = GetMaxRangedCredits(player.Entity);
+
             int newCredits = (int)args[0];
 
             if (newCredits < 0)
@@ -2588,9 +2603,9 @@ namespace SimpleImprovingTraits
                 return TextCommandResult.Error("Credits cannot be negative");
             }
 
-            if (newCredits > MaxRangedDamagePercent)
+            if (newCredits > maxCredits)
             {
-                return TextCommandResult.Error($"Credits cannot exceed max ({MaxRangedDamagePercent})");
+                return TextCommandResult.Error($"Credits cannot exceed max ({maxCredits})");
             }
 
             // Set the player's progress (clears per-weapon progress)
@@ -3414,16 +3429,21 @@ namespace SimpleImprovingTraits
 
             int bonusPercent = (int)(bonus * 100);
 
+            // Calculate remaining Ravenous penalty (0 when fully cancelled at level 30)
+            int ravenousRemaining = hasVanillaRavenous ? CalculateRemainingPenalty(VANILLA_RAVENOUS_HUNGER_PENALTY, level) : 0;
+
             // Sync level and bonus to WatchedAttributes for client-side display
             player.Entity.WatchedAttributes.SetInt(WATCHED_HUNGER_LEVEL, level);
             player.Entity.WatchedAttributes.SetInt(WATCHED_HUNGER_BONUS, bonusPercent);
             player.Entity.WatchedAttributes.SetBool("sitHasVanillaRavenous", hasVanillaRavenous);
             player.Entity.WatchedAttributes.SetInt("sitMaxHungerCredits", maxCredits);
+            player.Entity.WatchedAttributes.SetInt(WATCHED_RAVENOUS_REMAINING, ravenousRemaining);
 
             // Add our trait to extraTraits (hunger mastery is unique, doesn't replace a vanilla trait)
             UpdateExtraTraitStatic(player.Entity, HUNGER_TRAIT_CODE, level > 0);
 
             player.Entity.WatchedAttributes.MarkPathDirty(WATCHED_HUNGER_LEVEL);
+            player.Entity.WatchedAttributes.MarkPathDirty(WATCHED_RAVENOUS_REMAINING);
 
             return bonusPercent;
         }
@@ -3450,6 +3470,33 @@ namespace SimpleImprovingTraits
         }
 
         /// <summary>
+        /// Get the maximum melee credits a player can earn based on their traits.
+        /// Players with Farsighted or Nervous traits can earn extra credits
+        /// to compensate for the penalty before gaining positive bonuses.
+        /// </summary>
+        public static int GetMaxMeleeCredits(EntityPlayer entity)
+        {
+            if (entity == null) return MaxMeleeDamagePercent;
+
+            bool hasFarsighted = PlayerHasVanillaFarsighted(entity);
+            bool hasNervous = PlayerHasVanillaNervous(entity);
+
+            // Farsighted penalty is 15% melee damage, need 15 extra levels to cancel it
+            if (hasFarsighted)
+            {
+                return MaxMeleeDamagePercent + VANILLA_FARSIGHTED_MELEE_PENALTY;
+            }
+
+            // Nervous penalty is 15% melee damage, need 15 extra levels to cancel it
+            if (hasNervous)
+            {
+                return MaxMeleeDamagePercent + VANILLA_NERVOUS_MELEE_PENALTY;
+            }
+
+            return MaxMeleeDamagePercent;
+        }
+
+        /// <summary>
         /// Calculate ranged bonuses as percentages, accounting for vanilla Focused trait.
         /// Returns (damageBonus, accuracyBonus, distanceBonus) as integers.
         /// </summary>
@@ -3470,6 +3517,36 @@ namespace SimpleImprovingTraits
             int distanceBonus = Math.Min(credits, earnableDistance);
 
             return (damageBonus, accuracyBonus, distanceBonus);
+        }
+
+        /// <summary>
+        /// Get the maximum ranged credits a player can earn based on their traits.
+        /// Players with Nearsighted or Frail traits can earn extra credits
+        /// to compensate for the penalty before gaining positive bonuses.
+        /// </summary>
+        public static int GetMaxRangedCredits(EntityPlayer entity)
+        {
+            if (entity == null) return MaxRangedDamagePercent;
+
+            bool hasNearsighted = PlayerHasVanillaNearsighted(entity);
+            bool hasFrail = PlayerHasVanillaFrail(entity);
+
+            // Use the larger penalty to determine max credits
+            int extraCredits = 0;
+
+            // Nearsighted penalty is 15% ranged damage, need 15 extra levels to cancel it
+            if (hasNearsighted)
+            {
+                extraCredits = Math.Max(extraCredits, VANILLA_NEARSIGHTED_RANGED_PENALTY);
+            }
+
+            // Frail penalty is 25% ranged distance, need 25 extra levels to cancel it
+            if (hasFrail)
+            {
+                extraCredits = Math.Max(extraCredits, VANILLA_FRAIL_DISTANCE_PENALTY);
+            }
+
+            return MaxRangedDamagePercent + extraCredits;
         }
 
         /// <summary>
@@ -4154,8 +4231,11 @@ namespace SimpleImprovingTraits
             // Get or create player progress data
             var playerProgress = MiningProgress.GetOrAdd(playerUid, _ => new MiningProgressData());
 
+            // Get the player-specific max credits (accounts for Weak/Claustrophobic penalties)
+            int maxCredits = GetMaxMiningCredits(byPlayer.Entity);
+
             // Skip all processing if already at max - completely invisible
-            if (playerProgress.TotalCredits >= MaxMiningSpeedPercent) return;
+            if (playerProgress.TotalCredits >= maxCredits) return;
 
             // Get or create progress for this specific pickaxe type
             var pickaxeProgress = playerProgress.GetPickaxeProgress(pickaxeCode);
@@ -4166,7 +4246,7 @@ namespace SimpleImprovingTraits
             pickaxeProgress.BlocksInIncrement += points;
 
             // Check if we've earned any new credits with this pickaxe
-            while (pickaxeProgress.BlocksInIncrement >= pickaxeProgress.CurrentIncrementSize && playerProgress.TotalCredits < MaxMiningSpeedPercent)
+            while (pickaxeProgress.BlocksInIncrement >= pickaxeProgress.CurrentIncrementSize && playerProgress.TotalCredits < maxCredits)
             {
                 // Earn a credit
                 playerProgress.TotalCredits++;
@@ -4577,6 +4657,8 @@ namespace SimpleImprovingTraits
 
             // Calculate remaining negative trait penalties
             int weakMiningRemaining = hasWeak ? CalculateRemainingPenalty(VANILLA_WEAK_MINING_PENALTY, level) : 0;
+            // HP penalty is tied to mining penalty - when mining penalty is cancelled (at level 10), HP is also cancelled
+            int weakHpRemaining = weakMiningRemaining > 0 ? VANILLA_WEAK_HP_PENALTY : 0;
             int claustrophobicMiningRemaining = hasClaustrophobic ? CalculateRemainingPenalty(VANILLA_CLAUSTROPHOBIC_MINING_PENALTY, level) : 0;
             // Ore penalty is tied to mining penalty - when mining penalty is cancelled (at level 10), ore is also cancelled
             int claustrophobicOreRemaining = claustrophobicMiningRemaining > 0 ? VANILLA_CLAUSTROPHOBIC_ORE_PENALTY : 0;
@@ -4615,6 +4697,21 @@ namespace SimpleImprovingTraits
                 }
             }
 
+            // When Weak mining penalty is fully cancelled, also negate the HP penalty
+            if (hasWeak)
+            {
+                if (weakMiningRemaining == 0)
+                {
+                    // Negate the -2 HP penalty by applying +2 HP
+                    player.Entity.Stats.Set("maxhealthExtraPoints", WEAK_HP_CANCEL_STAT_CODE, VANILLA_WEAK_HP_PENALTY, false);
+                }
+                else
+                {
+                    // Remove the HP cancellation stat if penalty is still active
+                    player.Entity.Stats.Remove("maxhealthExtraPoints", WEAK_HP_CANCEL_STAT_CODE);
+                }
+            }
+
             // Sync level and bonus to WatchedAttributes for client-side display
             player.Entity.WatchedAttributes.SetInt(WATCHED_MINING_LEVEL, level);
             player.Entity.WatchedAttributes.SetInt(WATCHED_MINING_BONUS, bonusPercent);
@@ -4623,6 +4720,7 @@ namespace SimpleImprovingTraits
             // Sync negative trait status
             player.Entity.WatchedAttributes.SetBool("sitHasWeak", hasWeak);
             player.Entity.WatchedAttributes.SetInt(WATCHED_WEAK_MINING_REMAINING, weakMiningRemaining);
+            player.Entity.WatchedAttributes.SetInt(WATCHED_WEAK_HP_REMAINING, weakHpRemaining);
             player.Entity.WatchedAttributes.SetBool("sitHasClaustrophobic", hasClaustrophobic);
             player.Entity.WatchedAttributes.SetInt(WATCHED_CLAUSTROPHOBIC_MINING_REMAINING, claustrophobicMiningRemaining);
             player.Entity.WatchedAttributes.SetInt(WATCHED_CLAUSTROPHOBIC_ORE_REMAINING, claustrophobicOreRemaining);
@@ -4713,6 +4811,33 @@ namespace SimpleImprovingTraits
         /// </summary>
         public static int CalculateMaxCredits()
         {
+            return MaxMiningSpeedPercent;
+        }
+
+        /// <summary>
+        /// Get the maximum mining credits a player can earn based on their traits.
+        /// Players with Weak or Claustrophobic traits can earn extra credits
+        /// to compensate for the penalty before gaining positive bonuses.
+        /// </summary>
+        public static int GetMaxMiningCredits(EntityPlayer entity)
+        {
+            if (entity == null) return MaxMiningSpeedPercent;
+
+            bool hasWeak = PlayerHasVanillaWeak(entity);
+            bool hasClaustrophobic = PlayerHasVanillaClaustrophobic(entity);
+
+            // Weak penalty is 10% mining speed, need 10 extra levels to cancel it
+            if (hasWeak)
+            {
+                return MaxMiningSpeedPercent + VANILLA_WEAK_MINING_PENALTY;
+            }
+
+            // Claustrophobic penalty is 10% mining speed, need 10 extra levels to cancel it
+            if (hasClaustrophobic)
+            {
+                return MaxMiningSpeedPercent + VANILLA_CLAUSTROPHOBIC_MINING_PENALTY;
+            }
+
             return MaxMiningSpeedPercent;
         }
 
@@ -4918,15 +5043,18 @@ namespace SimpleImprovingTraits
         /// </summary>
         public static void ProcessMeleeDamage(IServerPlayer attackerPlayer, string weaponType, float damage)
         {
-            if (attackerPlayer == null || string.IsNullOrEmpty(weaponType)) return;
+            if (attackerPlayer?.Entity == null || string.IsNullOrEmpty(weaponType)) return;
 
             string playerUid = attackerPlayer.PlayerUID;
 
             // Get or create player progress data
             var playerProgress = MeleeProgress.GetOrAdd(playerUid, _ => new MeleeProgressData());
 
+            // Get the player-specific max credits (accounts for Farsighted/Nervous penalties)
+            int maxCredits = GetMaxMeleeCredits(attackerPlayer.Entity);
+
             // Skip all processing if already at max - completely invisible
-            if (playerProgress.TotalCredits >= MaxMeleeDamagePercent) return;
+            if (playerProgress.TotalCredits >= maxCredits) return;
 
             // Get or create progress for this specific weapon type
             var weaponProgress = playerProgress.GetWeaponProgress(weaponType);
@@ -4937,7 +5065,7 @@ namespace SimpleImprovingTraits
             weaponProgress.DamageInIncrement += damage;
 
             // Check if we've earned any new credits with this weapon type
-            while (weaponProgress.DamageInIncrement >= weaponProgress.CurrentIncrementSize && playerProgress.TotalCredits < MaxMeleeDamagePercent)
+            while (weaponProgress.DamageInIncrement >= weaponProgress.CurrentIncrementSize && playerProgress.TotalCredits < maxCredits)
             {
                 // Earn a credit
                 playerProgress.TotalCredits++;
@@ -5134,15 +5262,18 @@ namespace SimpleImprovingTraits
         /// </summary>
         public static void ProcessRangedDamage(IServerPlayer attackerPlayer, string weaponCombo, float damage)
         {
-            if (attackerPlayer == null || string.IsNullOrEmpty(weaponCombo)) return;
+            if (attackerPlayer?.Entity == null || string.IsNullOrEmpty(weaponCombo)) return;
 
             string playerUid = attackerPlayer.PlayerUID;
 
             // Get or create player progress data
             var playerProgress = RangedProgress.GetOrAdd(playerUid, _ => new RangedProgressData());
 
+            // Get the player-specific max credits (accounts for Nearsighted/Frail penalties)
+            int maxCredits = GetMaxRangedCredits(attackerPlayer.Entity);
+
             // Skip all processing if already at max - completely invisible
-            if (playerProgress.TotalCredits >= MaxRangedDamagePercent) return;
+            if (playerProgress.TotalCredits >= maxCredits) return;
 
             // Get or create progress for this specific weapon combination
             var weaponProgress = playerProgress.GetWeaponProgress(weaponCombo);
@@ -5153,7 +5284,7 @@ namespace SimpleImprovingTraits
             weaponProgress.DamageInIncrement += damage;
 
             // Check if we've earned any new credits with this weapon combination
-            while (weaponProgress.DamageInIncrement >= weaponProgress.CurrentIncrementSize && playerProgress.TotalCredits < MaxRangedDamagePercent)
+            while (weaponProgress.DamageInIncrement >= weaponProgress.CurrentIncrementSize && playerProgress.TotalCredits < maxCredits)
             {
                 // Earn a credit
                 playerProgress.TotalCredits++;
@@ -5280,6 +5411,8 @@ namespace SimpleImprovingTraits
             // Calculate remaining negative trait penalties
             int nearsightedRemaining = hasNearsighted ? CalculateRemainingPenalty(VANILLA_NEARSIGHTED_RANGED_PENALTY, level) : 0;
             int frailDistanceRemaining = hasFrail ? CalculateRemainingPenalty(VANILLA_FRAIL_DISTANCE_PENALTY, level) : 0;
+            // HP penalty is tied to distance penalty - when distance penalty is cancelled (at level 25), HP is also cancelled
+            float frailHpRemaining = frailDistanceRemaining > 0 ? VANILLA_FRAIL_HP_PENALTY : 0f;
 
             // Calculate net bonus after cancelling negative traits
             int netDamageLevel = level;
@@ -5325,6 +5458,21 @@ namespace SimpleImprovingTraits
                 ServerApi?.Logger.Debug($"[SimpleImprovingTraits] Applied ranged stats to {player.PlayerName}: Damage={damageBonus:F2}, Accuracy={accuracyBonus:F2}, Distance={distanceBonus:F2}");
             }
 
+            // When Frail distance penalty is fully cancelled, also negate the HP penalty
+            if (hasFrail)
+            {
+                if (frailDistanceRemaining == 0)
+                {
+                    // Negate the -2.5 HP penalty by applying +2.5 HP
+                    player.Entity.Stats.Set("maxhealthExtraPoints", FRAIL_HP_CANCEL_STAT_CODE, VANILLA_FRAIL_HP_PENALTY, false);
+                }
+                else
+                {
+                    // Remove the HP cancellation stat if penalty is still active
+                    player.Entity.Stats.Remove("maxhealthExtraPoints", FRAIL_HP_CANCEL_STAT_CODE);
+                }
+            }
+
             // Sync level and bonuses to WatchedAttributes for client-side display
             player.Entity.WatchedAttributes.SetInt(WATCHED_RANGED_LEVEL, level);
             player.Entity.WatchedAttributes.SetInt(WATCHED_RANGED_DAMAGE_BONUS, damagePct);
@@ -5337,6 +5485,7 @@ namespace SimpleImprovingTraits
             player.Entity.WatchedAttributes.SetInt(WATCHED_NEARSIGHTED_REMAINING, nearsightedRemaining);
             player.Entity.WatchedAttributes.SetBool("sitHasFrail", hasFrail);
             player.Entity.WatchedAttributes.SetInt(WATCHED_FRAIL_DISTANCE_REMAINING, frailDistanceRemaining);
+            player.Entity.WatchedAttributes.SetFloat(WATCHED_FRAIL_HP_REMAINING, frailHpRemaining);
 
             // Add our trait to extraTraits only if player doesn't already have Focused
             UpdateExtraTraitStatic(player.Entity, RANGED_TRAIT_CODE, level > 0 && !hasVanillaFocused);
@@ -7982,16 +8131,17 @@ namespace SimpleImprovingTraits
             var progress = PilfererProgress.GetOrAdd(player.PlayerUID, _ => new PilfererProgressData());
             int bonusPercent = CalculatePilfererBonusPercent(progress.TotalCredits, player.Entity);
             bool hasVanillaPilferer = PlayerHasVanillaPilfererStatic(player.Entity);
+            int maxCredits = GetMaxPilfererCredits(player.Entity);
 
             var sb = new StringBuilder();
-            sb.AppendLine($"Pilferer progression: Level {progress.TotalCredits} / {MaxPilfererPercent}");
+            sb.AppendLine($"Pilferer progression: Level {progress.TotalCredits} / {maxCredits}");
             sb.AppendLine($"Current bonus: +{bonusPercent}% rusty gear, vessel contents, and collection chance");
             if (hasVanillaPilferer)
             {
                 sb.AppendLine($"(Has vanilla Pilferer trait)");
             }
             sb.AppendLine($"Chests opened: {progress.OpenedChestPositions.Count}");
-            if (progress.TotalCredits < MaxPilfererPercent)
+            if (progress.TotalCredits < maxCredits)
             {
                 int remaining = progress.CurrentIncrementSize - progress.PointsInIncrement;
                 sb.AppendLine($"Progress: {progress.PointsInIncrement} / {progress.CurrentIncrementSize} points until next level");
@@ -8030,9 +8180,12 @@ namespace SimpleImprovingTraits
             IServerPlayer player = args.Caller.Player as IServerPlayer;
             if (player?.Entity == null) return TextCommandResult.Error("Player not found.");
 
+            // Get the player-specific max credits (accounts for Heavyhanded penalty)
+            int maxCredits = GetMaxPilfererCredits(player.Entity);
+
             int newLevel = (int)args[0];
-            if (newLevel < 0 || newLevel > MaxPilfererPercent)
-                return TextCommandResult.Error($"Level must be between 0 and {MaxPilfererPercent}.");
+            if (newLevel < 0 || newLevel > maxCredits)
+                return TextCommandResult.Error($"Level must be between 0 and {maxCredits}.");
 
             var progress = PilfererProgress.GetOrAdd(player.PlayerUID, _ => new PilfererProgressData());
             progress.TotalCredits = newLevel;
@@ -8077,6 +8230,25 @@ namespace SimpleImprovingTraits
             int vanillaBonus = hasVanillaPilferer ? VANILLA_PILFERER_RUSTY_GEAR_BONUS : 0;
             int earnableBonus = Math.Max(0, MaxPilfererPercent - vanillaBonus);
             return Math.Min(credits, earnableBonus);
+        }
+
+        /// <summary>
+        /// Get the maximum pilferer credits a player can earn based on their traits.
+        /// Players with Heavyhanded trait can earn extra credits to compensate for the penalty.
+        /// </summary>
+        public static int GetMaxPilfererCredits(EntityPlayer entity)
+        {
+            if (entity == null) return MaxPilfererPercent;
+
+            bool hasHeavyhanded = PlayerHasVanillaHeavyhanded(entity);
+
+            // Heavyhanded vessel penalty is 10%, need 10 extra levels to cancel it
+            if (hasHeavyhanded)
+            {
+                return MaxPilfererPercent + VANILLA_HEAVYHANDED_VESSEL_PENALTY;
+            }
+
+            return MaxPilfererPercent;
         }
 
         /// <summary>
@@ -8158,12 +8330,15 @@ namespace SimpleImprovingTraits
             string playerUid = player.PlayerUID;
             var progress = PilfererProgress.GetOrAdd(playerUid, _ => new PilfererProgressData());
 
-            if (progress.TotalCredits >= MaxPilfererPercent) return;
+            // Get the player-specific max credits (accounts for Heavyhanded penalty)
+            int maxCredits = GetMaxPilfererCredits(player.Entity);
+
+            if (progress.TotalCredits >= maxCredits) return;
 
             int oldCredits = progress.TotalCredits;
             progress.PointsInIncrement += PILFERER_VESSEL_POINTS;
 
-            while (progress.PointsInIncrement >= progress.CurrentIncrementSize && progress.TotalCredits < MaxPilfererPercent)
+            while (progress.PointsInIncrement >= progress.CurrentIncrementSize && progress.TotalCredits < maxCredits)
             {
                 progress.TotalCredits++;
                 progress.PointsInIncrement -= progress.CurrentIncrementSize;
@@ -8193,7 +8368,10 @@ namespace SimpleImprovingTraits
             string playerUid = player.PlayerUID;
             var progress = PilfererProgress.GetOrAdd(playerUid, _ => new PilfererProgressData());
 
-            if (progress.TotalCredits >= MaxPilfererPercent) return;
+            // Get the player-specific max credits (accounts for Heavyhanded penalty)
+            int maxCredits = GetMaxPilfererCredits(player.Entity);
+
+            if (progress.TotalCredits >= maxCredits) return;
 
             // Create a unique key for this chest position
             string posKey = $"{pos.X},{pos.Y},{pos.Z}";
@@ -8202,7 +8380,7 @@ namespace SimpleImprovingTraits
             int oldCredits = progress.TotalCredits;
             progress.PointsInIncrement += PILFERER_CHEST_POINTS;
 
-            while (progress.PointsInIncrement >= progress.CurrentIncrementSize && progress.TotalCredits < MaxPilfererPercent)
+            while (progress.PointsInIncrement >= progress.CurrentIncrementSize && progress.TotalCredits < maxCredits)
             {
                 progress.TotalCredits++;
                 progress.PointsInIncrement -= progress.CurrentIncrementSize;
@@ -8238,15 +8416,16 @@ namespace SimpleImprovingTraits
             int lootBonus = CalculateResourcefulLootBonusPercent(progress.TotalCredits, player.Entity);
             int speedBonus = CalculateResourcefulSpeedBonusPercent(progress.TotalCredits, player.Entity);
             bool hasVanillaResourceful = PlayerHasVanillaResourcefulStatic(player.Entity);
+            int maxCredits = GetMaxResourcefulCredits(player.Entity);
 
             var sb = new StringBuilder();
-            sb.AppendLine($"Resourceful progression: Level {progress.TotalCredits} / {MaxResourcefulLootPercent}");
+            sb.AppendLine($"Resourceful progression: Level {progress.TotalCredits} / {maxCredits}");
             sb.AppendLine($"Current bonus: +{lootBonus}% animal loot, +{speedBonus}% harvesting speed");
             if (hasVanillaResourceful)
             {
                 sb.AppendLine($"(Has vanilla Resourceful trait)");
             }
-            if (progress.TotalCredits < MaxResourcefulLootPercent)
+            if (progress.TotalCredits < maxCredits)
             {
                 int remaining = progress.CurrentIncrementSize - progress.AnimalsInIncrement;
                 sb.AppendLine($"Progress: {progress.AnimalsInIncrement} / {progress.CurrentIncrementSize} animals until next level");
@@ -8285,9 +8464,12 @@ namespace SimpleImprovingTraits
             IServerPlayer player = args.Caller.Player as IServerPlayer;
             if (player?.Entity == null) return TextCommandResult.Error("Player not found.");
 
+            // Get the player-specific max credits (accounts for Kind penalty)
+            int maxCredits = GetMaxResourcefulCredits(player.Entity);
+
             int newLevel = (int)args[0];
-            if (newLevel < 0 || newLevel > MaxResourcefulLootPercent)
-                return TextCommandResult.Error($"Level must be between 0 and {MaxResourcefulLootPercent}.");
+            if (newLevel < 0 || newLevel > maxCredits)
+                return TextCommandResult.Error($"Level must be between 0 and {maxCredits}.");
 
             var progress = ResourcefulProgress.GetOrAdd(player.PlayerUID, _ => new ResourcefulProgressData());
             progress.TotalCredits = newLevel;
@@ -8343,6 +8525,26 @@ namespace SimpleImprovingTraits
         {
             // Speed bonus scales indefinitely - 1% per credit, no cap
             return credits;
+        }
+
+        /// <summary>
+        /// Get the maximum resourceful credits a player can earn based on their traits.
+        /// Players with Kind trait can earn extra credits to compensate for the penalty.
+        /// </summary>
+        public static int GetMaxResourcefulCredits(EntityPlayer entity)
+        {
+            if (entity == null) return MaxResourcefulLootPercent;
+
+            bool hasKind = PlayerHasVanillaKind(entity);
+
+            // Kind has two penalties - use the larger one (speed = 25%)
+            // Loot penalty is 10%, speed penalty is 25%
+            if (hasKind)
+            {
+                return MaxResourcefulLootPercent + VANILLA_KIND_SPEED_PENALTY;
+            }
+
+            return MaxResourcefulLootPercent;
         }
 
         /// <summary>
@@ -8436,12 +8638,15 @@ namespace SimpleImprovingTraits
             string playerUid = player.PlayerUID;
             var progress = ResourcefulProgress.GetOrAdd(playerUid, _ => new ResourcefulProgressData());
 
-            if (progress.TotalCredits >= MaxResourcefulLootPercent) return;
+            // Get the player-specific max credits (accounts for Kind penalty)
+            int maxCredits = GetMaxResourcefulCredits(player.Entity);
+
+            if (progress.TotalCredits >= maxCredits) return;
 
             int oldCredits = progress.TotalCredits;
             progress.AnimalsInIncrement++;
 
-            while (progress.AnimalsInIncrement >= progress.CurrentIncrementSize && progress.TotalCredits < MaxResourcefulLootPercent)
+            while (progress.AnimalsInIncrement >= progress.CurrentIncrementSize && progress.TotalCredits < maxCredits)
             {
                 progress.TotalCredits++;
                 progress.AnimalsInIncrement -= progress.CurrentIncrementSize;
@@ -8475,20 +8680,41 @@ namespace SimpleImprovingTraits
             if (player?.Entity == null) return TextCommandResult.Error("Player not found.");
 
             var progress = ForagerProgress.GetOrAdd(player.PlayerUID, _ => new ForagerProgressData());
-            int lootBonus = CalculateForagerLootBonusPercent(progress.TotalCredits, player.Entity);
-            int wildCropBonus = CalculateForagerWildCropBonusPercent(progress.TotalCredits, player.Entity);
             bool hasVanillaForager = PlayerHasVanillaForagerStatic(player.Entity);
+            bool hasCivil = PlayerHasVanillaCivil(player.Entity);
+            bool hasHeavyhanded = PlayerHasVanillaHeavyhanded(player.Entity);
+            int maxCredits = GetMaxForagerCredits(player.Entity);
+
+            // Use net bonuses from WatchedAttributes (set by ApplyForagerBonusStatic)
+            int netLootBonus = player.Entity.WatchedAttributes.GetInt(WATCHED_FORAGER_LOOT_BONUS, 0);
+            int netWildCropBonus = player.Entity.WatchedAttributes.GetInt(WATCHED_FORAGER_WILD_CROP_BONUS, 0);
 
             var sb = new StringBuilder();
-            sb.AppendLine($"Forager progression: Level {progress.TotalCredits} / {MaxForagerLootPercent}");
-            sb.AppendLine($"Current bonus: +{lootBonus}% foraging loot, +{wildCropBonus}% wild crop drops");
+            sb.AppendLine($"Forager progression: Level {progress.TotalCredits} / {maxCredits}");
+            sb.AppendLine($"Current bonus: +{netLootBonus}% foraging loot, +{netWildCropBonus}% wild crop drops");
             if (hasVanillaForager)
             {
                 sb.AppendLine($"(Has vanilla Forager trait)");
             }
-            if (progress.TotalCredits < MaxForagerLootPercent)
+            if (hasCivil)
             {
-                int remaining = progress.CurrentIncrementSize - progress.CropsInIncrement;
+                int civilRemaining = player.Entity.WatchedAttributes.GetInt(WATCHED_CIVIL_REMAINING, 0);
+                if (civilRemaining > 0)
+                    sb.AppendLine($"(Civil penalty remaining: -{civilRemaining}% foraging loot)");
+                else
+                    sb.AppendLine("(Civil penalty cancelled!)");
+            }
+            if (hasHeavyhanded)
+            {
+                int forageRemaining = player.Entity.WatchedAttributes.GetInt(WATCHED_HEAVYHANDED_FORAGING_REMAINING, 0);
+                int wildCropRemaining = player.Entity.WatchedAttributes.GetInt(WATCHED_HEAVYHANDED_WILD_CROP_REMAINING, 0);
+                if (forageRemaining > 0 || wildCropRemaining > 0)
+                    sb.AppendLine($"(Heavyhanded penalties remaining: -{forageRemaining}% foraging, -{wildCropRemaining}% wild crop)");
+                else
+                    sb.AppendLine("(Heavyhanded penalties cancelled!)");
+            }
+            if (progress.TotalCredits < maxCredits)
+            {
                 sb.AppendLine($"Progress: {progress.CropsInIncrement} / {progress.CurrentIncrementSize} crops until next level");
             }
             else
@@ -8525,9 +8751,12 @@ namespace SimpleImprovingTraits
             IServerPlayer player = args.Caller.Player as IServerPlayer;
             if (player?.Entity == null) return TextCommandResult.Error("Player not found.");
 
+            // Get the player-specific max credits (accounts for Civil/Heavyhanded penalties)
+            int maxCredits = GetMaxForagerCredits(player.Entity);
+
             int newLevel = (int)args[0];
-            if (newLevel < 0 || newLevel > MaxForagerLootPercent)
-                return TextCommandResult.Error($"Level must be between 0 and {MaxForagerLootPercent}.");
+            if (newLevel < 0 || newLevel > maxCredits)
+                return TextCommandResult.Error($"Level must be between 0 and {maxCredits}.");
 
             var progress = ForagerProgress.GetOrAdd(player.PlayerUID, _ => new ForagerProgressData());
             progress.TotalCredits = newLevel;
@@ -8542,8 +8771,10 @@ namespace SimpleImprovingTraits
             pendingForagerProgressSave = true;
 
             ApplyForagerBonusStatic(player, progress.TotalCredits);
-            int lootBonus = CalculateForagerLootBonusPercent(progress.TotalCredits, player.Entity);
-            return TextCommandResult.Success($"Forager level set to {newLevel} (+{lootBonus}% loot).");
+            // Use net bonuses from WatchedAttributes which accounts for Civil/Heavyhanded penalties
+            int netLootBonus = player.Entity.WatchedAttributes.GetInt(WATCHED_FORAGER_LOOT_BONUS, 0);
+            int netWildCropBonus = player.Entity.WatchedAttributes.GetInt(WATCHED_FORAGER_WILD_CROP_BONUS, 0);
+            return TextCommandResult.Success($"Forager level set to {newLevel} (+{netLootBonus}% loot, +{netWildCropBonus}% wild crop).");
         }
 
         /// <summary>
@@ -8603,6 +8834,33 @@ namespace SimpleImprovingTraits
                 }
             }
             return false;
+        }
+
+        /// <summary>
+        /// Get the maximum forager credits a player can earn based on their traits.
+        /// Players with negative traits (Civil, Heavyhanded) can earn extra credits
+        /// to compensate for the penalty before gaining positive bonuses.
+        /// </summary>
+        public static int GetMaxForagerCredits(EntityPlayer entity)
+        {
+            if (entity == null) return MaxForagerLootPercent;
+
+            bool hasCivil = PlayerHasVanillaCivil(entity);
+            bool hasHeavyhanded = PlayerHasVanillaHeavyhanded(entity);
+
+            // Civil penalty is 10% foraging loot, need 10 extra levels to cancel it
+            if (hasCivil)
+            {
+                return MaxForagerLootPercent + VANILLA_CIVIL_FORAGING_PENALTY;
+            }
+
+            // Heavyhanded has two penalties - use the larger one (wild crop = 20%)
+            if (hasHeavyhanded)
+            {
+                return MaxForagerWildCropPercent + VANILLA_HEAVYHANDED_WILD_CROP_PENALTY;
+            }
+
+            return MaxForagerLootPercent;
         }
 
         /// <summary>
@@ -8689,12 +8947,15 @@ namespace SimpleImprovingTraits
             string playerUid = player.PlayerUID;
             var progress = ForagerProgress.GetOrAdd(playerUid, _ => new ForagerProgressData());
 
-            if (progress.TotalCredits >= MaxForagerLootPercent) return;
+            // Get the player-specific max credits (accounts for Civil/Heavyhanded penalties)
+            int maxCredits = GetMaxForagerCredits(player.Entity);
+
+            if (progress.TotalCredits >= maxCredits) return;
 
             int oldCredits = progress.TotalCredits;
             progress.CropsInIncrement++;
 
-            while (progress.CropsInIncrement >= progress.CurrentIncrementSize && progress.TotalCredits < MaxForagerLootPercent)
+            while (progress.CropsInIncrement >= progress.CurrentIncrementSize && progress.TotalCredits < maxCredits)
             {
                 progress.TotalCredits++;
                 progress.CropsInIncrement -= progress.CurrentIncrementSize;
@@ -8708,9 +8969,11 @@ namespace SimpleImprovingTraits
             if (progress.TotalCredits > oldCredits)
             {
                 ApplyForagerBonusStatic(player, progress.TotalCredits);
-                int lootBonus = CalculateForagerLootBonusPercent(progress.TotalCredits, player.Entity);
+                // Use the net bonus from WatchedAttributes which accounts for Civil/Heavyhanded penalties
+                int netLootBonus = player.Entity.WatchedAttributes.GetInt(WATCHED_FORAGER_LOOT_BONUS, 0);
+                int netWildCropBonus = player.Entity.WatchedAttributes.GetInt(WATCHED_FORAGER_WILD_CROP_BONUS, 0);
                 player.SendMessage(GlobalConstants.GeneralChatGroup,
-                    Lang.Get("simpleimprovingtraits:message-forager-level-up", progress.TotalCredits, lootBonus),
+                    Lang.Get("simpleimprovingtraits:message-forager-level-up", progress.TotalCredits, netLootBonus, netWildCropBonus),
                     EnumChatType.Notification);
             }
         }
@@ -11890,20 +12153,23 @@ namespace SimpleImprovingTraits
 
             // Weak trait (Tailor) - HP and mining speed penalty
             // Vanilla format: <font color="#ff8484">• Weak </font> <font opacity="0.6">(-2 health points, -10% mining speed)</font>
+            // Both penalties are cancelled together at mining level 10
             bool hasWeak = eplr.WatchedAttributes.GetBool("sitHasWeak", false);
             int weakMiningRemaining = eplr.WatchedAttributes.GetInt(SimpleImprovingTraitsModSystem.WATCHED_WEAK_MINING_REMAINING, 0);
+            int weakHpRemaining = eplr.WatchedAttributes.GetInt(SimpleImprovingTraitsModSystem.WATCHED_WEAK_HP_REMAINING, 0);
             if (hasWeak)
             {
-                if (weakMiningRemaining > 0)
+                if (weakMiningRemaining > 0 || weakHpRemaining > 0)
                 {
-                    string dynamicWeakTrait = Lang.Get("simpleimprovingtraits:trait-weak-mining-only-dynamic", weakMiningRemaining);
+                    // Show both penalties during progression (both are cancelled at level 10)
+                    string dynamicWeakTrait = Lang.Get("simpleimprovingtraits:trait-weak-dynamic", weakHpRemaining, weakMiningRemaining);
                     __result = System.Text.RegularExpressions.Regex.Replace(__result,
                         @"<font color=""#ff8484"">• Weak </font> <font opacity=""0\.6"">\(-\d+ health points, -\d+% mining speed\)</font>",
                         dynamicWeakTrait);
                 }
                 else
                 {
-                    // Remove Weak trait completely - use empty string, cleanup at end handles newlines
+                    // Remove Weak trait completely when both penalties are cancelled
                     __result = System.Text.RegularExpressions.Regex.Replace(__result,
                         @"\n?<font color=""#ff8484"">• Weak </font> <font opacity=""0\.6"">\(-\d+ health points, -\d+% mining speed\)</font>",
                         "");
@@ -12013,25 +12279,26 @@ namespace SimpleImprovingTraits
 
             // Frail trait (Malefactor, Clockmaker) - HP and ranged distance penalty
             // Vanilla format: <font color="#ff8484">• Frail </font> <font opacity="0.6">(-2.5 health points, -25% ranged distance)</font>
+            // Both penalties are cancelled together at ranged level 25
             bool hasFrail = eplr.WatchedAttributes.GetBool("sitHasFrail", false);
             int frailDistanceRemaining = eplr.WatchedAttributes.GetInt(SimpleImprovingTraitsModSystem.WATCHED_FRAIL_DISTANCE_REMAINING, 0);
+            float frailHpRemaining = eplr.WatchedAttributes.GetFloat(SimpleImprovingTraitsModSystem.WATCHED_FRAIL_HP_REMAINING, 0f);
             if (hasFrail)
             {
-                if (frailDistanceRemaining > 0)
+                if (frailDistanceRemaining > 0 || frailHpRemaining > 0)
                 {
-                    // Show Frail with remaining distance penalty (HP still shown)
-                    string dynamicFrailTrait = Lang.Get("simpleimprovingtraits:trait-frail-dynamic", 2.5f, frailDistanceRemaining);
+                    // Show both penalties during progression (both are cancelled at level 25)
+                    string dynamicFrailTrait = Lang.Get("simpleimprovingtraits:trait-frail-dynamic", frailHpRemaining, frailDistanceRemaining);
                     __result = System.Text.RegularExpressions.Regex.Replace(__result,
                         @"<font color=""#ff8484"">• Frail </font> <font opacity=""0\.6"">\(-[\d\.]+ health points, -\d+% ranged distance\)</font>",
                         dynamicFrailTrait);
                 }
                 else
                 {
-                    // Show only HP penalty (distance cancelled)
-                    string dynamicFrailTrait = Lang.Get("simpleimprovingtraits:trait-frail-hp-only-dynamic", 2.5f);
+                    // Remove Frail trait completely when both penalties are cancelled
                     __result = System.Text.RegularExpressions.Regex.Replace(__result,
-                        @"<font color=""#ff8484"">• Frail </font> <font opacity=""0\.6"">\(-[\d\.]+ health points, -\d+% ranged distance\)</font>",
-                        dynamicFrailTrait);
+                        @"\n?<font color=""#ff8484"">• Frail </font> <font opacity=""0\.6"">\(-[\d\.]+ health points, -\d+% ranged distance\)</font>",
+                        "");
                 }
             }
 
@@ -12067,7 +12334,27 @@ namespace SimpleImprovingTraits
             }
 
             // Ravenous trait (Blackguard) - hunger rate penalty
-            // Already handled by Hunger progression system
+            // Vanilla format: <font color="#ff8484">• Ravenous </font> <font opacity="0.6">(+30% hunger rate)</font>
+            bool hasRavenous = eplr.WatchedAttributes.GetBool("sitHasVanillaRavenous", false);
+            int ravenousRemaining = eplr.WatchedAttributes.GetInt(SimpleImprovingTraitsModSystem.WATCHED_RAVENOUS_REMAINING, 0);
+            if (hasRavenous)
+            {
+                if (ravenousRemaining > 0)
+                {
+                    // Show Ravenous with remaining penalty
+                    string dynamicRavenousTrait = Lang.Get("simpleimprovingtraits:trait-ravenous-dynamic", ravenousRemaining);
+                    __result = System.Text.RegularExpressions.Regex.Replace(__result,
+                        @"<font color=""#ff8484"">• Ravenous </font> <font opacity=""0\.6"">\(\+\d+% hunger rate\)</font>",
+                        dynamicRavenousTrait);
+                }
+                else
+                {
+                    // Remove Ravenous trait completely at level 30 - use empty string, cleanup at end handles newlines
+                    __result = System.Text.RegularExpressions.Regex.Replace(__result,
+                        @"\n?<font color=""#ff8484"">• Ravenous </font> <font opacity=""0\.6"">\(\+\d+% hunger rate\)</font>",
+                        "");
+                }
+            }
 
             // Claustrophobic trait (Hunter) - ore drop and mining speed penalties
             // Mining penalty decreases progressively with mining level (1-10)

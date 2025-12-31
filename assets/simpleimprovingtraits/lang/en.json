@@ -47,7 +47,7 @@
   "trait-sitresourcefulmastery": "<font color=\"#84ff84\">• Resourceful </font>",
   "traitname-sitresourcefulmastery": "Resourceful",
   "trait-resourceful-dynamic": "<font color=\"#84ff84\">• Resourceful </font> <font opacity=\"0.6\">(+{0}% animal loot, +{1}% animal harvesting speed)</font>",
-  "message-forager-level-up": "Forager level up! You are now level {0} with +{1}% foraging loot.",
+  "message-forager-level-up": "Forager level up! You are now level {0} with +{1}% foraging loot, +{2}% wild crop drop.",
   "trait-sitforagermastery": "<font color=\"#84ff84\">• Forager </font>",
   "traitname-sitforagermastery": "Forager",
   "trait-forager-dynamic": "<font color=\"#84ff84\">• Forager </font> <font opacity=\"0.6\">(+{0}% loot from foraging, +{1}% wild crop drop rate)</font>",

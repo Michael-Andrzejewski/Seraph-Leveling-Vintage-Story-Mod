@@ -3576,9 +3576,10 @@ namespace SeraphLeveling
             int cappedLevel = Math.Min(level, maxCredits);
             float bonus = cappedLevel * 0.01f;
 
-            // Set the hunger rate stat (hungerrate is multiplicative, so 0.75 = 75% hunger rate)
-            // We want to REDUCE hunger rate, so we subtract the bonus from 1.0
-            player.Entity.Stats.Set("hungerrate", HUNGER_STAT_CODE, 1f - bonus, false);
+            // Set the hunger rate stat - this value is ADDED to the base (1.0)
+            // We want to REDUCE hunger rate, so we use a negative value
+            // e.g., -0.25 means 75% hunger rate (1.0 + -0.25 = 0.75)
+            player.Entity.Stats.Set("hungerrate", HUNGER_STAT_CODE, -bonus, false);
 
             int bonusPercent = (int)(bonus * 100);
 

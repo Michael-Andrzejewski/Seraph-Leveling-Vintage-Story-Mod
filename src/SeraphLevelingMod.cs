@@ -4844,7 +4844,8 @@ namespace SeraphLeveling
                 if (claustrophobicMiningRemaining == 0)
                 {
                     // Negate the -15% ore drop penalty by applying +15%
-                    player.Entity.Stats.Set("oreDropRate", "sitClaustrophobicOreCancel", 1f + (VANILLA_CLAUSTROPHOBIC_ORE_PENALTY * 0.01f), false);
+                    // Note: oreDropRate is additive - vanilla uses -0.15 for -15%, so we use +0.15 to cancel
+                    player.Entity.Stats.Set("oreDropRate", "sitClaustrophobicOreCancel", VANILLA_CLAUSTROPHOBIC_ORE_PENALTY * 0.01f, false);
                 }
                 else
                 {
@@ -8149,7 +8150,8 @@ namespace SeraphLeveling
             {
                 // Negate Claustrophobic penalties: -15% ore drop, -10% mining speed
                 // By adding positive stats to counteract them
-                player.Entity.Stats.Set("oreDropRate", "sitClaustrophobicRemoval", 1.15f, false); // +15% to negate -15%
+                // Note: oreDropRate is additive - vanilla uses -0.15 for -15%, so we use +0.15 to cancel
+                player.Entity.Stats.Set("oreDropRate", "sitClaustrophobicRemoval", 0.15f, false); // +15% to negate -15%
                 player.Entity.Stats.Set("miningSpeedMul", "sitClaustrophobicRemoval", 1.10f, false); // +10% to negate -10%
             }
             else
@@ -8578,8 +8580,10 @@ namespace SeraphLeveling
             float bonus = bonusPercent * 0.01f;
 
             // Apply to pilferer-related stats
-            player.Entity.Stats.Set("rustyGearDropRate", PILFERER_RUSTY_GEAR_STAT_CODE, 1f + bonus, false);
-            player.Entity.Stats.Set("vesselContentsDropRate", PILFERER_VESSEL_CONTENTS_STAT_CODE, 1f + bonus, false);
+            // Note: These are additive stats where vanilla traits use values like 0.1 for +10%.
+            // The game applies (1 + blended) as the multiplier. Using just the bonus value.
+            player.Entity.Stats.Set("rustyGearDropRate", PILFERER_RUSTY_GEAR_STAT_CODE, bonus, false);
+            player.Entity.Stats.Set("vesselContentsDropRate", PILFERER_VESSEL_CONTENTS_STAT_CODE, bonus, false);
             player.Entity.Stats.Set("wholeVesselLootChance", PILFERER_WHOLE_VESSEL_STAT_CODE, bonus, false);
 
             // Sync to WatchedAttributes
@@ -8896,8 +8900,9 @@ namespace SeraphLeveling
             float speedBonus = speedBonusPercent * 0.01f;
 
             // Apply to resourceful-related stats
-            // animalLootDropRate is additive (1.0 + bonus means +X% more loot)
-            player.Entity.Stats.Set("animalLootDropRate", RESOURCEFUL_LOOT_STAT_CODE, 1f + lootBonus, false);
+            // Note: animalLootDropRate is an additive stat where vanilla traits use values like 0.1 for +10%.
+            // The game applies (1 + blended) as the multiplier. Using just the bonus value.
+            player.Entity.Stats.Set("animalLootDropRate", RESOURCEFUL_LOOT_STAT_CODE, lootBonus, false);
             // harvestingSpeedMul is multiplicative (1.25 = 25% faster harvesting)
             player.Entity.Stats.Set("harvestingSpeedMul", RESOURCEFUL_SPEED_STAT_CODE, 1f + speedBonus, false);
 
@@ -9216,8 +9221,11 @@ namespace SeraphLeveling
             float wildCropBonus = netWildCropBonus * 0.01f;
 
             // Apply to forager-related stats
-            player.Entity.Stats.Set("forageDropRate", FORAGER_LOOT_STAT_CODE, 1f + lootBonus, false);
-            player.Entity.Stats.Set("wildCropDropRate", FORAGER_WILD_CROP_STAT_CODE, 1f + wildCropBonus, false);
+            // Note: forageDropRate/wildCropDropRate are additive stats where vanilla traits use
+            // values like 0.1 for +10%. The game applies (1 + blended) as the multiplier.
+            // Using just the bonus value (not 1 + bonus) to avoid doubling.
+            player.Entity.Stats.Set("forageDropRate", FORAGER_LOOT_STAT_CODE, lootBonus, false);
+            player.Entity.Stats.Set("wildCropDropRate", FORAGER_WILD_CROP_STAT_CODE, wildCropBonus, false);
 
             // Sync to WatchedAttributes
             player.Entity.WatchedAttributes.SetInt(WATCHED_FORAGER_LEVEL, level);

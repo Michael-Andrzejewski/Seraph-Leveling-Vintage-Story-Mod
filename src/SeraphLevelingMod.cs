@@ -4836,7 +4836,9 @@ namespace SeraphLeveling
             float bonus = bonusPercent * 0.01f;
 
             // Set the mining speed stat (persistent = false since we reapply on join)
-            player.Entity.Stats.Set("miningSpeedMul", MINING_STAT_CODE, 1f + bonus, false);
+            // Note: Stats use WeightedSum blending with a base of 1.0. Vanilla traits set values
+            // like 0.1 for +10%. We set just the bonus value, not 1 + bonus.
+            player.Entity.Stats.Set("miningSpeedMul", MINING_STAT_CODE, bonus, false);
 
             // When Claustrophobic mining penalty is fully cancelled, also negate the ore drop penalty
             if (hasClaustrophobic)
@@ -8150,9 +8152,9 @@ namespace SeraphLeveling
             {
                 // Negate Claustrophobic penalties: -15% ore drop, -10% mining speed
                 // By adding positive stats to counteract them
-                // Note: oreDropRate is additive - vanilla uses -0.15 for -15%, so we use +0.15 to cancel
+                // Note: Stats use WeightedSum with base 1.0. Vanilla uses -0.15/-0.10, so we use +0.15/+0.10 to cancel
                 player.Entity.Stats.Set("oreDropRate", "sitClaustrophobicRemoval", 0.15f, false); // +15% to negate -15%
-                player.Entity.Stats.Set("miningSpeedMul", "sitClaustrophobicRemoval", 1.10f, false); // +10% to negate -10%
+                player.Entity.Stats.Set("miningSpeedMul", "sitClaustrophobicRemoval", 0.10f, false); // +10% to negate -10%
             }
             else
             {
@@ -8900,11 +8902,10 @@ namespace SeraphLeveling
             float speedBonus = speedBonusPercent * 0.01f;
 
             // Apply to resourceful-related stats
-            // Note: animalLootDropRate is an additive stat where vanilla traits use values like 0.1 for +10%.
-            // The game applies (1 + blended) as the multiplier. Using just the bonus value.
+            // Note: Stats use WeightedSum blending with a base of 1.0. Vanilla traits set values
+            // like 0.1 for +10%. We set just the bonus value, not 1 + bonus.
             player.Entity.Stats.Set("animalLootDropRate", RESOURCEFUL_LOOT_STAT_CODE, lootBonus, false);
-            // harvestingSpeedMul is multiplicative (1.25 = 25% faster harvesting)
-            player.Entity.Stats.Set("harvestingSpeedMul", RESOURCEFUL_SPEED_STAT_CODE, 1f + speedBonus, false);
+            player.Entity.Stats.Set("harvestingSpeedMul", RESOURCEFUL_SPEED_STAT_CODE, speedBonus, false);
 
             // Sync to WatchedAttributes
             player.Entity.WatchedAttributes.SetInt(WATCHED_RESOURCEFUL_LEVEL, level);

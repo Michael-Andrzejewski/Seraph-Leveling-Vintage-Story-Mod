@@ -28,6 +28,7 @@
   "message-armor-first-equip-both": "First time equipping this armor! +{0}% armor durability, walk speed penalty reduced by {1}%.",
   "message-armor-damage-level-up": "Armor durability level up! You are now level {0} with +{1}% armor durability.",
   "message-armor-repair-level-up": "Armor repair level up! You are now level {0} with +{1}% armor durability.",
+  "message-armor-time-level-up": "Armor experience level up! Walk speed penalty reduced by {0}%.",
   "trait-soldier-armor-dynamic": "<font color=\"#84ff84\">• Soldier </font> <font opacity=\"0.6\">(+{0}% armor durability, walk speed penalty reduced by {1}%)</font>",
   "trait-sitarmormastery": "<font color=\"#84ff84\">• Soldier </font>",
   "traitname-sitarmormastery": "Soldier",

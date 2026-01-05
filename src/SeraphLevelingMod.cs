@@ -50,8 +50,8 @@ namespace SeraphLeveling
         public int HungerMaxReductionPercent { get; set; } = 25;
 
         // Armor progression
-        public int ArmorBaseSecondsPerIncrement { get; set; } = 86400;
-        public int ArmorTimeIncrementStep { get; set; } = 86400;
+        public int ArmorBaseSecondsPerIncrement { get; set; } = 2880;
+        public int ArmorTimeIncrementStep { get; set; } = 2880;
         public int ArmorBaseDamageBlockedPerIncrement { get; set; } = 100;
         public int ArmorDamageIncrementStep { get; set; } = 100;
         public int ArmorBaseRepairsPerIncrement { get; set; } = 1;
@@ -267,7 +267,7 @@ namespace SeraphLeveling
         /// <summary>Seconds worn in this armor piece toward next time credit.</summary>
         public float SecondsWornInIncrement { get; set; }
 
-        /// <summary>Seconds needed for next time credit with this armor piece (86400, 172800, etc.).</summary>
+        /// <summary>Seconds needed for next time credit with this armor piece (2880, 5760, etc.).</summary>
         public int CurrentTimeIncrementSize { get; set; }
 
         /// <summary>Time credits earned with this armor piece.</summary>
@@ -297,7 +297,7 @@ namespace SeraphLeveling
         public ArmorPieceProgressData()
         {
             SecondsWornInIncrement = 0;
-            CurrentTimeIncrementSize = 86400; // 1 day in seconds
+            CurrentTimeIncrementSize = 2880; // 1 VS day (48 minutes) in seconds
             TimeCredits = 0;
             DamageBlockedInIncrement = 0;
             CurrentDamageIncrementSize = 100; // Base damage for first credit
@@ -1002,6 +1002,50 @@ namespace SeraphLeveling
     }
 
     /// <summary>
+    /// Cached vanilla trait data for a player.
+    /// Populated once on player join to avoid repeated GetStringArray calls.
+    /// </summary>
+    public class CachedVanillaTraits
+    {
+        public bool HasHardy { get; set; }
+        public bool HasSoldier { get; set; }
+        public bool HasFocused { get; set; }
+        public bool HasFleetfooted { get; set; }
+        public bool HasRavenous { get; set; }
+        public bool HasFarsighted { get; set; }
+        public bool HasNervous { get; set; }
+        public bool HasNearsighted { get; set; }
+        public bool HasFrail { get; set; }
+        public bool HasCivil { get; set; }
+        public bool HasWeak { get; set; }
+        public bool HasKind { get; set; }
+        public bool HasHeavyhanded { get; set; }
+        public bool HasClaustrophobic { get; set; }
+        public bool HasFurtive { get; set; }
+        public bool HasPrecise { get; set; }
+        public bool HasMender { get; set; }
+        public bool HasPilferer { get; set; }
+        public bool HasResourceful { get; set; }
+        public bool HasForager { get; set; }
+    }
+
+    /// <summary>
+    /// Simple struct for tracking 2D positions without allocating Vec3d objects.
+    /// Used in walking/sneaking tick handlers to avoid GC pressure.
+    /// </summary>
+    public struct Position2D
+    {
+        public double X;
+        public double Z;
+
+        public Position2D(double x, double z)
+        {
+            X = x;
+            Z = z;
+        }
+    }
+
+    /// <summary>
     /// Main mod system for Simple Improving Traits.
     /// Provides a progression system that improves player traits through gameplay.
     /// Currently implements mining speed progression based on blocks mined.
@@ -1124,11 +1168,14 @@ namespace SeraphLeveling
         // Flag to indicate pending walking progress save
         private static volatile bool pendingWalkingProgressSave = false;
 
-        // Tracking last known positions for walking distance calculation
-        private static ConcurrentDictionary<string, Vec3d> lastPlayerPositions = new ConcurrentDictionary<string, Vec3d>();
+        // Tracking last known positions for walking distance calculation (using Position2D to avoid Vec3d allocations)
+        private static ConcurrentDictionary<string, Position2D> lastPlayerPositions = new ConcurrentDictionary<string, Position2D>();
 
         // Maximum distance per tick to count (prevents teleportation from counting)
         private const float MAX_DISTANCE_PER_TICK = 10f;
+
+        // Cache for vanilla trait checks - populated once on player join
+        private static ConcurrentDictionary<string, CachedVanillaTraits> VanillaTraitsCache = new ConcurrentDictionary<string, CachedVanillaTraits>();
 
         // Keys for hunger rate progression system
         public const string HUNGER_STAT_CODE = "sitHungerBonus";
@@ -1174,9 +1221,9 @@ namespace SeraphLeveling
         public const string ARMOR_TRAIT_CODE = "sitarmormastery";
 
         // Armor progression configuration
-        // Time-based progression: 1 day base, +1 day increment per credit (gives -1% walk speed penalty per credit)
-        public static int BaseSecondsInArmorPerIncrement = 86400;  // Base seconds (1 day) for first credit
-        public static int ArmorTimeIncrementStep = 86400;          // How many more seconds each subsequent credit needs (1 day)
+        // Time-based progression: 1 VS day (48 min) base, +1 VS day increment per credit (gives -1% walk speed penalty per credit)
+        public static int BaseSecondsInArmorPerIncrement = 2880;  // Base seconds (1 VS day = 48 min) for first credit
+        public static int ArmorTimeIncrementStep = 2880;          // How many more seconds each subsequent credit needs (1 VS day)
 
         // Damage-based progression: 100 damage base, +100 increment per credit (gives +1% durability per credit)
         public static int BaseDamageBlockedPerIncrement = 100;     // Base damage blocked for first credit
@@ -1366,8 +1413,8 @@ namespace SeraphLeveling
         public static ConcurrentDictionary<string, FurtiveProgressData> FurtiveProgress = new ConcurrentDictionary<string, FurtiveProgressData>();
         private static volatile bool pendingFurtiveProgressSave = false;
 
-        // Tracking last known positions for sneaking distance calculation
-        private static ConcurrentDictionary<string, Vec3d> lastSneakingPositions = new ConcurrentDictionary<string, Vec3d>();
+        // Tracking last known positions for sneaking distance calculation (using Position2D to avoid Vec3d allocations)
+        private static ConcurrentDictionary<string, Position2D> lastSneakingPositions = new ConcurrentDictionary<string, Position2D>();
 
         // =========================================================================
         // PRECISE TRAIT - Tracks damage to mechanicals for damage bonus
@@ -1804,6 +1851,13 @@ namespace SeraphLeveling
                     .RequiresPrivilege(Privilege.controlserver)
                     .HandleWith(OnTraitArmorRepairBaseCommand)
                 .EndSubCommand()
+                .BeginSubCommand("testwalkspeed")
+                    .WithDescription("Apply a test walk speed modifier (admin only, use 0 to clear)")
+                    .WithArgs(api.ChatCommands.Parsers.OptionalInt("percent"))
+                    .RequiresPrivilege(Privilege.controlserver)
+                    .RequiresPlayer()
+                    .HandleWith(OnTraitTestWalkSpeedCommand)
+                .EndSubCommand()
                 // Clothier trait commands
                 .BeginSubCommand("clothier")
                     .WithDescription("View your clothier progression stats")
@@ -2066,6 +2120,13 @@ namespace SeraphLeveling
                     .WithDescription("Reset all trait config values (base, increment, max) to defaults (admin only)")
                     .RequiresPrivilege(Privilege.controlserver)
                     .HandleWith(OnTraitResetConfigCommand)
+                .EndSubCommand()
+                // Max all traits for testing
+                .BeginSubCommand("maxall")
+                    .WithDescription("Set all trait progression to maximum for testing (admin only)")
+                    .RequiresPrivilege(Privilege.controlserver)
+                    .RequiresPlayer()
+                    .HandleWith(OnTraitMaxAllCommand)
                 .EndSubCommand();
 
             // Hook into block breaking for mining progression
@@ -2167,7 +2228,8 @@ namespace SeraphLeveling
                 "  /trait armordurabilitymax [percent] - Get or set max durability bonus (admin)\n" +
                 "  /trait armorwalkspeedmax [percent] - Get or set max walk speed reduction (admin)\n" +
                 "  /trait reset - Reset all trait progression to 0 (admin)\n" +
-                "  /trait resetconfig - Reset all config values to defaults (admin)");
+                "  /trait resetconfig - Reset all config values to defaults (admin)\n" +
+                "  /trait maxall - Set all trait progression to maximum for testing (admin)");
         }
 
         /// <summary>
@@ -3507,6 +3569,73 @@ namespace SeraphLeveling
         }
 
         /// <summary>
+        /// Handler for /trait testwalkspeed command.
+        /// Applies a test armor walk speed penalty reduction (positive = less penalty, 0 = clear).
+        /// </summary>
+        private TextCommandResult OnTraitTestWalkSpeedCommand(TextCommandCallingArgs args)
+        {
+            var player = args.Caller.Player as IServerPlayer;
+            if (player?.Entity == null)
+            {
+                return TextCommandResult.Error("Player entity not found");
+            }
+
+            int? percent = (int?)args[0];
+
+            if (!percent.HasValue)
+            {
+                return TextCommandResult.Success("Usage: /trait testwalkspeed <percent>\nExample: /trait testwalkspeed 99 (reduces armor penalty by 99%)\nUse 0 to clear the test modifier.");
+            }
+
+            if (percent.Value == 0)
+            {
+                player.Entity.Stats["armorWalkSpeedAffectedness"].Remove("sitTestPenalty");
+
+                // Force WearableStats to recalculate
+                var clearInv = player.InventoryManager?.GetOwnInventory(GlobalConstants.characterInvClassName);
+                if (clearInv != null)
+                {
+                    foreach (var slot in clearInv)
+                    {
+                        if (slot?.Itemstack != null)
+                        {
+                            slot.MarkDirty();
+                            break;
+                        }
+                    }
+                }
+
+                return TextCommandResult.Success("Test armor walk speed penalty modifier cleared.");
+            }
+
+            // armorWalkSpeedAffectedness: negative values reduce the penalty
+            float reduction = -(percent.Value * 0.01f);
+            player.Entity.Stats["armorWalkSpeedAffectedness"].Set("sitTestPenalty", reduction);
+
+            // Debug: check blended value
+            float blendedValue = player.Entity.Stats.GetBlended("armorWalkSpeedAffectedness");
+            ServerApi.Logger.Debug($"[SeraphLeveling] Test command: set armorWalkSpeedAffectedness modifier to {reduction:F2}, blended value is now {blendedValue:F2}");
+
+            // Force WearableStats to recalculate by triggering a slot change on character inventory
+            var charInv = player.InventoryManager?.GetOwnInventory(GlobalConstants.characterInvClassName);
+            if (charInv != null)
+            {
+                // Trigger slot modified on first slot to force WearableStats recalculation
+                foreach (var slot in charInv)
+                {
+                    if (slot?.Itemstack != null)
+                    {
+                        slot.MarkDirty();
+                        break;
+                    }
+                }
+                ServerApi.Logger.Debug($"[SeraphLeveling] Triggered character inventory refresh to recalculate wearable stats");
+            }
+
+            return TextCommandResult.Success($"Applied {percent.Value}% armor walk speed penalty reduction (stat value: {reduction:F2}, blended: {blendedValue:F2}). Use '/trait testwalkspeed 0' to clear.");
+        }
+
+        /// <summary>
         /// Calculate the maximum hunger credits a player can earn.
         /// Ravenous players need more credits to reach the same target hunger rate.
         /// Target is (100 - MaxHungerReductionPercent)% = 75% by default.
@@ -3566,8 +3695,9 @@ namespace SeraphLeveling
         {
             if (player?.Entity == null) return 0;
 
-            // Check if player has vanilla Ravenous
-            bool hasVanillaRavenous = PlayerHasVanillaRavenousStatic(player.Entity);
+            // Use cached vanilla traits if available, otherwise fall back to direct check
+            var cache = GetCachedTraits(player.PlayerUID);
+            bool hasVanillaRavenous = cache?.HasRavenous ?? PlayerHasVanillaRavenousStatic(player.Entity);
 
             // Calculate max credits this player can earn
             int maxCredits = CalculateMaxHungerCredits(player.Entity);
@@ -3575,29 +3705,38 @@ namespace SeraphLeveling
             // Calculate bonus from level (1% per level, capped at player's max)
             int cappedLevel = Math.Min(level, maxCredits);
             float bonus = cappedLevel * 0.01f;
-
-            // Set the hunger rate stat - this value is ADDED to the base (1.0)
-            // We want to REDUCE hunger rate, so we use a negative value
-            // e.g., -0.25 means 75% hunger rate (1.0 + -0.25 = 0.75)
-            player.Entity.Stats.Set("hungerrate", HUNGER_STAT_CODE, -bonus, false);
-
             int bonusPercent = (int)(bonus * 100);
 
             // Calculate remaining Ravenous penalty (0 when fully cancelled at level 30)
             int ravenousRemaining = hasVanillaRavenous ? CalculateRemainingPenalty(VANILLA_RAVENOUS_HUNGER_PENALTY, level) : 0;
 
-            // Sync level and bonus to WatchedAttributes for client-side display
-            player.Entity.WatchedAttributes.SetInt(WATCHED_HUNGER_LEVEL, level);
-            player.Entity.WatchedAttributes.SetInt(WATCHED_HUNGER_BONUS, bonusPercent);
-            player.Entity.WatchedAttributes.SetBool("sitHasVanillaRavenous", hasVanillaRavenous);
-            player.Entity.WatchedAttributes.SetInt("sitMaxHungerCredits", maxCredits);
-            player.Entity.WatchedAttributes.SetInt(WATCHED_RAVENOUS_REMAINING, ravenousRemaining);
+            // Check if any values have changed before updating
+            var watchedAttrs = player.Entity.WatchedAttributes;
+            int oldLevel = watchedAttrs.GetInt(WATCHED_HUNGER_LEVEL, -1);
+            int oldBonus = watchedAttrs.GetInt(WATCHED_HUNGER_BONUS, -1);
 
-            // Add our trait to extraTraits (hunger mastery is unique, doesn't replace a vanilla trait)
-            UpdateExtraTraitStatic(player.Entity, HUNGER_TRAIT_CODE, level > 0);
+            bool valuesChanged = (oldLevel != level) || (oldBonus != bonusPercent);
 
-            player.Entity.WatchedAttributes.MarkPathDirty(WATCHED_HUNGER_LEVEL);
-            player.Entity.WatchedAttributes.MarkPathDirty(WATCHED_RAVENOUS_REMAINING);
+            // Only update stats and attributes if values changed
+            if (valuesChanged)
+            {
+                // Set the hunger rate stat - this value is ADDED to the base (1.0)
+                // We want to REDUCE hunger rate, so we use a negative value
+                player.Entity.Stats.Set("hungerrate", HUNGER_STAT_CODE, -bonus, false);
+
+                // Sync level and bonus to WatchedAttributes for client-side display
+                watchedAttrs.SetInt(WATCHED_HUNGER_LEVEL, level);
+                watchedAttrs.SetInt(WATCHED_HUNGER_BONUS, bonusPercent);
+                watchedAttrs.SetBool("sitHasVanillaRavenous", hasVanillaRavenous);
+                watchedAttrs.SetInt("sitMaxHungerCredits", maxCredits);
+                watchedAttrs.SetInt(WATCHED_RAVENOUS_REMAINING, ravenousRemaining);
+
+                // Add our trait to extraTraits (hunger mastery is unique, doesn't replace a vanilla trait)
+                UpdateExtraTraitStatic(player.Entity, HUNGER_TRAIT_CODE, level > 0);
+
+                // Only call MarkPathDirty once (batched update)
+                watchedAttrs.MarkPathDirty(WATCHED_HUNGER_LEVEL);
+            }
 
             return bonusPercent;
         }
@@ -3985,39 +4124,71 @@ namespace SeraphLeveling
 
         /// <summary>
         /// Apply armor bonuses to a player.
+        /// Optimized to only update WatchedAttributes and call MarkPathDirty when values actually change.
         /// </summary>
         public static void ApplyArmorBonusesStatic(IServerPlayer player, int durabilityCredits, int walkSpeedCredits)
         {
             if (player?.Entity == null) return;
 
-            // Check if player has vanilla Soldier (affects bonus cap)
-            bool hasVanillaSoldier = PlayerHasVanillaSoldierForArmor(player.Entity);
+            // Use cached vanilla traits if available, otherwise fall back to direct check
+            var cache = GetCachedTraits(player.PlayerUID);
+            bool hasVanillaSoldier = cache?.HasSoldier ?? PlayerHasVanillaSoldierForArmor(player.Entity);
 
             // Calculate durability bonus (reduces armor damage taken)
             int durabilityBonus = CalculateArmorDurabilityBonusPercent(durabilityCredits, player.Entity);
-            // armorDurabilityLoss is a multiplier, lower = less durability lost
-            // A bonus of 50% means armor loses 50% less durability, so multiplier = 0.5
-            float durabilityMultiplier = 1f - (durabilityBonus * 0.01f);
-            player.Entity.Stats.Set("armorDurabilityLoss", ARMOR_DURABILITY_STAT_CODE, durabilityMultiplier, false);
-
             // Calculate walk speed penalty reduction
-            // This reduces the negative walkspeed effect from armor
             int walkSpeedBonus = CalculateArmorWalkSpeedBonusPercent(walkSpeedCredits, player.Entity);
-            // We add a positive walkspeed bonus to counteract armor penalty
-            float walkSpeedAddition = walkSpeedBonus * 0.01f;
-            player.Entity.Stats.Set("walkspeed", ARMOR_WALKSPEED_STAT_CODE, walkSpeedAddition, false);
 
-            // Sync to WatchedAttributes for client-side display
-            player.Entity.WatchedAttributes.SetInt(WATCHED_ARMOR_DURABILITY_LEVEL, durabilityCredits);
-            player.Entity.WatchedAttributes.SetInt(WATCHED_ARMOR_DURABILITY_BONUS, durabilityBonus);
-            player.Entity.WatchedAttributes.SetInt(WATCHED_ARMOR_WALKSPEED_LEVEL, walkSpeedCredits);
-            player.Entity.WatchedAttributes.SetInt(WATCHED_ARMOR_WALKSPEED_BONUS, walkSpeedBonus);
-            player.Entity.WatchedAttributes.SetBool("sitHasVanillaSoldierArmor", hasVanillaSoldier);
+            // Check if any values have changed before updating
+            var watchedAttrs = player.Entity.WatchedAttributes;
+            int oldDurabilityLevel = watchedAttrs.GetInt(WATCHED_ARMOR_DURABILITY_LEVEL, -1);
+            int oldWalkSpeedLevel = watchedAttrs.GetInt(WATCHED_ARMOR_WALKSPEED_LEVEL, -1);
 
-            // Add our trait to extraTraits only if player doesn't already have Soldier
-            UpdateExtraTraitStatic(player.Entity, ARMOR_TRAIT_CODE, (durabilityCredits > 0 || walkSpeedCredits > 0) && !hasVanillaSoldier);
+            bool valuesChanged = (oldDurabilityLevel != durabilityCredits) || (oldWalkSpeedLevel != walkSpeedCredits);
 
-            player.Entity.WatchedAttributes.MarkPathDirty(WATCHED_ARMOR_DURABILITY_LEVEL);
+            // Only update stats and attributes if values changed
+            if (valuesChanged)
+            {
+                // armorDurabilityLoss is a multiplier, lower = less durability lost
+                float durabilityMultiplier = 1f - (durabilityBonus * 0.01f);
+                player.Entity.Stats.Set("armorDurabilityLoss", ARMOR_DURABILITY_STAT_CODE, durabilityMultiplier, false);
+
+                // Reduce armor walk speed penalty using armorWalkSpeedAffectedness
+                // Negative values reduce the penalty (e.g., -0.25 = 25% less armor penalty)
+                // Base value is 1.0, so setting -0.5 gives 1.0 + (-0.5) = 0.5 (50% of penalty applied)
+                float armorWalkSpeedReduction = -(walkSpeedBonus * 0.01f);
+                player.Entity.Stats["armorWalkSpeedAffectedness"].Set(ARMOR_WALKSPEED_STAT_CODE, armorWalkSpeedReduction);
+
+                // Debug: Log the stat values
+                float blendedValue = player.Entity.Stats.GetBlended("armorWalkSpeedAffectedness");
+                ServerApi.Logger.Debug($"[SeraphLeveling] armorWalkSpeedAffectedness: set modifier {armorWalkSpeedReduction:F2}, blended value {blendedValue:F2}");
+
+                // Force WearableStats to recalculate by triggering slot modified
+                var charInv = player.InventoryManager?.GetOwnInventory(GlobalConstants.characterInvClassName);
+                if (charInv != null)
+                {
+                    foreach (var slot in charInv)
+                    {
+                        if (slot?.Itemstack != null)
+                        {
+                            slot.MarkDirty();
+                            break;
+                        }
+                    }
+                }
+
+                // Sync to WatchedAttributes for client-side display
+                watchedAttrs.SetInt(WATCHED_ARMOR_DURABILITY_LEVEL, durabilityCredits);
+                watchedAttrs.SetInt(WATCHED_ARMOR_DURABILITY_BONUS, durabilityBonus);
+                watchedAttrs.SetInt(WATCHED_ARMOR_WALKSPEED_LEVEL, walkSpeedCredits);
+                watchedAttrs.SetInt(WATCHED_ARMOR_WALKSPEED_BONUS, walkSpeedBonus);
+                watchedAttrs.SetBool("sitHasVanillaSoldierArmor", hasVanillaSoldier);
+
+                // Add our trait to extraTraits only if player doesn't already have Soldier
+                UpdateExtraTraitStatic(player.Entity, ARMOR_TRAIT_CODE, (durabilityCredits > 0 || walkSpeedCredits > 0) && !hasVanillaSoldier);
+
+                watchedAttrs.MarkPathDirty(WATCHED_ARMOR_DURABILITY_LEVEL);
+            }
         }
 
         /// <summary>
@@ -4170,18 +4341,17 @@ namespace SeraphLeveling
                 // Get previous armor state
                 var previousArmor = playerEquippedArmor.GetOrAdd(playerUid, _ => new Dictionary<string, string>());
 
-                // Check for newly equipped armor (first-equip bonus)
+                // Check for newly equipped armor (first-equip bonus) and track time worn
                 foreach (var kvp in currentArmor)
                 {
                     string slotId = kvp.Key;
                     string itemCode = kvp.Value;
+                    var pieceProgress = armorProgress.GetArmorProgress(itemCode);
 
                     // Check if this is new armor in this slot
                     if (!previousArmor.TryGetValue(slotId, out string prevArmor) || prevArmor != itemCode)
                     {
                         // New armor equipped - check for first-time bonus
-                        var pieceProgress = armorProgress.GetArmorProgress(itemCode);
-
                         if (!pieceProgress.HasBeenEquipped)
                         {
                             pieceProgress.HasBeenEquipped = true;
@@ -4210,6 +4380,38 @@ namespace SeraphLeveling
                                     Lang.Get("seraphleveling:message-armor-first-equip-both", actualDurabilityBonus, actualWalkSpeedBonus),
                                     EnumChatType.Notification);
                             }
+                        }
+                    }
+
+                    // Track time worn for walk speed credits (only if not at max)
+                    if (armorProgress.TotalWalkSpeedCredits < MaxArmorWalkSpeedPercent)
+                    {
+                        int oldWalkSpeedCredits = armorProgress.TotalWalkSpeedCredits;
+
+                        // Add 1 second (tick interval) to this armor piece's time
+                        pieceProgress.SecondsWornInIncrement += 1f;
+
+                        // Check if we've earned any new time credits
+                        while (pieceProgress.SecondsWornInIncrement >= pieceProgress.CurrentTimeIncrementSize &&
+                               armorProgress.TotalWalkSpeedCredits < MaxArmorWalkSpeedPercent)
+                        {
+                            pieceProgress.TimeCredits++;
+                            armorProgress.TotalWalkSpeedCredits++;
+                            pieceProgress.SecondsWornInIncrement -= pieceProgress.CurrentTimeIncrementSize;
+                            pieceProgress.CurrentTimeIncrementSize += ArmorTimeIncrementStep;
+
+                            ServerApi.Logger.Debug($"[SeraphLeveling] Player {player.PlayerName} earned time credit {pieceProgress.TimeCredits} with {itemCode}");
+                        }
+
+                        if (armorProgress.TotalWalkSpeedCredits > oldWalkSpeedCredits)
+                        {
+                            pendingArmorProgressSave = true;
+                            ApplyArmorBonusesStatic(player, armorProgress.TotalDurabilityCredits, armorProgress.TotalWalkSpeedCredits);
+
+                            // Notify player of level up
+                            player.SendMessage(GlobalConstants.GeneralChatGroup,
+                                Lang.Get("seraphleveling:message-armor-time-level-up", armorProgress.TotalWalkSpeedCredits),
+                                EnumChatType.Notification);
                         }
                     }
                 }
@@ -4316,13 +4518,15 @@ namespace SeraphLeveling
         /// <summary>
         /// Apply walking speed bonus to a player based on their level.
         /// Returns the actual applied bonus percentage.
+        /// Optimized to only update WatchedAttributes and call MarkPathDirty when values actually change.
         /// </summary>
         public static int ApplyWalkingBonusStatic(IServerPlayer player, int level)
         {
             if (player?.Entity == null) return 0;
 
-            // Check if player has vanilla Fleetfooted (affects bonus cap)
-            bool hasVanillaFleetfooted = PlayerHasVanillaFleetfootedStatic(player.Entity);
+            // Use cached vanilla traits if available, otherwise fall back to direct check
+            var cache = GetCachedTraits(player.PlayerUID);
+            bool hasVanillaFleetfooted = cache?.HasFleetfooted ?? PlayerHasVanillaFleetfootedStatic(player.Entity);
             int vanillaFleetfootedBonus = hasVanillaFleetfooted ? VANILLA_FLEETFOOTED_WALK_BONUS : 0;
 
             // Calculate raw bonus from level (1% per level)
@@ -4331,23 +4535,32 @@ namespace SeraphLeveling
             // Cap earned bonus so total (vanilla + earned) doesn't exceed MaxWalkingSpeedPercent
             float maxEarnableBonus = (MaxWalkingSpeedPercent - vanillaFleetfootedBonus) / 100f;
             float bonus = Math.Min(rawBonus, Math.Max(0, maxEarnableBonus));
-
-            // Set the walk speed stat (persistent = false since we reapply on join)
-            // walkspeed is a multiplicative stat used by Stats.GetBlended("walkspeed")
-            // Adding 0.1 means +10% speed, 0.5 means +50%, etc.
-            player.Entity.Stats.Set("walkspeed", WALKING_STAT_CODE, bonus, false);
-
             int bonusPercent = (int)(bonus * 100);
 
-            // Sync level and bonus to WatchedAttributes for client-side display
-            player.Entity.WatchedAttributes.SetInt(WATCHED_WALKING_LEVEL, level);
-            player.Entity.WatchedAttributes.SetInt(WATCHED_WALKING_BONUS, bonusPercent);
-            player.Entity.WatchedAttributes.SetBool("sitHasVanillaFleetfooted", hasVanillaFleetfooted);
+            // Check if any values have changed before updating
+            var watchedAttrs = player.Entity.WatchedAttributes;
+            int oldLevel = watchedAttrs.GetInt(WATCHED_WALKING_LEVEL, -1);
+            int oldBonus = watchedAttrs.GetInt(WATCHED_WALKING_BONUS, -1);
 
-            // Add our trait to extraTraits only if player doesn't already have Fleetfooted
-            UpdateExtraTraitStatic(player.Entity, WALKING_TRAIT_CODE, level > 0 && !hasVanillaFleetfooted);
+            bool valuesChanged = (oldLevel != level) || (oldBonus != bonusPercent);
 
-            player.Entity.WatchedAttributes.MarkPathDirty(WATCHED_WALKING_LEVEL);
+            // Only update stats and attributes if values changed
+            if (valuesChanged)
+            {
+                // Set the walk speed stat (persistent = false since we reapply on join)
+                player.Entity.Stats.Set("walkspeed", WALKING_STAT_CODE, bonus, false);
+
+                // Sync level and bonus to WatchedAttributes for client-side display
+                watchedAttrs.SetInt(WATCHED_WALKING_LEVEL, level);
+                watchedAttrs.SetInt(WATCHED_WALKING_BONUS, bonusPercent);
+                watchedAttrs.SetBool("sitHasVanillaFleetfooted", hasVanillaFleetfooted);
+
+                // Add our trait to extraTraits only if player doesn't already have Fleetfooted
+                UpdateExtraTraitStatic(player.Entity, WALKING_TRAIT_CODE, level > 0 && !hasVanillaFleetfooted);
+
+                // Only mark dirty if values actually changed
+                watchedAttrs.MarkPathDirty(WATCHED_WALKING_LEVEL);
+            }
 
             return bonusPercent;
         }
@@ -4442,22 +4655,23 @@ namespace SeraphLeveling
                 if (player?.Entity == null) continue;
 
                 string playerUid = player.PlayerUID;
-                Vec3d currentPos = player.Entity.Pos.XYZ;
+                double currentX = player.Entity.Pos.X;
+                double currentZ = player.Entity.Pos.Z;
 
-                // Get or initialize last position
-                if (!lastPlayerPositions.TryGetValue(playerUid, out Vec3d lastPos))
+                // Get or initialize last position (using Position2D struct to avoid Vec3d allocations)
+                if (!lastPlayerPositions.TryGetValue(playerUid, out Position2D lastPos))
                 {
-                    lastPlayerPositions[playerUid] = currentPos.Clone();
+                    lastPlayerPositions[playerUid] = new Position2D(currentX, currentZ);
                     continue;
                 }
 
                 // Calculate 2D horizontal distance (ignore Y axis to avoid counting climbing/falling)
-                double dx = currentPos.X - lastPos.X;
-                double dz = currentPos.Z - lastPos.Z;
+                double dx = currentX - lastPos.X;
+                double dz = currentZ - lastPos.Z;
                 float distance = (float)Math.Sqrt(dx * dx + dz * dz);
 
-                // Update last position
-                lastPlayerPositions[playerUid] = currentPos.Clone();
+                // Update last position (no allocation - struct assignment)
+                lastPlayerPositions[playerUid] = new Position2D(currentX, currentZ);
 
                 // Skip if no movement or teleportation (too far)
                 if (distance < 0.01f || distance > MAX_DISTANCE_PER_TICK) continue;
@@ -4577,13 +4791,70 @@ namespace SeraphLeveling
         }
 
         /// <summary>
-        /// Called when a player disconnects. Cleans up their position and armor tracking data.
+        /// Called when a player disconnects. Cleans up their position, armor tracking, and cached data.
         /// </summary>
         private void OnPlayerDisconnect(IServerPlayer byPlayer)
         {
             if (byPlayer == null) return;
-            lastPlayerPositions.TryRemove(byPlayer.PlayerUID, out _);
-            playerEquippedArmor.TryRemove(byPlayer.PlayerUID, out _);
+            string playerUid = byPlayer.PlayerUID;
+            lastPlayerPositions.TryRemove(playerUid, out _);
+            lastSneakingPositions.TryRemove(playerUid, out _);
+            playerEquippedArmor.TryRemove(playerUid, out _);
+            VanillaTraitsCache.TryRemove(playerUid, out _);
+        }
+
+        /// <summary>
+        /// Populates the vanilla traits cache for a player.
+        /// This reads the characterTraits array once and caches all trait booleans.
+        /// </summary>
+        private static void PopulateVanillaTraitsCache(IServerPlayer player)
+        {
+            if (player?.Entity == null) return;
+
+            string playerUid = player.PlayerUID;
+            var entity = player.Entity;
+
+            // Get character traits once
+            string[] characterTraits = entity.WatchedAttributes.GetStringArray("characterTraits", null) ?? Array.Empty<string>();
+            string characterClass = entity.WatchedAttributes.GetString("characterClass", "")?.ToLowerInvariant() ?? "";
+
+            // Create a HashSet for O(1) lookups
+            var traitSet = new HashSet<string>(characterTraits, StringComparer.OrdinalIgnoreCase);
+
+            var cache = new CachedVanillaTraits
+            {
+                HasHardy = traitSet.Contains("hardy") || characterClass == "blackguard",
+                HasSoldier = traitSet.Contains("soldier") || characterClass == "blackguard",
+                HasFocused = traitSet.Contains("focused") || characterClass == "hunter",
+                HasFleetfooted = traitSet.Contains("fleetfooted") || characterClass == "hunter" || characterClass == "clockmaker",
+                HasRavenous = traitSet.Contains("ravenous") || characterClass == "blackguard",
+                HasFarsighted = traitSet.Contains("farsighted") || characterClass == "hunter",
+                HasNervous = traitSet.Contains("nervous") || characterClass == "malefactor" || characterClass == "clockmaker",
+                HasNearsighted = traitSet.Contains("nearsighted") || characterClass == "blackguard",
+                HasFrail = traitSet.Contains("frail") || characterClass == "malefactor" || characterClass == "clockmaker",
+                HasCivil = traitSet.Contains("civil") || characterClass == "tailor",
+                HasWeak = traitSet.Contains("weak") || characterClass == "tailor",
+                HasKind = traitSet.Contains("kind") || characterClass == "tailor",
+                HasHeavyhanded = traitSet.Contains("heavyhanded") || characterClass == "blackguard",
+                HasClaustrophobic = traitSet.Contains("claustrophobic") || characterClass == "hunter",
+                HasFurtive = traitSet.Contains("furtive") || characterClass == "malefactor",
+                HasPrecise = traitSet.Contains("precise") || characterClass == "clockmaker",
+                HasMender = traitSet.Contains("mender") || characterClass == "tailor",
+                HasPilferer = traitSet.Contains("pilferer") || characterClass == "malefactor",
+                HasResourceful = traitSet.Contains("resourceful") || characterClass == "hunter" || characterClass == "malefactor",
+                HasForager = traitSet.Contains("forager") || characterClass == "hunter" || characterClass == "malefactor"
+            };
+
+            VanillaTraitsCache[playerUid] = cache;
+        }
+
+        /// <summary>
+        /// Gets the cached vanilla traits for a player. Returns null if not cached.
+        /// </summary>
+        private static CachedVanillaTraits GetCachedTraits(string playerUid)
+        {
+            VanillaTraitsCache.TryGetValue(playerUid, out var cache);
+            return cache;
         }
 
         /// <summary>
@@ -4594,6 +4865,9 @@ namespace SeraphLeveling
             if (byPlayer?.Entity == null) return;
 
             string playerUid = byPlayer.PlayerUID;
+
+            // Populate vanilla traits cache first (before applying any bonuses)
+            PopulateVanillaTraitsCache(byPlayer);
 
             // Apply mining bonus
             var miningProg = MiningProgress.GetOrAdd(playerUid, _ => new MiningProgressData());
@@ -4797,17 +5071,17 @@ namespace SeraphLeveling
         /// Also syncs the level and bonus to WatchedAttributes for client display,
         /// and adds/removes the mining mastery trait from extraTraits.
         /// Returns the actual applied bonus percentage (0-100 scale).
+        /// Optimized to only update WatchedAttributes and call MarkPathDirty when values actually change.
         /// </summary>
         private int ApplyMiningBonus(IServerPlayer player, int level)
         {
             if (player?.Entity == null) return 0;
 
-            // Check if player has vanilla Hardy (affects bonus cap)
-            bool hasVanillaHardy = PlayerHasVanillaHardy(player.Entity);
-            bool hasWeak = PlayerHasVanillaWeak(player.Entity);
-            bool hasClaustrophobic = PlayerHasVanillaClaustrophobic(player.Entity);
-
-            ServerApi.Logger.Debug($"[SeraphLeveling] ApplyMiningBonus: player={player.PlayerName}, level={level}, hasClaustrophobic={hasClaustrophobic}, class={player.Entity.WatchedAttributes.GetString("characterClass", "unknown")}");
+            // Use cached vanilla traits if available, otherwise fall back to direct check
+            var cache = GetCachedTraits(player.PlayerUID);
+            bool hasVanillaHardy = cache?.HasHardy ?? PlayerHasVanillaHardy(player.Entity);
+            bool hasWeak = cache?.HasWeak ?? PlayerHasVanillaWeak(player.Entity);
+            bool hasClaustrophobic = cache?.HasClaustrophobic ?? PlayerHasVanillaClaustrophobic(player.Entity);
 
             int vanillaHardyBonus = hasVanillaHardy ? VANILLA_HARDY_MINING_BONUS : 0;
 
@@ -4818,8 +5092,6 @@ namespace SeraphLeveling
             int claustrophobicMiningRemaining = hasClaustrophobic ? CalculateRemainingPenalty(VANILLA_CLAUSTROPHOBIC_MINING_PENALTY, level) : 0;
             // Ore penalty is tied to mining penalty - when mining penalty is cancelled (at level 10), ore is also cancelled
             int claustrophobicOreRemaining = claustrophobicMiningRemaining > 0 ? VANILLA_CLAUSTROPHOBIC_ORE_PENALTY : 0;
-
-            ServerApi.Logger.Debug($"[SeraphLeveling] Claustrophobic penalties: miningRemaining={claustrophobicMiningRemaining}, oreRemaining={claustrophobicOreRemaining}");
 
             // Calculate net bonus after cancelling negative traits
             // Negative trait penalty must be fully cancelled before bonus starts showing
@@ -4835,64 +5107,71 @@ namespace SeraphLeveling
 
             float bonus = bonusPercent * 0.01f;
 
-            // Set the mining speed stat (persistent = false since we reapply on join)
-            // Note: Stats use WeightedSum blending with a base of 1.0. Vanilla traits set values
-            // like 0.1 for +10%. We set just the bonus value, not 1 + bonus.
-            player.Entity.Stats.Set("miningSpeedMul", MINING_STAT_CODE, bonus, false);
+            // Check if any values have changed before updating
+            var watchedAttrs = player.Entity.WatchedAttributes;
+            int oldLevel = watchedAttrs.GetInt(WATCHED_MINING_LEVEL, -1);
+            int oldBonus = watchedAttrs.GetInt(WATCHED_MINING_BONUS, -1);
+            int oldClaustoMining = watchedAttrs.GetInt(WATCHED_CLAUSTROPHOBIC_MINING_REMAINING, -1);
 
-            // When Claustrophobic mining penalty is fully cancelled, also negate the ore drop penalty
-            if (hasClaustrophobic)
+            bool valuesChanged = (oldLevel != level) || (oldBonus != bonusPercent) || (oldClaustoMining != claustrophobicMiningRemaining);
+
+            // Only update stats and attributes if values changed
+            if (valuesChanged)
             {
-                if (claustrophobicMiningRemaining == 0)
+                // Set the mining speed stat (persistent = false since we reapply on join)
+                player.Entity.Stats.Set("miningSpeedMul", MINING_STAT_CODE, bonus, false);
+
+                // When Claustrophobic mining penalty is fully cancelled, also negate the ore drop penalty
+                if (hasClaustrophobic)
                 {
-                    // Negate the -15% ore drop penalty by applying +15%
-                    // Note: oreDropRate is additive - vanilla uses -0.15 for -15%, so we use +0.15 to cancel
-                    player.Entity.Stats.Set("oreDropRate", "sitClaustrophobicOreCancel", VANILLA_CLAUSTROPHOBIC_ORE_PENALTY * 0.01f, false);
+                    if (claustrophobicMiningRemaining == 0)
+                    {
+                        // Negate the -15% ore drop penalty by applying +15%
+                        player.Entity.Stats.Set("oreDropRate", "sitClaustrophobicOreCancel", VANILLA_CLAUSTROPHOBIC_ORE_PENALTY * 0.01f, false);
+                    }
+                    else
+                    {
+                        // Remove the ore cancellation stat if penalty is still active
+                        player.Entity.Stats.Remove("oreDropRate", "sitClaustrophobicOreCancel");
+                    }
                 }
-                else
+
+                // When Weak mining penalty is fully cancelled, also negate the HP penalty
+                if (hasWeak)
                 {
-                    // Remove the ore cancellation stat if penalty is still active
-                    player.Entity.Stats.Remove("oreDropRate", "sitClaustrophobicOreCancel");
+                    if (weakMiningRemaining == 0)
+                    {
+                        // Negate the -2 HP penalty by applying +2 HP
+                        player.Entity.Stats.Set("maxhealthExtraPoints", WEAK_HP_CANCEL_STAT_CODE, VANILLA_WEAK_HP_PENALTY, false);
+                    }
+                    else
+                    {
+                        // Remove the HP cancellation stat if penalty is still active
+                        player.Entity.Stats.Remove("maxhealthExtraPoints", WEAK_HP_CANCEL_STAT_CODE);
+                    }
                 }
+
+                // Sync level and bonus to WatchedAttributes for client-side display
+                watchedAttrs.SetInt(WATCHED_MINING_LEVEL, level);
+                watchedAttrs.SetInt(WATCHED_MINING_BONUS, bonusPercent);
+                watchedAttrs.SetBool("sitHasVanillaHardy", hasVanillaHardy);
+
+                // Sync negative trait status
+                watchedAttrs.SetBool("sitHasWeak", hasWeak);
+                watchedAttrs.SetInt(WATCHED_WEAK_MINING_REMAINING, weakMiningRemaining);
+                watchedAttrs.SetInt(WATCHED_WEAK_HP_REMAINING, weakHpRemaining);
+                watchedAttrs.SetBool("sitHasClaustrophobic", hasClaustrophobic);
+                watchedAttrs.SetInt(WATCHED_CLAUSTROPHOBIC_MINING_REMAINING, claustrophobicMiningRemaining);
+                watchedAttrs.SetInt(WATCHED_CLAUSTROPHOBIC_ORE_REMAINING, claustrophobicOreRemaining);
+
+                // Add our trait to extraTraits only if:
+                // - Player doesn't already have Hardy AND
+                // - All negative mining penalties are cancelled (bonusPercent > 0)
+                UpdateExtraTrait(player.Entity, MINING_TRAIT_CODE, bonusPercent > 0 && !hasVanillaHardy);
+
+                // Only call MarkPathDirty once at the end (batched update)
+                watchedAttrs.MarkPathDirty(WATCHED_MINING_LEVEL);
             }
-
-            // When Weak mining penalty is fully cancelled, also negate the HP penalty
-            if (hasWeak)
-            {
-                if (weakMiningRemaining == 0)
-                {
-                    // Negate the -2 HP penalty by applying +2 HP
-                    player.Entity.Stats.Set("maxhealthExtraPoints", WEAK_HP_CANCEL_STAT_CODE, VANILLA_WEAK_HP_PENALTY, false);
-                }
-                else
-                {
-                    // Remove the HP cancellation stat if penalty is still active
-                    player.Entity.Stats.Remove("maxhealthExtraPoints", WEAK_HP_CANCEL_STAT_CODE);
-                }
-            }
-
-            // Sync level and bonus to WatchedAttributes for client-side display
-            player.Entity.WatchedAttributes.SetInt(WATCHED_MINING_LEVEL, level);
-            player.Entity.WatchedAttributes.SetInt(WATCHED_MINING_BONUS, bonusPercent);
-            player.Entity.WatchedAttributes.SetBool("sitHasVanillaHardy", hasVanillaHardy);
-
-            // Sync negative trait status
-            player.Entity.WatchedAttributes.SetBool("sitHasWeak", hasWeak);
-            player.Entity.WatchedAttributes.SetInt(WATCHED_WEAK_MINING_REMAINING, weakMiningRemaining);
-            player.Entity.WatchedAttributes.SetInt(WATCHED_WEAK_HP_REMAINING, weakHpRemaining);
-            player.Entity.WatchedAttributes.SetBool("sitHasClaustrophobic", hasClaustrophobic);
-            player.Entity.WatchedAttributes.SetInt(WATCHED_CLAUSTROPHOBIC_MINING_REMAINING, claustrophobicMiningRemaining);
-            player.Entity.WatchedAttributes.SetInt(WATCHED_CLAUSTROPHOBIC_ORE_REMAINING, claustrophobicOreRemaining);
-
-            // Add our trait to extraTraits only if:
-            // - Player doesn't already have Hardy AND
-            // - All negative mining penalties are cancelled (bonusPercent > 0)
-            UpdateExtraTrait(player.Entity, MINING_TRAIT_CODE, bonusPercent > 0 && !hasVanillaHardy);
-
-            player.Entity.WatchedAttributes.MarkPathDirty(WATCHED_MINING_LEVEL);
-            player.Entity.WatchedAttributes.MarkPathDirty("sitHasClaustrophobic");
-            player.Entity.WatchedAttributes.MarkPathDirty(WATCHED_CLAUSTROPHOBIC_MINING_REMAINING);
-            player.Entity.WatchedAttributes.MarkPathDirty(WATCHED_CLAUSTROPHOBIC_ORE_REMAINING);
 
             return bonusPercent;
         }
@@ -5254,15 +5533,17 @@ namespace SeraphLeveling
         /// <summary>
         /// Static version of ApplyMeleeBonus for use from Harmony patches.
         /// Also handles Farsighted and Nervous negative trait cancellation.
+        /// Optimized to only update WatchedAttributes and call MarkPathDirty when values actually change.
         /// </summary>
         private static int ApplyMeleeBonusStatic(IServerPlayer player, int level)
         {
             if (player?.Entity == null) return 0;
 
-            // Check if player has vanilla Soldier (affects bonus cap)
-            bool hasVanillaSoldier = PlayerHasVanillaSoldierStatic(player.Entity);
-            bool hasFarsighted = PlayerHasVanillaFarsighted(player.Entity);
-            bool hasNervous = PlayerHasVanillaNervous(player.Entity);
+            // Use cached vanilla traits if available, otherwise fall back to direct check
+            var cache = GetCachedTraits(player.PlayerUID);
+            bool hasVanillaSoldier = cache?.HasSoldier ?? PlayerHasVanillaSoldierStatic(player.Entity);
+            bool hasFarsighted = cache?.HasFarsighted ?? PlayerHasVanillaFarsighted(player.Entity);
+            bool hasNervous = cache?.HasNervous ?? PlayerHasVanillaNervous(player.Entity);
 
             int vanillaSoldierBonus = hasVanillaSoldier ? VANILLA_SOLDIER_MELEE_BONUS : 0;
 
@@ -5274,12 +5555,10 @@ namespace SeraphLeveling
             int netBonusPercent = level;
             if (hasFarsighted)
             {
-                // Farsighted penalty is cancelled first, then bonus starts
                 netBonusPercent = Math.Max(0, level - VANILLA_FARSIGHTED_MELEE_PENALTY);
             }
             if (hasNervous)
             {
-                // Nervous penalty is cancelled first, then bonus starts
                 netBonusPercent = Math.Max(0, level - VANILLA_NERVOUS_MELEE_PENALTY);
             }
 
@@ -5287,27 +5566,37 @@ namespace SeraphLeveling
             int maxEarnableBonus = MaxMeleeDamagePercent - vanillaSoldierBonus;
             netBonusPercent = Math.Min(netBonusPercent, Math.Max(0, maxEarnableBonus));
 
-            float bonus = netBonusPercent * 0.01f;
+            // Check if any values have changed before updating
+            var watchedAttrs = player.Entity.WatchedAttributes;
+            int oldLevel = watchedAttrs.GetInt(WATCHED_MELEE_LEVEL, -1);
+            int oldBonus = watchedAttrs.GetInt(WATCHED_MELEE_BONUS, -1);
 
-            // Set the melee damage stat (persistent = false since we reapply on join)
-            // Note: meleeWeaponsDamage is an additive stat, so we just add the bonus (not 1 + bonus)
-            player.Entity.Stats.Set("meleeWeaponsDamage", MELEE_STAT_CODE, bonus, false);
+            bool valuesChanged = (oldLevel != level) || (oldBonus != netBonusPercent);
 
-            // Sync level and bonus to WatchedAttributes for client-side display
-            player.Entity.WatchedAttributes.SetInt(WATCHED_MELEE_LEVEL, level);
-            player.Entity.WatchedAttributes.SetInt(WATCHED_MELEE_BONUS, netBonusPercent);
-            player.Entity.WatchedAttributes.SetBool("sitHasVanillaSoldier", hasVanillaSoldier);
+            // Only update stats and attributes if values changed
+            if (valuesChanged)
+            {
+                float bonus = netBonusPercent * 0.01f;
 
-            // Sync negative trait status
-            player.Entity.WatchedAttributes.SetBool("sitHasFarsighted", hasFarsighted);
-            player.Entity.WatchedAttributes.SetInt(WATCHED_FARSIGHTED_REMAINING, farsightedRemaining);
-            player.Entity.WatchedAttributes.SetBool("sitHasNervous", hasNervous);
-            player.Entity.WatchedAttributes.SetInt(WATCHED_NERVOUS_REMAINING, nervousRemaining);
+                // Set the melee damage stat (persistent = false since we reapply on join)
+                player.Entity.Stats.Set("meleeWeaponsDamage", MELEE_STAT_CODE, bonus, false);
 
-            // Add our trait to extraTraits only if player doesn't already have Soldier
-            UpdateExtraTraitStatic(player.Entity, MELEE_TRAIT_CODE, level > 0 && !hasVanillaSoldier);
+                // Sync level and bonus to WatchedAttributes for client-side display
+                watchedAttrs.SetInt(WATCHED_MELEE_LEVEL, level);
+                watchedAttrs.SetInt(WATCHED_MELEE_BONUS, netBonusPercent);
+                watchedAttrs.SetBool("sitHasVanillaSoldier", hasVanillaSoldier);
 
-            player.Entity.WatchedAttributes.MarkPathDirty(WATCHED_MELEE_LEVEL);
+                // Sync negative trait status
+                watchedAttrs.SetBool("sitHasFarsighted", hasFarsighted);
+                watchedAttrs.SetInt(WATCHED_FARSIGHTED_REMAINING, farsightedRemaining);
+                watchedAttrs.SetBool("sitHasNervous", hasNervous);
+                watchedAttrs.SetInt(WATCHED_NERVOUS_REMAINING, nervousRemaining);
+
+                // Add our trait to extraTraits only if player doesn't already have Soldier
+                UpdateExtraTraitStatic(player.Entity, MELEE_TRAIT_CODE, level > 0 && !hasVanillaSoldier);
+
+                watchedAttrs.MarkPathDirty(WATCHED_MELEE_LEVEL);
+            }
 
             return netBonusPercent;
         }
@@ -5553,15 +5842,17 @@ namespace SeraphLeveling
         /// Static version of ApplyRangedBonus for use from Harmony patches.
         /// Also handles Nearsighted and Frail negative trait cancellation.
         /// Returns (damageBonus, accuracyBonus, distanceBonus) as percentages.
+        /// Optimized to only update WatchedAttributes and call MarkPathDirty when values actually change.
         /// </summary>
         public static (int damage, int accuracy, int distance) ApplyRangedBonusStatic(IServerPlayer player, int level)
         {
             if (player?.Entity == null) return (0, 0, 0);
 
-            // Check if player has vanilla Focused (affects bonus caps)
-            bool hasVanillaFocused = PlayerHasVanillaFocusedStatic(player.Entity);
-            bool hasNearsighted = PlayerHasVanillaNearsighted(player.Entity);
-            bool hasFrail = PlayerHasVanillaFrail(player.Entity);
+            // Use cached vanilla traits if available, otherwise fall back to direct check
+            var cache = GetCachedTraits(player.PlayerUID);
+            bool hasVanillaFocused = cache?.HasFocused ?? PlayerHasVanillaFocusedStatic(player.Entity);
+            bool hasNearsighted = cache?.HasNearsighted ?? PlayerHasVanillaNearsighted(player.Entity);
+            bool hasFrail = cache?.HasFrail ?? PlayerHasVanillaFrail(player.Entity);
 
             int vanillaDamage = hasVanillaFocused ? VANILLA_FOCUSED_DAMAGE_BONUS : 0;
             int vanillaAccuracy = hasVanillaFocused ? VANILLA_FOCUSED_ACCURACY_BONUS : 0;
@@ -5579,12 +5870,10 @@ namespace SeraphLeveling
 
             if (hasNearsighted)
             {
-                // Nearsighted penalty is cancelled first, then damage bonus starts
                 netDamageLevel = Math.Max(0, level - VANILLA_NEARSIGHTED_RANGED_PENALTY);
             }
             if (hasFrail)
             {
-                // Frail distance penalty is cancelled first, then distance bonus starts
                 netDistanceLevel = Math.Max(0, level - VANILLA_FRAIL_DISTANCE_PENALTY);
             }
 
@@ -5598,58 +5887,57 @@ namespace SeraphLeveling
             int accuracyPct = Math.Min(level, earnableAccuracy);
             int distancePct = Math.Min(netDistanceLevel, earnableDistance);
 
-            float damageBonus = damagePct * 0.01f;
-            float accuracyBonus = accuracyPct * 0.01f;
-            float distanceBonus = distancePct * 0.01f;
+            // Check if any values have changed before updating
+            var watchedAttrs = player.Entity.WatchedAttributes;
+            int oldLevel = watchedAttrs.GetInt(WATCHED_RANGED_LEVEL, -1);
+            int oldDamageBonus = watchedAttrs.GetInt(WATCHED_RANGED_DAMAGE_BONUS, -1);
 
-            // Set the ranged stats (persistent = false since we reapply on join)
-            // Note: All ranged stats are additive (0 = no change, not 1.0)
-            // rangedWeaponsDamage - affects projectile damage
-            // rangedWeaponsAcc - affects aim accuracy (reticle size)
-            // bowDrawingStrength - affects projectile velocity, thus travel distance (this is how vanilla Focused implements +20% ranged distance)
-            player.Entity.Stats.Set("rangedWeaponsDamage", RANGED_DAMAGE_STAT_CODE, damageBonus, false);
-            player.Entity.Stats.Set("rangedWeaponsAcc", RANGED_ACCURACY_STAT_CODE, accuracyBonus, false);
-            player.Entity.Stats.Set("bowDrawingStrength", RANGED_DISTANCE_STAT_CODE, distanceBonus, false);
+            bool valuesChanged = (oldLevel != level) || (oldDamageBonus != damagePct);
 
-            // Debug logging to verify stats are being applied
-            if (damageBonus > 0 || accuracyBonus > 0 || distanceBonus > 0)
+            // Only update stats and attributes if values changed
+            if (valuesChanged)
             {
-                ServerApi?.Logger.Debug($"[SeraphLeveling] Applied ranged stats to {player.PlayerName}: Damage={damageBonus:F2}, Accuracy={accuracyBonus:F2}, Distance={distanceBonus:F2}");
-            }
+                float damageBonus = damagePct * 0.01f;
+                float accuracyBonus = accuracyPct * 0.01f;
+                float distanceBonus = distancePct * 0.01f;
 
-            // When Frail distance penalty is fully cancelled, also negate the HP penalty
-            if (hasFrail)
-            {
-                if (frailDistanceRemaining == 0)
+                // Set the ranged stats (persistent = false since we reapply on join)
+                player.Entity.Stats.Set("rangedWeaponsDamage", RANGED_DAMAGE_STAT_CODE, damageBonus, false);
+                player.Entity.Stats.Set("rangedWeaponsAcc", RANGED_ACCURACY_STAT_CODE, accuracyBonus, false);
+                player.Entity.Stats.Set("bowDrawingStrength", RANGED_DISTANCE_STAT_CODE, distanceBonus, false);
+
+                // When Frail distance penalty is fully cancelled, also negate the HP penalty
+                if (hasFrail)
                 {
-                    // Negate the -2.5 HP penalty by applying +2.5 HP
-                    player.Entity.Stats.Set("maxhealthExtraPoints", FRAIL_HP_CANCEL_STAT_CODE, VANILLA_FRAIL_HP_PENALTY, false);
+                    if (frailDistanceRemaining == 0)
+                    {
+                        player.Entity.Stats.Set("maxhealthExtraPoints", FRAIL_HP_CANCEL_STAT_CODE, VANILLA_FRAIL_HP_PENALTY, false);
+                    }
+                    else
+                    {
+                        player.Entity.Stats.Remove("maxhealthExtraPoints", FRAIL_HP_CANCEL_STAT_CODE);
+                    }
                 }
-                else
-                {
-                    // Remove the HP cancellation stat if penalty is still active
-                    player.Entity.Stats.Remove("maxhealthExtraPoints", FRAIL_HP_CANCEL_STAT_CODE);
-                }
+
+                // Sync level and bonuses to WatchedAttributes for client-side display
+                watchedAttrs.SetInt(WATCHED_RANGED_LEVEL, level);
+                watchedAttrs.SetInt(WATCHED_RANGED_DAMAGE_BONUS, damagePct);
+                watchedAttrs.SetInt(WATCHED_RANGED_ACCURACY_BONUS, accuracyPct);
+                watchedAttrs.SetInt(WATCHED_RANGED_DISTANCE_BONUS, distancePct);
+                watchedAttrs.SetBool("sitHasVanillaFocused", hasVanillaFocused);
+
+                // Sync negative trait status
+                watchedAttrs.SetBool("sitHasNearsighted", hasNearsighted);
+                watchedAttrs.SetInt(WATCHED_NEARSIGHTED_REMAINING, nearsightedRemaining);
+                watchedAttrs.SetBool("sitHasFrail", hasFrail);
+                watchedAttrs.SetInt(WATCHED_FRAIL_DISTANCE_REMAINING, frailDistanceRemaining);
+                watchedAttrs.SetFloat(WATCHED_FRAIL_HP_REMAINING, frailHpRemaining);
+
+                // Add our trait to extraTraits only if player doesn't already have Focused
+                UpdateExtraTraitStatic(player.Entity, RANGED_TRAIT_CODE, level > 0 && !hasVanillaFocused);
+
+                watchedAttrs.MarkPathDirty(WATCHED_RANGED_LEVEL);
             }
-
-            // Sync level and bonuses to WatchedAttributes for client-side display
-            player.Entity.WatchedAttributes.SetInt(WATCHED_RANGED_LEVEL, level);
-            player.Entity.WatchedAttributes.SetInt(WATCHED_RANGED_DAMAGE_BONUS, damagePct);
-            player.Entity.WatchedAttributes.SetInt(WATCHED_RANGED_ACCURACY_BONUS, accuracyPct);
-            player.Entity.WatchedAttributes.SetInt(WATCHED_RANGED_DISTANCE_BONUS, distancePct);
-            player.Entity.WatchedAttributes.SetBool("sitHasVanillaFocused", hasVanillaFocused);
-
-            // Sync negative trait status
-            player.Entity.WatchedAttributes.SetBool("sitHasNearsighted", hasNearsighted);
-            player.Entity.WatchedAttributes.SetInt(WATCHED_NEARSIGHTED_REMAINING, nearsightedRemaining);
-            player.Entity.WatchedAttributes.SetBool("sitHasFrail", hasFrail);
-            player.Entity.WatchedAttributes.SetInt(WATCHED_FRAIL_DISTANCE_REMAINING, frailDistanceRemaining);
-            player.Entity.WatchedAttributes.SetFloat(WATCHED_FRAIL_HP_REMAINING, frailHpRemaining);
-
-            // Add our trait to extraTraits only if player doesn't already have Focused
-            UpdateExtraTraitStatic(player.Entity, RANGED_TRAIT_CODE, level > 0 && !hasVanillaFocused);
-
-            player.Entity.WatchedAttributes.MarkPathDirty(WATCHED_RANGED_LEVEL);
 
             return (damagePct, accuracyPct, distancePct);
         }
@@ -5859,6 +6147,7 @@ namespace SeraphLeveling
             ClaustrophobicRemovalProgress.Clear();
             lastPlayerPositions.Clear();
             lastSneakingPositions.Clear();
+            VanillaTraitsCache.Clear();
             pendingMiningProgressSave = false;
             pendingMeleeProgressSave = false;
             pendingRangedProgressSave = false;
@@ -7573,22 +7862,23 @@ namespace SeraphLeveling
                     continue;
                 }
 
-                Vec3d currentPos = player.Entity.Pos.XYZ;
+                double currentX = player.Entity.Pos.X;
+                double currentZ = player.Entity.Pos.Z;
 
-                // Get or initialize last sneaking position
-                if (!lastSneakingPositions.TryGetValue(playerUid, out Vec3d lastPos))
+                // Get or initialize last sneaking position (using Position2D struct to avoid Vec3d allocations)
+                if (!lastSneakingPositions.TryGetValue(playerUid, out Position2D lastPos))
                 {
-                    lastSneakingPositions[playerUid] = currentPos.Clone();
+                    lastSneakingPositions[playerUid] = new Position2D(currentX, currentZ);
                     continue;
                 }
 
                 // Calculate 2D horizontal distance (ignore Y axis to avoid counting climbing/falling)
-                double dx = currentPos.X - lastPos.X;
-                double dz = currentPos.Z - lastPos.Z;
+                double dx = currentX - lastPos.X;
+                double dz = currentZ - lastPos.Z;
                 float distance = (float)Math.Sqrt(dx * dx + dz * dz);
 
-                // Update last position
-                lastSneakingPositions[playerUid] = currentPos.Clone();
+                // Update last position (no allocation - struct assignment)
+                lastSneakingPositions[playerUid] = new Position2D(currentX, currentZ);
 
                 // Skip if no movement or teleportation (too far)
                 if (distance < 0.01f || distance > MAX_DISTANCE_PER_TICK) continue;
@@ -10069,6 +10359,176 @@ namespace SeraphLeveling
         }
 
         /// <summary>
+        /// Handler for /trait maxall command.
+        /// Sets all trait progression to maximum for testing purposes.
+        /// </summary>
+        private TextCommandResult OnTraitMaxAllCommand(TextCommandCallingArgs args)
+        {
+            IServerPlayer player = args.Caller.Player as IServerPlayer;
+            if (player?.Entity == null) return TextCommandResult.Error("Player not found.");
+
+            string playerUid = player.PlayerUID;
+
+            // Max Mining
+            int maxMiningCredits = GetMaxMiningCredits(player.Entity);
+            var miningProg = MiningProgress.GetOrAdd(playerUid, _ => new MiningProgressData());
+            miningProg.TotalCredits = maxMiningCredits;
+            miningProg.PickaxeProgress.Clear();
+            pendingMiningProgressSave = true;
+            ApplyMiningBonus(player, CalculateMiningBonusPercent(maxMiningCredits));
+
+            // Max Melee
+            int maxMeleeCredits = GetMaxMeleeCredits(player.Entity);
+            var meleeProg = MeleeProgress.GetOrAdd(playerUid, _ => new MeleeProgressData());
+            meleeProg.TotalCredits = maxMeleeCredits;
+            meleeProg.WeaponProgress.Clear();
+            pendingMeleeProgressSave = true;
+            ApplyMeleeBonusStatic(player, CalculateMeleeBonusPercent(maxMeleeCredits));
+
+            // Max Ranged
+            int maxRangedCredits = GetMaxRangedCredits(player.Entity);
+            var rangedProg = RangedProgress.GetOrAdd(playerUid, _ => new RangedProgressData());
+            rangedProg.TotalCredits = maxRangedCredits;
+            rangedProg.WeaponProgress.Clear();
+            pendingRangedProgressSave = true;
+            ApplyRangedBonusStatic(player, maxRangedCredits);
+
+            // Max Walking
+            int maxWalkingCredits = MaxWalkingSpeedPercent;
+            var walkingProg = WalkingProgress.GetOrAdd(playerUid, _ => new WalkingProgressData());
+            walkingProg.TotalCredits = maxWalkingCredits;
+            walkingProg.BlocksInIncrement = 0;
+            walkingProg.CurrentIncrementSize = BaseBlocksWalkedPerIncrement;
+            pendingWalkingProgressSave = true;
+            ApplyWalkingBonusStatic(player, maxWalkingCredits);
+
+            // Max Hunger
+            int maxHungerCredits = CalculateMaxHungerCredits(player.Entity);
+            var hungerProg = HungerProgress.GetOrAdd(playerUid, _ => new HungerProgressData());
+            hungerProg.TotalCredits = maxHungerCredits;
+            hungerProg.SecondsInIncrement = 0;
+            hungerProg.CurrentIncrementSize = BaseSecondsPerIncrement;
+            pendingHungerProgressSave = true;
+            ApplyHungerBonusStatic(player, CalculateHungerBonusPercent(maxHungerCredits, player.Entity));
+
+            // Max Armor
+            int maxArmorDurabilityCredits = MaxArmorDurabilityPercent;
+            int maxArmorWalkSpeedCredits = MaxArmorWalkSpeedPercent;
+            var armorProg = ArmorProgress.GetOrAdd(playerUid, _ => new ArmorProgressData());
+            armorProg.TotalDurabilityCredits = maxArmorDurabilityCredits;
+            armorProg.TotalWalkSpeedCredits = maxArmorWalkSpeedCredits;
+            armorProg.ArmorProgress.Clear();
+            pendingArmorProgressSave = true;
+            ApplyArmorBonusesStatic(player, maxArmorDurabilityCredits, maxArmorWalkSpeedCredits);
+
+            // Max Clothier (unlock sewing kit)
+            var clothierProg = ClothierProgress.GetOrAdd(playerUid, _ => new ClothierProgressData());
+            clothierProg.SewingKitUnlocked = true;
+            pendingClothierProgressSave = true;
+            ApplyClothierBonusStatic(player, clothierProg);
+
+            // Max Mender
+            int maxMenderCredits = MaxMenderPercent;
+            var menderProg = MenderProgress.GetOrAdd(playerUid, _ => new MenderProgressData());
+            menderProg.TotalCredits = maxMenderCredits;
+            menderProg.RepairsInIncrement = 0;
+            menderProg.CurrentIncrementSize = BaseMenderRepairsPerIncrement;
+            pendingMenderProgressSave = true;
+            ApplyMenderBonusStatic(player, maxMenderCredits);
+
+            // Max Pilferer
+            int maxPilfererCredits = GetMaxPilfererCredits(player.Entity);
+            var pilfererProg = PilfererProgress.GetOrAdd(playerUid, _ => new PilfererProgressData());
+            pilfererProg.TotalCredits = maxPilfererCredits;
+            pilfererProg.PointsInIncrement = 0;
+            pilfererProg.CurrentIncrementSize = BasePilfererPointsPerIncrement;
+            pendingPilfererProgressSave = true;
+            ApplyPilfererBonusStatic(player, maxPilfererCredits);
+
+            // Max Resourceful
+            int maxResourcefulCredits = GetMaxResourcefulCredits(player.Entity);
+            var resourcefulProg = ResourcefulProgress.GetOrAdd(playerUid, _ => new ResourcefulProgressData());
+            resourcefulProg.TotalCredits = maxResourcefulCredits;
+            resourcefulProg.AnimalsInIncrement = 0;
+            resourcefulProg.CurrentIncrementSize = BaseResourcefulAnimalsPerIncrement;
+            pendingResourcefulProgressSave = true;
+            ApplyResourcefulBonusStatic(player, maxResourcefulCredits);
+
+            // Max Forager
+            int maxForagerCredits = GetMaxForagerCredits(player.Entity);
+            var foragerProg = ForagerProgress.GetOrAdd(playerUid, _ => new ForagerProgressData());
+            foragerProg.TotalCredits = maxForagerCredits;
+            foragerProg.CropsInIncrement = 0;
+            foragerProg.CurrentIncrementSize = BaseForagerCropsPerIncrement;
+            pendingForagerProgressSave = true;
+            ApplyForagerBonusStatic(player, maxForagerCredits);
+
+            // Max Furtive
+            int maxFurtiveCredits = MaxFurtivePercent;
+            var furtiveProg = FurtiveProgress.GetOrAdd(playerUid, _ => new FurtiveProgressData());
+            furtiveProg.TotalCredits = maxFurtiveCredits;
+            furtiveProg.BlocksInIncrement = 0;
+            furtiveProg.CurrentIncrementSize = BaseFurtiveSneakBlocksPerIncrement;
+            pendingFurtiveProgressSave = true;
+            ApplyFurtiveBonusStatic(player, maxFurtiveCredits);
+
+            // Max Precise
+            int maxPreciseCredits = MaxPrecisePercent;
+            var preciseProg = PreciseProgress.GetOrAdd(playerUid, _ => new PreciseProgressData());
+            preciseProg.TotalCredits = maxPreciseCredits;
+            preciseProg.WeaponProgress.Clear();
+            pendingPreciseProgressSave = true;
+            ApplyPreciseBonusStatic(player, maxPreciseCredits);
+
+            // Unlock Technical
+            var technicalProg = TechnicalProgress.GetOrAdd(playerUid, _ => new TechnicalProgressData());
+            technicalProg.TranslocatorsRepaired = TechnicalRequiredTranslocatorRepairs;
+            technicalProg.IsUnlocked = true;
+            pendingTechnicalProgressSave = true;
+            ApplyTechnicalBonusStatic(player, true);
+
+            // Unlock Hardy Health
+            var hardyHealthProg = HardyHealthProgress.GetOrAdd(playerUid, _ => new HardyHealthProgressData());
+            hardyHealthProg.IsUnlocked = true;
+            pendingHardyHealthProgressSave = true;
+            ApplyHardyHealthBonusStatic(player, true);
+
+            // Unlock Bowyer
+            var bowyerProg = BowyerProgress.GetOrAdd(playerUid, _ => new BowyerProgressData());
+            bowyerProg.IsUnlocked = true;
+            bowyerProg.TotalBowDamage = BowyerBowDamageThreshold;
+            pendingBowyerProgressSave = true;
+            ApplyBowyerBonusStatic(player, true);
+
+            // Unlock Improviser
+            var improviserProg = ImproviserProgress.GetOrAdd(playerUid, _ => new ImproviserProgressData());
+            improviserProg.IsUnlocked = true;
+            improviserProg.TotalRockDamage = ImproviserRockDamageThreshold;
+            pendingImproviserProgressSave = true;
+            ApplyImproviserBonusStatic(player, true);
+
+            // Unlock Tinkerer
+            var tinkererProg = TinkererProgress.GetOrAdd(playerUid, _ => new TinkererProgressData());
+            tinkererProg.IsUnlocked = true;
+            pendingTinkererProgressSave = true;
+            ApplyTinkererBonusStatic(player, true);
+
+            // Unlock Merciless
+            var mercilessProg = MercilessProgress.GetOrAdd(playerUid, _ => new MercilessProgressData());
+            mercilessProg.IsUnlocked = true;
+            pendingMercilessProgressSave = true;
+            ApplyMercilessBonusStatic(player, true);
+
+            // Remove Claustrophobic (if applicable)
+            var claustrophobicProg = ClaustrophobicRemovalProgress.GetOrAdd(playerUid, _ => new ClaustrophobicRemovalProgressData());
+            claustrophobicProg.IsRemoved = true;
+            pendingClaustrophobicRemovalProgressSave = true;
+            ApplyClaustrophobicRemovalStatic(player, true);
+
+            return TextCommandResult.Success("All trait progression has been set to maximum for testing.");
+        }
+
+        /// <summary>
         /// Handler for /trait resetconfig command.
         /// Resets all trait configuration values (base, increment, max) to their defaults.
         /// </summary>
@@ -10103,8 +10563,8 @@ namespace SeraphLeveling
             MaxHungerReductionPercent = 25;
 
             // Armor defaults
-            BaseSecondsInArmorPerIncrement = 86400;
-            ArmorTimeIncrementStep = 86400;
+            BaseSecondsInArmorPerIncrement = 2880;
+            ArmorTimeIncrementStep = 2880;
             BaseDamageBlockedPerIncrement = 100;
             ArmorDamageIncrementStep = 100;
             BaseRepairsPerIncrement = 1;

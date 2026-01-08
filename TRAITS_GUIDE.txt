@@ -1,0 +1,405 @@
+================================================================================
+                    SIMPLE IMPROVING TRAITS - COMPLETE GUIDE
+================================================================================
+
+This guide explains how to improve each trait, including stat limits, required
+actions, base values, and scaling increments.
+
+================================================================================
+                              MINING - HARDY TRAIT
+================================================================================
+
+Max Bonus: 50% mining speed
+Base Increment: 100 points for first 1%
+Scaling: Each additional 1% requires +100 more points (100, 200, 300, 400...)
+
+HOW TO IMPROVE:
+- Mine stone blocks: 1 point each
+- Mine ore blocks: 5 points each (configurable via OreMultiplier)
+
+SPECIAL MECHANICS:
+- Per-pickaxe tracking: Each pickaxe type tracks progress independently
+- Encourages using many different pickaxe types
+- Only blocks broken with pickaxes count
+
+EXAMPLE PROGRESSION:
+- Mine 100 stone with copper pickaxe -> +1% (copper now needs 200 for next)
+- Mine 200 more with copper pickaxe -> +1% (copper now needs 300 for next)
+- Switch to tin-bronze pickaxe
+- Mine 100 stone with tin-bronze -> +1% (tin-bronze now needs 200 for next)
+
+================================================================================
+                            MELEE DAMAGE - SOLDIER TRAIT
+================================================================================
+
+Max Bonus: 50% melee damage
+Base Increment: 100 damage for first 1%
+Scaling: Each additional 1% requires +100 more damage (100, 200, 300, 400...)
+
+HOW TO IMPROVE:
+- Deal damage with qualifying melee weapons
+
+QUALIFYING WEAPONS:
+- Swords (code starts with sword-, blade-, longsword-, shortsword-)
+- Falx (code starts with falx-)
+- Spears (code starts with spear-)
+
+SPECIAL MECHANICS:
+- Per-weapon tracking: Each specific weapon tracks progress independently
+- Encourages crafting and using many different weapon types
+
+VANILLA INTERACTION:
+- Vanilla Soldier gives +30% melee damage
+- Blackguard players can earn up to 20% more (to reach 50% cap)
+- Commoners can earn the full 50%
+
+================================================================================
+                           RANGED - FOCUSED TRAIT
+================================================================================
+
+Max Damage Bonus: 50%
+Max Accuracy Bonus: 50%
+Max Distance Bonus: 50%
+Base Increment: 100 damage for first 1%
+Scaling: Each additional 1% requires +100 more damage (100, 200, 300, 400...)
+
+HOW TO IMPROVE:
+- Deal ranged damage with projectiles
+
+QUALIFYING WEAPONS:
+- Arrows (projectile code starts with arrow- or is arrow)
+- Sling stones (projectile code starts with stone- or is stone)
+- Thrown spears (projectile code starts with spear- or thrownspear)
+
+SPECIAL MECHANICS:
+- Per-weapon-combo tracking: Each bow+arrow combination tracks separately
+- Melee hits with a bow do NOT count
+- Only projectile damage counts
+
+EXAMPLE PROGRESSION:
+- 100 damage with crude bow + flint arrows -> +1% all stats
+- 200 more with crude bow + flint arrows -> +1% all stats
+- Switch to crude bow + copper arrows
+- 100 damage with new combo -> +1% all stats (new weapon combo)
+
+VANILLA INTERACTION:
+- Vanilla Focused gives +20% damage, +30% accuracy, +20% distance
+- Hunters can earn: +30% more damage, +20% more accuracy, +30% more distance
+- Commoners can earn the full 50% for all stats
+
+================================================================================
+                        WALK SPEED - FLEETFOOTED TRAIT
+================================================================================
+
+Max Bonus: 15% walk speed (115% total)
+Base Increment: 1000 blocks walked for first 1%
+Scaling: Each additional 1% requires +1000 more blocks (1000, 2000, 3000...)
+
+HOW TO IMPROVE:
+- Walk around (horizontal distance only)
+
+SPECIAL MECHANICS:
+- Only horizontal movement counts (X/Z axis)
+- Climbing and falling do NOT count (no ladder/falling exploits)
+- Teleportation ignored (distances >10 blocks per tick discarded)
+- Tracked every 500ms
+
+VANILLA INTERACTION:
+- Vanilla Fleetfooted gives +10% walk speed
+- Hunter/Clockmaker can earn up to 5% more (to reach 15% cap)
+- Commoners can earn the full 15%
+
+================================================================================
+                              HUNGER RATE
+================================================================================
+
+Target Hunger Rate: 75% (configurable)
+Base Increment: 300 seconds (5 minutes) at full saturation for first 1%
+Scaling: Each additional 1% requires +60 more seconds (5 min, 6 min, 7 min...)
+
+HOW TO IMPROVE:
+- Stay at maximum saturation (1500/1500)
+
+MAX CREDITS BY CLASS:
+- Non-Ravenous players (100% base): Need 25 credits to reach 75%
+- Ravenous players (130% base, Blackguard): Need 55 credits to reach 75%
+
+SPECIAL MECHANICS:
+- Only time at EXACTLY max saturation counts
+- Tracked every 1 second
+- All classes can reach the same 75% target
+
+================================================================================
+                    ARMOR PROGRESSION - SOLDIER TRAIT
+================================================================================
+
+ARMOR DURABILITY:
+Max Bonus: 50%
+
+WALK SPEED PENALTY REDUCTION:
+Max Bonus: 50%
+
+--- XP SOURCE 1: FIRST-TIME EQUIP BONUS ---
+
+Equipping new armor grants immediate bonuses to BOTH durability AND walk speed:
+- Light armor (leather, gambeson, jerkin, improvised): +1% each
+- Chain armor (chain, lamellar): +1% each
+- Brigandine: +2% each
+- Scale armor: +3% each
+- Plate armor: +3% each
+
+Each unique armor piece only grants this bonus ONCE per player.
+
+--- XP SOURCE 2: DAMAGE BLOCKED (Durability Only) ---
+
+Base Increment: 100 damage blocked for first credit
+Scaling: Each additional credit requires +100 more damage
+Per-piece tracking: Each armor piece tracks damage independently
+
+Damage distribution by hit probability:
+- Head: 20%
+- Body: 50%
+- Legs: 30%
+
+--- XP SOURCE 3: ARMOR REPAIRS (Durability Only) ---
+
+Base Increment: 1 repair for first credit
+Scaling: Each additional credit requires +1 more repair (1, 2, 3...)
+Per-piece tracking: Each armor piece tracks repairs independently
+
+VANILLA INTERACTION:
+- Vanilla Soldier gives +15% durability and -25% speed penalty
+- Blackguard can earn: +35% more durability, +25% more speed reduction
+- Commoners can earn the full 50% for both
+
+================================================================================
+                             CLOTHIER TRAIT
+================================================================================
+
+Unlock Requirement: Wear 20 unique clothing items
+Effect: Unlocks sewing kit crafting
+
+HOW TO IMPROVE:
+- Wear different clothing items
+- Each unique clothing item counts once
+
+QUALIFYING CLOTHING:
+Items with codes containing: clothes-, shirt-, trousers-, dress-, hat-,
+cape-, cloak-, jacket-, vest-, skirt-, gloves-, boots-, shoes-, headband-,
+mask-, scarf-
+
+================================================================================
+                              MENDER TRAIT
+================================================================================
+
+Max Bonus: 20% armor/clothing durability
+Base Increment: 5 repairs for first 1%
+Scaling: Each additional 1% requires +1 more repair (5, 6, 7, 8...)
+
+HOW TO IMPROVE:
+- Repair items with a sewing kit
+
+VANILLA INTERACTION:
+- Vanilla Mender gives +10% armor durability
+- Players with Mender can earn up to 10% more (to reach 20% cap)
+- Commoners can earn the full 20%
+
+================================================================================
+                             PILFERER TRAIT
+================================================================================
+
+Max Bonus: 20% for all three stats:
+- Rusty gear drops
+- Vessel contents
+- Vessel collection chance
+
+Base Increment: 10 points for first 1%
+Scaling: Each additional 1% requires +10 more points (10, 20, 30, 40...)
+
+HOW TO IMPROVE:
+- Open collapsed chests (first time): 1 point
+- Break vessels: 2 points
+
+QUALIFYING BLOCKS:
+Blocks with codes containing: vessel-, storagevessel, crackedvessel, urn-
+
+VANILLA INTERACTION:
+- Vanilla Pilferer gives +10% rusty gear, +15% vessel contents, +12% collection
+- Players with Pilferer can earn up to 10% more (to reach 20% cap)
+- Commoners can earn the full 20%
+
+================================================================================
+                           RESOURCEFUL TRAIT
+================================================================================
+
+Max Loot Bonus: 20%
+Max Harvesting Speed Bonus: 25%
+Base Increment: 10 animals for first 1%
+Scaling: Each additional 1% requires +10 more animals (10, 20, 30, 40...)
+
+HOW TO IMPROVE:
+- Harvest animals (complete the harvest action)
+
+VANILLA INTERACTION:
+- Vanilla Resourceful gives +10% animal loot, +25% harvesting speed
+- Players with Resourceful can earn up to 10% more loot (already at speed cap)
+- Commoners can earn the full 20% loot, 25% speed
+
+================================================================================
+                             FORAGER TRAIT
+================================================================================
+
+Max Foraging Loot Bonus: 20%
+Max Wild Crop Drop Bonus: 20%
+Base Increment: 10 crops for first 1%
+Scaling: Each additional 1% requires +10 more crops (10, 20, 30, 40...)
+
+HOW TO IMPROVE:
+- Break wild crops
+
+QUALIFYING BLOCKS:
+Blocks with codes containing: tallgrass, flower-, mushroom-, berry-, cattail,
+fern, wildvine, reeds, waterlily, seaweed, or (crop- AND wild)
+
+VANILLA INTERACTION:
+- Vanilla Forager gives +10% foraging loot, +20% wild crop drops
+- Players with Forager can earn up to 10% more loot (already at crop cap)
+- Commoners can earn the full 20% for both
+
+================================================================================
+                            TECHNICAL TRAIT
+================================================================================
+
+Unlock Requirement: Repair 5 translocators
+Effect: Reduces translocator temporal gear cost by 1 (3 gears -> 2 gears)
+
+HOW TO IMPROVE:
+- Repair broken static translocators using metal parts + temporal gears
+- Only fully completed repairs count (not partial progress)
+
+SPECIAL MECHANICS:
+- Technical is a prerequisite for Tinkerer trait
+- Tinkerer requires: Technical unlocked + 10% Precise damage bonus
+
+================================================================================
+                    NEGATIVE TRAIT CANCELLATION SYSTEM
+================================================================================
+
+Negative traits from vanilla classes can be progressively cancelled by earning
+levels in the corresponding positive trait.
+
+CANCELLATION TABLE:
+
+Negative Trait    | Class              | Effect                  | Cancelled By      | Levels
+------------------|--------------------|-------------------------|-------------------|--------
+Civil             | Tailor             | -10% foraging loot      | Forager           | 10
+Weak              | Tailor             | -2 HP, -10% mining      | Hardy (mining)    | 10
+Kind (loot)       | Tailor             | -10% animal loot        | Resourceful       | 10
+Kind (speed)      | Tailor             | -25% harvest speed      | Resourceful       | 25
+Farsighted        | Hunter             | -15% melee damage       | Soldier (melee)   | 15
+Claustrophobic    | Hunter             | -15% ore, -10% mining   | Hardy (mining)    | 10
+Nervous           | Malef/Clock        | -15% melee damage       | Soldier (melee)   | 15
+Frail             | Malef/Clock        | -2.5 HP, -25% range     | Focused           | 25
+Nearsighted       | Blackguard         | -15% ranged damage      | Focused           | 15
+Heavyhanded       | Blackguard         | -10% vessel loot        | Pilferer          | 10
+Heavyhanded       | Blackguard         | -15% foraging loot      | Forager           | 15
+Heavyhanded       | Blackguard         | -20% wild crop drop     | Forager           | 20
+Ravenous          | Blackguard         | +30% hunger rate        | Hunger            | 30
+
+HOW IT WORKS:
+1. As you earn levels, the negative penalty decreases proportionally
+2. When penalty reaches 0, negative trait is removed from UI
+3. Positive bonus only shows AFTER negative is fully cancelled
+
+EXAMPLE:
+- Tailor starts with Civil (-10% foraging loot)
+- At Forager level 3: Shows "Civil (-7% foraging loot)"
+- At Forager level 10: Civil trait removed from display
+- At Forager level 15: Shows "Forager (+5% foraging loot)"
+
+================================================================================
+                           ADMIN COMMANDS REFERENCE
+================================================================================
+
+GENERAL:
+/trait reset                      - Reset all trait progression to 0
+/trait resetconfig                - Reset all config values to defaults
+
+MINING:
+/trait mining                     - View personal mining stats
+/trait miningbase [value]         - Get/set base points per increment
+/trait mininglevel <level>        - Set credits directly
+/trait miningmax [percent]        - Get/set max bonus (default 50)
+
+MELEE:
+/trait melee                      - View personal melee stats
+/trait meleebase [value]          - Get/set base damage per increment
+/trait meleelevel <level>         - Set credits directly
+/trait meleemax [percent]         - Get/set max bonus (default 50)
+/trait meleeincrement [value]     - Get/set increment step per credit
+
+RANGED:
+/trait ranged                     - View personal ranged stats
+/trait rangedbase [value]         - Get/set base damage per increment
+/trait rangedlevel <level>        - Set credits directly
+/trait rangedmax [percent]        - Get/set max damage bonus (default 50)
+/trait rangedmaxacc [percent]     - Get/set max accuracy bonus (default 50)
+/trait rangedmaxdist [percent]    - Get/set max distance bonus (default 50)
+/trait rangedincrement [value]    - Get/set increment step per credit
+
+WALKING:
+/trait walking                    - View personal walking stats
+/trait walkingbase [value]        - Get/set base blocks per increment
+/trait walkinglevel <level>       - Set credits directly
+/trait walkingmax [percent]       - Get/set max bonus (default 15)
+/trait walkingincrement [value]   - Get/set increment step per credit
+
+HUNGER:
+/trait hunger                     - View personal hunger stats
+/trait hungerbase [value]         - Get/set base seconds per increment (default 300)
+/trait hungerlevel <level>        - Set credits directly
+/trait hungermax [percent]        - Get/set target reduction (default 25)
+/trait hungerincrement [value]    - Get/set increment step per credit (default 60)
+
+ARMOR:
+/trait armor                      - View personal armor stats
+/trait armorlevel <level>         - Set durability credits directly
+/trait armorwalkspeedlevel <lvl>  - Set walk speed credits directly
+/trait armordurabilitymax [%]     - Get/set max durability bonus (default 50)
+/trait armorwalkspeedmax [%]      - Get/set max walk speed reduction (default 50)
+/trait armordamagebase [damage]   - Get/set base damage per increment (default 100)
+/trait armorrepairbase [repairs]  - Get/set base repairs per increment (default 1)
+
+CLOTHIER:
+/trait clothier                   - View clothier progression
+/trait clothierrequired [count]   - Get/set required unique clothes (default 20)
+
+MENDER:
+/trait mender                     - View mender progression
+/trait menderbase [value]         - Get/set base repairs per increment (default 5)
+/trait menderlevel <level>        - Set credits directly
+/trait mendermax [percent]        - Get/set max bonus (default 20)
+
+PILFERER:
+/trait pilferer                   - View pilferer progression
+/trait pilfererbase [value]       - Get/set base points per increment (default 10)
+/trait pilfererlevel <level>      - Set credits directly
+/trait pilferermax [percent]      - Get/set max bonus (default 20)
+
+RESOURCEFUL:
+/trait resourceful                - View resourceful progression
+/trait resourcefulbase [value]    - Get/set base animals per increment (default 10)
+/trait resourcefullevel <level>   - Set credits directly
+/trait resourcefulmax [percent]   - Get/set max loot bonus (default 20)
+
+FORAGER:
+/trait forager                    - View forager progression
+/trait foragerbase [value]        - Get/set base crops per increment (default 10)
+/trait foragerlevel <level>       - Set credits directly
+/trait foragermax [percent]       - Get/set max loot bonus (default 20)
+
+TECHNICAL:
+/trait technical                  - View technical trait progress
+/trait technicalunlock <true/false> - Manually unlock/lock the trait
+
+================================================================================

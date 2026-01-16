@@ -667,7 +667,7 @@ namespace SeraphLeveling
 
     /// <summary>
     /// Data structure for tracking Pilferer progression.
-    /// Tracks collapsed chests opened and vessels broken for loot bonuses.
+    /// Tracks loot vessels broken for loot bonuses.
     /// </summary>
     public class PilfererProgressData
     {
@@ -680,15 +680,11 @@ namespace SeraphLeveling
         /// <summary>Points needed for the next credit (10, 20, 30, etc.).</summary>
         public int CurrentIncrementSize { get; set; }
 
-        /// <summary>Set of chest block positions that have been opened (for first-time tracking).</summary>
-        public HashSet<string> OpenedChestPositions { get; set; }
-
         public PilfererProgressData()
         {
             TotalCredits = 0;
             PointsInIncrement = 0;
             CurrentIncrementSize = 10; // Base increment size
-            OpenedChestPositions = new HashSet<string>();
         }
 
         public PilfererProgressData Clone()
@@ -697,8 +693,7 @@ namespace SeraphLeveling
             {
                 TotalCredits = this.TotalCredits,
                 PointsInIncrement = this.PointsInIncrement,
-                CurrentIncrementSize = this.CurrentIncrementSize,
-                OpenedChestPositions = new HashSet<string>(this.OpenedChestPositions)
+                CurrentIncrementSize = this.CurrentIncrementSize
             };
         }
     }
@@ -1518,8 +1513,7 @@ namespace SeraphLeveling
         public static int BasePilfererPointsPerIncrement = 10;  // Base points for first credit
         public static int PilfererIncrementStep = 10;           // Increment step per credit
         public static int MaxPilfererPercent = 20;              // 20% max bonus for all three stats
-        public const int PILFERER_CHEST_POINTS = 1;             // Points per first-time chest opening
-        public const int PILFERER_VESSEL_POINTS = 2;            // Points per broken vessel
+        public const int PILFERER_VESSEL_POINTS = 2;            // Points per broken loot vessel
 
         // Vanilla Pilferer trait bonuses (Malefactor exclusive)
         public const int VANILLA_PILFERER_RUSTY_GEAR_BONUS = 10;
@@ -4907,8 +4901,8 @@ namespace SeraphLeveling
                 ProcessWildCropBroken(byPlayer);
             }
 
-            // Check for Pilferer progression (vessels)
-            if (!IsSkillDisabled("pilferer") && IsVesselBlock(oldblockId))
+            // Check for Pilferer progression (cracked vessels only - they can't be re-placed)
+            if (!IsSkillDisabled("pilferer") && IsCrackedVesselBlock(oldblockId))
             {
                 ProcessVesselBreak(byPlayer);
             }
@@ -5144,9 +5138,16 @@ namespace SeraphLeveling
 
         /// <summary>
         /// Called periodically by auto-save timer to persist all pending progress.
+        /// Only saves when players are online to avoid waking up idle dedicated servers.
         /// </summary>
         private void OnAutoSaveTick(float dt)
         {
+            // Don't save if no players are online - this prevents waking up idle dedicated servers
+            if (ServerApi?.World?.AllOnlinePlayers == null || ServerApi.World.AllOnlinePlayers.Length == 0)
+            {
+                return;
+            }
+
             SaveAllPendingProgress();
         }
 
@@ -5671,21 +5672,36 @@ namespace SeraphLeveling
             {
                 // Find Entity.ReceiveDamage method
                 var entityType = typeof(Entity);
+                api.Logger.Debug($"[SeraphLeveling] Looking for Entity.ReceiveDamage method in {entityType.FullName}");
+
                 var receiveDamageMethod = entityType.GetMethod("ReceiveDamage",
                     System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance);
 
                 if (receiveDamageMethod == null)
                 {
-                    api.Logger.Warning("[SeraphLeveling] Could not find Entity.ReceiveDamage method");
+                    // Try to list available methods for debugging
+                    var methods = entityType.GetMethods(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance);
+                    var damageMethodNames = methods.Where(m => m.Name.Contains("Damage")).Select(m => m.Name).ToArray();
+                    api.Logger.Warning($"[SeraphLeveling] Could not find Entity.ReceiveDamage method. Available damage methods: {string.Join(", ", damageMethodNames)}");
                     return;
                 }
+
+                api.Logger.Debug($"[SeraphLeveling] Found Entity.ReceiveDamage: {receiveDamageMethod}");
 
                 // Get our postfix method
                 var postfixMethod = AccessTools.Method(typeof(EntityDamagePatches),
                     nameof(EntityDamagePatches.ReceiveDamage_Postfix));
 
+                if (postfixMethod == null)
+                {
+                    api.Logger.Error("[SeraphLeveling] Could not find ReceiveDamage_Postfix method!");
+                    return;
+                }
+
+                api.Logger.Debug($"[SeraphLeveling] Found postfix method: {postfixMethod}");
+
                 serverHarmony.Patch(receiveDamageMethod, postfix: new HarmonyMethod(postfixMethod));
-                api.Logger.Notification("[SeraphLeveling] Successfully patched Entity.ReceiveDamage for melee tracking");
+                api.Logger.Notification("[SeraphLeveling] Successfully patched Entity.ReceiveDamage for damage tracking");
 
                 // Patch EntityBehaviorHarvestable.SetHarvested for Resourceful trait (animal harvesting)
                 PatchAnimalHarvesting(api);
@@ -6339,38 +6355,71 @@ namespace SeraphLeveling
             string projectileCode = projectile.Code?.ToString() ?? "";
             string heldItemCode = shooter.RightHandItemSlot?.Itemstack?.Collectible?.Code?.ToString() ?? "";
 
-            // Remove prefixes for checking
-            string projCheck = projectileCode.StartsWith("game:") ? projectileCode.Substring(5) : projectileCode;
-            string heldCheck = heldItemCode.StartsWith("game:") ? heldItemCode.Substring(5) : heldItemCode;
+            // Remove any mod prefix (e.g., "game:", "combatoverhaul:") for checking
+            string projCheck = projectileCode.Contains(":") ? projectileCode.Substring(projectileCode.IndexOf(':') + 1) : projectileCode;
+            string heldCheck = heldItemCode.Contains(":") ? heldItemCode.Substring(heldItemCode.IndexOf(':') + 1) : heldItemCode;
 
-            // Check for arrow projectiles
-            if (projCheck.StartsWith("arrow-") || projCheck == "arrow")
+            // Check for arrow projectiles (bows)
+            if (projCheck.StartsWith("arrow-") || projCheck == "arrow" || projCheck.Contains("arrow"))
             {
                 // Get bow type from held item (if still holding a bow)
                 string bowCode = "unknown-bow";
                 if (heldCheck.StartsWith("bow-") || heldCheck == "bow" ||
                     heldCheck.StartsWith("longbow") || heldCheck.StartsWith("recurvebow") ||
-                    heldCheck.StartsWith("crudebow") || heldCheck.StartsWith("simplebow"))
+                    heldCheck.StartsWith("crudebow") || heldCheck.StartsWith("simplebow") ||
+                    heldCheck.Contains("bow"))
                 {
                     bowCode = heldCheck;
                 }
                 return $"{bowCode}+{projCheck}";
             }
 
+            // Check for crossbow bolts/quarrels
+            if (projCheck.StartsWith("bolt-") || projCheck == "bolt" || projCheck.Contains("bolt") ||
+                projCheck.StartsWith("quarrel-") || projCheck == "quarrel" || projCheck.Contains("quarrel"))
+            {
+                // Get crossbow type from held item
+                string crossbowCode = "unknown-crossbow";
+                if (heldCheck.StartsWith("crossbow") || heldCheck.Contains("crossbow"))
+                {
+                    crossbowCode = heldCheck;
+                }
+                return $"{crossbowCode}+{projCheck}";
+            }
+
+            // Check for firearm projectiles (bullets, musket balls, etc.)
+            if (projCheck.StartsWith("bullet-") || projCheck == "bullet" || projCheck.Contains("bullet") ||
+                projCheck.StartsWith("musketball") || projCheck.Contains("musketball") ||
+                projCheck.StartsWith("shot-") || projCheck.Contains("shot"))
+            {
+                // Get firearm type from held item
+                string firearmCode = "unknown-firearm";
+                if (heldCheck.StartsWith("musket") || heldCheck.StartsWith("pistol") ||
+                    heldCheck.StartsWith("rifle") || heldCheck.StartsWith("blunderbuss") ||
+                    heldCheck.Contains("gun") || heldCheck.Contains("firearm"))
+                {
+                    firearmCode = heldCheck;
+                }
+                return $"{firearmCode}+{projCheck}";
+            }
+
             // Check for sling stones (thrown stones)
-            if (projCheck.StartsWith("stone-") || projCheck == "stone" || projCheck.StartsWith("thrownstone"))
+            if (projCheck.StartsWith("stone-") || projCheck == "stone" || projCheck.StartsWith("thrownstone") ||
+                projCheck.Contains("slingstone") || projCheck.Contains("sling-stone"))
             {
                 // Check if holding a sling
                 string slingCode = "thrown";
-                if (heldCheck.StartsWith("sling"))
+                if (heldCheck.StartsWith("sling") || heldCheck.Contains("sling"))
                 {
                     slingCode = heldCheck;
                 }
                 return $"{slingCode}+{projCheck}";
             }
 
-            // Check for spear throws (thrown spears deal ranged damage)
-            if (projCheck.StartsWith("spear-") || projCheck.StartsWith("thrownspear"))
+            // Check for spear/javelin throws (thrown spears deal ranged damage)
+            if (projCheck.StartsWith("spear-") || projCheck.StartsWith("thrownspear") ||
+                projCheck.StartsWith("javelin-") || projCheck.Contains("javelin") ||
+                projCheck.StartsWith("pilum-") || projCheck.Contains("throwingspear"))
             {
                 return $"thrown+{projCheck}";
             }
@@ -6383,9 +6432,18 @@ namespace SeraphLeveling
         /// </summary>
         public static bool IsRangedDamage(DamageSource damageSource)
         {
+            // Debug logging at start to diagnose CO issues
+            ServerApi?.Logger.Debug($"[SeraphLeveling] IsRangedDamage called: SourceEntity={damageSource?.SourceEntity?.Code}, CauseEntity={damageSource?.CauseEntity?.Code}, Type={damageSource?.Type}, Same={damageSource?.SourceEntity == damageSource?.CauseEntity}");
+
             // CauseEntity is non-null for projectile damage (it's the shooter)
             // SourceEntity is the projectile itself
             if (damageSource?.CauseEntity == null) return false;
+
+            // For melee attacks, SourceEntity equals CauseEntity (both are the attacker).
+            // For ranged attacks, SourceEntity is the projectile, CauseEntity is the shooter.
+            // Combat Overhaul may set CauseEntity for melee attacks, so we check if they're
+            // the same entity to distinguish melee from ranged.
+            if (damageSource.SourceEntity == damageSource.CauseEntity) return false;
 
             // Additional check: the damage should be from a projectile type
             // PiercingAttack is typically used for arrows
@@ -9580,7 +9638,6 @@ namespace SeraphLeveling
             {
                 sb.AppendLine($"(Has vanilla Pilferer trait)");
             }
-            sb.AppendLine($"Chests opened: {progress.OpenedChestPositions.Count}");
             if (progress.TotalCredits < maxCredits)
             {
                 int remaining = progress.CurrentIncrementSize - progress.PointsInIncrement;
@@ -9773,7 +9830,8 @@ namespace SeraphLeveling
         }
 
         /// <summary>
-        /// Process vessel break (called from OnBlockBroken for vessels).
+        /// Process cracked vessel break (called from OnBlockBroken for cracked vessels).
+        /// Only cracked vessels count - they can't be re-placed by players.
         /// </summary>
         public static void ProcessVesselBreak(IServerPlayer player)
         {
@@ -9796,7 +9854,7 @@ namespace SeraphLeveling
                 progress.PointsInIncrement -= progress.CurrentIncrementSize;
                 progress.CurrentIncrementSize += PilfererIncrementStep;
 
-                ServerApi.Logger.Debug($"[SeraphLeveling] Player {player.PlayerName} earned pilferer credit {progress.TotalCredits} from vessel");
+                ServerApi.Logger.Debug($"[SeraphLeveling] Player {player.PlayerName} earned pilferer credit {progress.TotalCredits} from cracked vessel");
             }
 
             pendingPilfererProgressSave = true;
@@ -9811,48 +9869,6 @@ namespace SeraphLeveling
             }
         }
 
-        /// <summary>
-        /// Process chest opening (called when player opens a chest for the first time).
-        /// </summary>
-        public static void ProcessChestOpening(IServerPlayer player, BlockPos pos)
-        {
-            if (player?.Entity == null || pos == null) return;
-
-            string playerUid = player.PlayerUID;
-            var progress = PilfererProgress.GetOrAdd(playerUid, _ => new PilfererProgressData());
-
-            // Get the player-specific max credits (accounts for Heavyhanded penalty)
-            int maxCredits = GetMaxPilfererCredits(player.Entity);
-
-            if (progress.TotalCredits >= maxCredits) return;
-
-            // Create a unique key for this chest position
-            string posKey = $"{pos.X},{pos.Y},{pos.Z}";
-            if (!progress.OpenedChestPositions.Add(posKey)) return; // Already opened this chest
-
-            int oldCredits = progress.TotalCredits;
-            progress.PointsInIncrement += PILFERER_CHEST_POINTS;
-
-            while (progress.PointsInIncrement >= progress.CurrentIncrementSize && progress.TotalCredits < maxCredits)
-            {
-                progress.TotalCredits++;
-                progress.PointsInIncrement -= progress.CurrentIncrementSize;
-                progress.CurrentIncrementSize += PilfererIncrementStep;
-
-                ServerApi.Logger.Debug($"[SeraphLeveling] Player {player.PlayerName} earned pilferer credit {progress.TotalCredits} from chest");
-            }
-
-            pendingPilfererProgressSave = true;
-
-            if (progress.TotalCredits > oldCredits)
-            {
-                ApplyPilfererBonusStatic(player, progress.TotalCredits);
-                // Notify player of level up with raw improvement (shows progress even when cancelling Heavyhanded)
-                player.SendMessage(GlobalConstants.GeneralChatGroup,
-                    Lang.Get("seraphleveling:message-pilferer-level-up", progress.TotalCredits, progress.TotalCredits),
-                    EnumChatType.Notification);
-            }
-        }
 
         // =========================================================================
         // RESOURCEFUL TRAIT IMPLEMENTATION
@@ -10539,9 +10555,12 @@ namespace SeraphLeveling
         }
 
         /// <summary>
-        /// Check if a block is a vessel (for Pilferer progression).
+        /// Check if a block is a loot vessel / cracked vessel (for Pilferer progression).
+        /// Only loot vessels count - they can't be re-placed by players, preventing exploits.
+        /// Storage vessels and urns are excluded since players can place and break them repeatedly.
+        /// Block code: game:lootvessel-*
         /// </summary>
-        private static bool IsVesselBlock(int blockId)
+        private static bool IsCrackedVesselBlock(int blockId)
         {
             if (ServerApi == null) return false;
 
@@ -10551,10 +10570,8 @@ namespace SeraphLeveling
             string blockCode = block.Code?.ToString()?.ToLowerInvariant();
             if (string.IsNullOrEmpty(blockCode)) return false;
 
-            if (blockCode.Contains("vessel-")) return true;
-            if (blockCode.Contains("storagevessel")) return true;
-            if (blockCode.Contains("crackedvessel")) return true;
-            if (blockCode.Contains("urn-")) return true;
+            // Only loot vessels (cracked vessels) count - they don't drop themselves when broken
+            if (blockCode.Contains("lootvessel")) return true;
 
             return false;
         }
@@ -11144,7 +11161,6 @@ namespace SeraphLeveling
                 pilfererProg.TotalCredits = 0;
                 pilfererProg.PointsInIncrement = 0;
                 pilfererProg.CurrentIncrementSize = 10; // Default base
-                pilfererProg.OpenedChestPositions.Clear();
                 pendingPilfererProgressSave = true;
             }
             ApplyPilfererBonusStatic(player, 0);
@@ -11891,7 +11907,7 @@ namespace SeraphLeveling
                             writer.Write((byte)0x50); // 'P'
                             writer.Write((byte)0x4C); // 'L'
                             writer.Write((byte)0x46); // 'F'
-                            writer.Write((byte)1);    // Version 1
+                            writer.Write((byte)2);    // Version 2 - removed chest positions
 
                             writer.Write(snapshot.Length);
                             foreach (var playerKvp in snapshot)
@@ -11901,11 +11917,6 @@ namespace SeraphLeveling
                                 writer.Write(progress.TotalCredits);
                                 writer.Write(progress.PointsInIncrement);
                                 writer.Write(progress.CurrentIncrementSize);
-                                writer.Write(progress.OpenedChestPositions.Count);
-                                foreach (string posKey in progress.OpenedChestPositions)
-                                {
-                                    writer.Write(posKey);
-                                }
                             }
                         }
                         data = ms.ToArray();
@@ -11959,10 +11970,14 @@ namespace SeraphLeveling
                                 PointsInIncrement = reader.ReadInt32(),
                                 CurrentIncrementSize = reader.ReadInt32()
                             };
-                            int chestCount = reader.ReadInt32();
-                            for (int j = 0; j < chestCount; j++)
+                            // Version 1 had chest positions - skip them if loading old data
+                            if (version == 1)
                             {
-                                progress.OpenedChestPositions.Add(reader.ReadString());
+                                int chestCount = reader.ReadInt32();
+                                for (int j = 0; j < chestCount; j++)
+                                {
+                                    reader.ReadString(); // Skip old chest position data
+                                }
                             }
                             PilfererProgress[playerUid] = progress;
                         }
@@ -14530,6 +14545,9 @@ namespace SeraphLeveling
         /// </summary>
         public static void ReceiveDamage_Postfix(Entity __instance, DamageSource damageSource, float damage, bool __result)
         {
+            // Debug: Log all damage events to diagnose CO issues
+            SeraphLevelingModSystem.ServerApi?.Logger.Debug($"[SeraphLeveling] ReceiveDamage_Postfix: target={__instance?.Code}, damage={damage}, result={__result}, SourceEntity={damageSource?.SourceEntity?.Code}, CauseEntity={damageSource?.CauseEntity?.Code}, Type={damageSource?.Type}");
+
             // Only process if damage was actually dealt
             if (!__result || damage <= 0) return;
 

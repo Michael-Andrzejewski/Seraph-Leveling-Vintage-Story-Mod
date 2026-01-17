@@ -2430,6 +2430,13 @@ namespace SeraphLeveling
                     .RequiresPlayer()
                     .HandleWith(OnTraitCOProficiencyCommand)
                 .EndSubCommand()
+                .BeginSubCommand("colevel")
+                    .WithDescription("Set Combat Overhaul proficiency credits (admin only). Usage: /trait colevel <proficiency> <credits>")
+                    .RequiresPrivilege(Privilege.controlserver)
+                    .RequiresPlayer()
+                    .WithArgs(api.ChatCommands.Parsers.Word("proficiency"), api.ChatCommands.Parsers.Int("credits"))
+                    .HandleWith(OnTraitCOLevelCommand)
+                .EndSubCommand()
                 .BeginSubCommand("coreset")
                     .WithDescription("Reset all Combat Overhaul progression to 0 (admin only)")
                     .RequiresPrivilege(Privilege.controlserver)
@@ -6446,9 +6453,12 @@ namespace SeraphLeveling
             if (damageSource.SourceEntity == damageSource.CauseEntity) return false;
 
             // Additional check: the damage should be from a projectile type
-            // PiercingAttack is typically used for arrows
+            // PiercingAttack is typically used for arrows in vanilla
+            // SlashingAttack is used by Combat Overhaul for arrows
+            // BluntAttack is used for thrown stones
             return damageSource.Type == EnumDamageType.PiercingAttack ||
-                   damageSource.Type == EnumDamageType.BluntAttack; // For thrown stones
+                   damageSource.Type == EnumDamageType.SlashingAttack ||
+                   damageSource.Type == EnumDamageType.BluntAttack;
         }
 
         public override void Dispose()
@@ -7863,17 +7873,30 @@ namespace SeraphLeveling
                 return (CO_FIREARMS_PROFICIENCY, itemCode);
 
             // Two-Handed Swords (check before one-handed)
+            // Combat Armory uses "sword-great-" and "sword-long-" formats
             if (lowerCode.StartsWith("greatsword-") || lowerCode.StartsWith("zweihander-") ||
                 lowerCode.StartsWith("claymore-") || lowerCode.StartsWith("flamberge-") ||
-                (lowerCode.Contains("twohanded") && lowerCode.Contains("sword")))
+                lowerCode.StartsWith("montante-") || lowerCode.StartsWith("nodachi-") ||
+                lowerCode.StartsWith("2hsword-") || lowerCode.StartsWith("2h-sword-") ||
+                lowerCode.StartsWith("twohandedsword-") || lowerCode.StartsWith("twohanded-sword-") ||
+                lowerCode.StartsWith("sword-great-") || // Combat Armory greatswords
+                lowerCode.StartsWith("sword-long-") ||  // Combat Armory longswords
+                lowerCode.StartsWith("longsword-") ||   // Standard longsword prefix
+                (lowerCode.Contains("twohanded") && lowerCode.Contains("sword")) ||
+                (lowerCode.Contains("2h") && lowerCode.Contains("sword")))
                 return (CO_TWO_HANDED_SWORDS_PROFICIENCY, itemCode);
 
             // One-Handed Swords
+            // Note: sword-long- and longsword- are handled above as two-handed
             if (lowerCode.StartsWith("sword-") || lowerCode.StartsWith("blade-") ||
-                lowerCode.StartsWith("shortsword-") || lowerCode.StartsWith("longsword-") ||
-                lowerCode.StartsWith("saber-") || lowerCode.StartsWith("rapier-") ||
-                lowerCode.StartsWith("scimitar-") || lowerCode.StartsWith("cutlass-") ||
-                lowerCode.StartsWith("falx-") || lowerCode.StartsWith("falchion-"))
+                lowerCode.StartsWith("shortsword-") || lowerCode.StartsWith("sword-short-") ||
+                lowerCode.StartsWith("sword-arming-") || // Combat Armory arming swords
+                lowerCode.StartsWith("saber-") || lowerCode.StartsWith("sabre-") || // Both spellings
+                lowerCode.StartsWith("rapier-") || lowerCode.StartsWith("scimitar-") ||
+                lowerCode.StartsWith("cutlass-") || lowerCode.StartsWith("falx-") ||
+                lowerCode.StartsWith("falchion-") || lowerCode.StartsWith("dagger-") ||
+                lowerCode.StartsWith("knife-") || lowerCode.StartsWith("kopis-") ||
+                lowerCode.StartsWith("gladius-") || lowerCode.StartsWith("messer-"))
                 return (CO_ONE_HANDED_SWORDS_PROFICIENCY, itemCode);
 
             // Halberds (polearms with axe heads)
@@ -7905,7 +7928,10 @@ namespace SeraphLeveling
 
             // Javelins (thrown spears)
             if (lowerCode.StartsWith("javelin-") || lowerCode.StartsWith("pilum-") ||
-                lowerCode.Contains("throwingspear") || lowerCode.Contains("thrownspear"))
+                lowerCode.StartsWith("throwing-spear-") || lowerCode.StartsWith("thrown-spear-") ||
+                lowerCode.StartsWith("dart-") || lowerCode.StartsWith("plumbata-") ||
+                lowerCode.Contains("javelin") || lowerCode.Contains("throwingspear") ||
+                lowerCode.Contains("thrownspear") || lowerCode.Contains("throwing-spear"))
                 return (CO_JAVELINS_PROFICIENCY, itemCode);
 
             // Spears (melee)
@@ -7922,6 +7948,16 @@ namespace SeraphLeveling
             // Slings
             if (lowerCode.StartsWith("sling-") || lowerCode == "sling")
                 return (CO_SLINGS_PROFICIENCY, itemCode);
+
+            // Debug logging for unmatched weapons - helps identify missing item codes
+            if (lowerCode.Contains("sword") || lowerCode.Contains("blade") || lowerCode.Contains("spear") ||
+                lowerCode.Contains("javelin") || lowerCode.Contains("axe") || lowerCode.Contains("mace") ||
+                lowerCode.Contains("hammer") || lowerCode.Contains("club") || lowerCode.Contains("bow") ||
+                lowerCode.Contains("staff") || lowerCode.Contains("halberd") || lowerCode.Contains("pike") ||
+                lowerCode.Contains("sabre") || lowerCode.Contains("weapon") || lowerCode.Contains("dagger"))
+            {
+                ServerApi?.Logger?.Debug($"[SeraphLeveling] CO: Unmatched weapon item code: '{itemCode}' (normalized: '{lowerCode}')");
+            }
 
             return (null, null);
         }
@@ -11635,6 +11671,80 @@ namespace SeraphLeveling
         }
 
         /// <summary>
+        /// Handler for /trait colevel command.
+        /// Sets Combat Overhaul proficiency credits directly.
+        /// Usage: /trait colevel <proficiency> <credits>
+        /// Proficiency names: bows, crossbows, firearms, slings, 1hswords, 2hswords, spears, javelins, maces, clubs, halberds, axes, quarterstaff, steadyaim
+        /// </summary>
+        private TextCommandResult OnTraitCOLevelCommand(TextCommandCallingArgs args)
+        {
+            IServerPlayer player = args.Caller.Player as IServerPlayer;
+            if (player?.Entity == null) return TextCommandResult.Error("Player not found.");
+
+            if (!IsCombatOverhaulLoaded)
+            {
+                return TextCommandResult.Error("Combat Overhaul mod is not installed.");
+            }
+
+            string proficiencyArg = (string)args[0];
+            int credits = (int)args[1];
+
+            // Map short names to full proficiency stat names
+            string proficiencyStat = proficiencyArg.ToLowerInvariant() switch
+            {
+                "bows" or "bow" => CO_BOWS_PROFICIENCY,
+                "crossbows" or "crossbow" or "xbow" => CO_CROSSBOWS_PROFICIENCY,
+                "firearms" or "firearm" or "guns" or "gun" => CO_FIREARMS_PROFICIENCY,
+                "slings" or "sling" => CO_SLINGS_PROFICIENCY,
+                "1hswords" or "1hsword" or "1h" or "onehanded" => CO_ONE_HANDED_SWORDS_PROFICIENCY,
+                "2hswords" or "2hsword" or "2h" or "twohanded" => CO_TWO_HANDED_SWORDS_PROFICIENCY,
+                "spears" or "spear" => CO_SPEARS_PROFICIENCY,
+                "javelins" or "javelin" or "jav" => CO_JAVELINS_PROFICIENCY,
+                "maces" or "mace" => CO_MACES_PROFICIENCY,
+                "clubs" or "club" => CO_CLUBS_PROFICIENCY,
+                "halberds" or "halberd" => CO_HALBERDS_PROFICIENCY,
+                "axes" or "axe" => CO_AXES_PROFICIENCY,
+                "quarterstaff" or "staff" or "staves" => CO_QUARTERSTAFF_PROFICIENCY,
+                "steadyaim" or "steady" or "aim" => CO_STEADY_AIM,
+                _ => null
+            };
+
+            if (proficiencyStat == null)
+            {
+                return TextCommandResult.Error($"Unknown proficiency '{proficiencyArg}'. Valid options: bows, crossbows, firearms, slings, 1hswords, 2hswords, spears, javelins, maces, clubs, halberds, axes, quarterstaff, steadyaim");
+            }
+
+            // Get max credits for this proficiency
+            int maxCredits = GetCOProficiencyMaxCredits(proficiencyStat);
+            if (credits < 0 || credits > maxCredits)
+            {
+                return TextCommandResult.Error($"Credits must be between 0 and {maxCredits} for {GetCOProficiencyDisplayName(proficiencyStat)}.");
+            }
+
+            string playerUid = player.PlayerUID;
+            var playerProgress = COProgress.GetOrAdd(playerUid, _ => new COPlayerProgressData());
+
+            if (proficiencyStat == CO_STEADY_AIM)
+            {
+                playerProgress.SteadyAimCredits = credits;
+                ApplyCOSteadyAimBonus(player, credits);
+            }
+            else
+            {
+                var profProgress = playerProgress.GetProficiencyProgress(proficiencyStat);
+                profProgress.TotalCredits = credits;
+                // Reset weapon progress since we're setting directly
+                profProgress.WeaponProgress.Clear();
+                ApplyCOProficiencyBonusWithCancellation(player, proficiencyStat, credits);
+            }
+
+            pendingCOProgressSave = true;
+
+            float bonus = CalculateCOProficiencyBonus(credits, GetCOProficiencyMax(proficiencyStat));
+            return TextCommandResult.Success($"Set {GetCOProficiencyDisplayName(proficiencyStat)} to {credits} credits (+{bonus:F2}).");
+        }
+
+        /// <summary>
         /// Handler for /trait coreset command.
         /// Resets all Combat Overhaul progression to 0.
         /// </summary>
@@ -14511,6 +14621,89 @@ namespace SeraphLeveling
                 }
             }
 
+            // =========================================================================
+            // COMBAT OVERHAUL PROFICIENCY TRAIT DISPLAY
+            // Display CO proficiencies that have credits > 0
+            // =========================================================================
+
+            // Check if CO is enabled by looking for any CO credits
+            var coProficiencies = new (string statName, string displayName, float maxBonus)[]
+            {
+                ("bowsProficiency", "Bows Proficiency", 0.5f),
+                ("crossbowsProficiency", "Crossbows Proficiency", 0.5f),
+                ("firearmsProficiency", "Firearms Proficiency", 0.5f),
+                ("slingsProficiency", "Slings Proficiency", 0.3f),
+                ("oneHandedSwordsProficiency", "One-Handed Swords", 0.3f),
+                ("twoHandedSwordsProficiency", "Two-Handed Swords", 0.3f),
+                ("spearsProficiency", "Spears Proficiency", 0.3f),
+                ("javelinsProficiency", "Javelins Proficiency", 0.3f),
+                ("macesProficiency", "Maces Proficiency", 0.3f),
+                ("clubsProficiency", "Clubs Proficiency", 0.3f),
+                ("halberdsProficiency", "Halberds Proficiency", 0.3f),
+                ("axesProficiency", "Axes Proficiency", 0.3f),
+                ("quarterstaffProficiency", "Quarterstaff Proficiency", 0.3f),
+            };
+
+            foreach (var (statName, displayName, maxBonus) in coProficiencies)
+            {
+                string watchedKey = $"sitCO{statName}Credits";
+                int credits = eplr.WatchedAttributes.GetInt(watchedKey, 0);
+                if (credits > 0)
+                {
+                    float bonus = credits * 0.01f;
+                    if (bonus > maxBonus) bonus = maxBonus;
+                    string coTrait = $"<font color=\"#84ff84\">• {displayName} </font> <font opacity=\"0.6\">(+{bonus:F2})</font>";
+
+                    // Re-check hasNoTraits
+                    hasNoTraits = string.IsNullOrEmpty(__result) ||
+                                  __result.Trim() == noTraitsMsg.Trim() ||
+                                  __result == noTraitsMsg ||
+                                  __result.Contains(noTraitsMsg) ||
+                                  __result.Contains("No positive or negative traits");
+
+                    if (hasNoTraits)
+                    {
+                        __result = coTrait;
+                    }
+                    else
+                    {
+                        __result = __result + "\n" + coTrait;
+                    }
+                }
+            }
+
+            // Steady Aim (separate since it's a shared ranged proficiency)
+            int steadyAimCredits = eplr.WatchedAttributes.GetInt(SeraphLevelingModSystem.WATCHED_CO_STEADY_AIM_CREDITS, 0);
+            if (steadyAimCredits > 0)
+            {
+                float steadyAimBonus = steadyAimCredits * 0.01f;
+                if (steadyAimBonus > 0.5f) steadyAimBonus = 0.5f;
+                string steadyAimTrait = $"<font color=\"#84ff84\">• Steady Aim </font> <font opacity=\"0.6\">(+{steadyAimBonus:F2})</font>";
+
+                hasNoTraits = string.IsNullOrEmpty(__result) ||
+                              __result.Trim() == noTraitsMsg.Trim() ||
+                              __result == noTraitsMsg ||
+                              __result.Contains(noTraitsMsg) ||
+                              __result.Contains("No positive or negative traits");
+
+                if (hasNoTraits)
+                {
+                    __result = steadyAimTrait;
+                }
+                else
+                {
+                    __result = __result + "\n" + steadyAimTrait;
+                }
+            }
+
+            // CO Negative traits display (Trembling Aim, Clumsy Hands, etc.)
+            float tremblingAimRemaining = eplr.WatchedAttributes.GetFloat(SeraphLevelingModSystem.WATCHED_CO_TREMBLING_AIM_REMAINING, 0f);
+            if (tremblingAimRemaining > 0)
+            {
+                string tremblingTrait = $"<font color=\"#ff8484\">• Trembling Aim </font> <font opacity=\"0.6\">(-{tremblingAimRemaining:F2} steady aim)</font>";
+                __result = __result + "\n" + tremblingTrait;
+            }
+
             // Clean up any newline issues that might have been introduced
             // First normalize line endings (handle \r\n, \r, and \n)
             __result = __result.Replace("\r\n", "\n").Replace("\r", "\n");
@@ -14584,7 +14777,21 @@ namespace SeraphLeveling
                 // Combat Overhaul: Also track CO ranged proficiency if enabled
                 if (SeraphLevelingModSystem.IsCOCompatEnabled)
                 {
-                    // Get held ranged weapon for CO proficiency tracking
+                    // First, check the projectile itself for thrown weapons (javelins, thrown spears)
+                    // These weapons ARE the projectile, so we detect from SourceEntity
+                    string projectileCode = damageSource.SourceEntity?.Code?.ToString();
+                    if (!string.IsNullOrEmpty(projectileCode))
+                    {
+                        var (projProficiency, projWeaponCode) = SeraphLevelingModSystem.GetCOWeaponType(projectileCode);
+                        SeraphLevelingModSystem.ServerApi?.Logger?.Debug($"[SeraphLeveling] CO ranged projectile check: '{projectileCode}' -> proficiency='{projProficiency ?? "null"}'");
+                        if (projProficiency != null)
+                        {
+                            // Javelins proficiency is NOT in IsCORangedProficiency, so process it here
+                            SeraphLevelingModSystem.ProcessCOProficiencyDamage(shooterPlayer, projProficiency, projWeaponCode, damage);
+                        }
+                    }
+
+                    // Also check held ranged weapon for bows/crossbows/slings/firearms
                     var heldRangedItem = shooterPlayer.Entity?.RightHandItemSlot?.Itemstack?.Collectible;
                     if (heldRangedItem != null)
                     {
@@ -14614,6 +14821,8 @@ namespace SeraphLeveling
             if (heldItem == null) return;
 
             string itemCode = heldItem.Code?.ToString();
+            SeraphLevelingModSystem.ServerApi?.Logger?.Debug($"[SeraphLeveling] Melee hit with held item: '{itemCode}'");
+
             string weaponType = SeraphLevelingModSystem.GetWeaponTypeFromCode(itemCode);
 
             if (weaponType != null)
@@ -14631,6 +14840,7 @@ namespace SeraphLeveling
             if (SeraphLevelingModSystem.IsCOCompatEnabled)
             {
                 var (proficiencyStat, coWeaponCode) = SeraphLevelingModSystem.GetCOWeaponType(itemCode);
+                SeraphLevelingModSystem.ServerApi?.Logger?.Debug($"[SeraphLeveling] CO weapon check: itemCode='{itemCode}' -> proficiency='{proficiencyStat ?? "null"}', weaponCode='{coWeaponCode ?? "null"}'");
                 if (proficiencyStat != null && !SeraphLevelingModSystem.IsCORangedProficiency(proficiencyStat))
                 {
                     SeraphLevelingModSystem.ProcessCOProficiencyDamage(attackerPlayer, proficiencyStat, coWeaponCode, damage);

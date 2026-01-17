@@ -1081,7 +1081,9 @@ namespace SeraphLeveling
         // Combat Overhaul negative traits
         public bool HasCOTremblingAim { get; set; }
         public bool HasCOClumsyHands { get; set; }
-        public bool HasCOFrightenedOfMelee { get; set; }
+        public bool HasCOFearOfMelee { get; set; }
+        public bool HasCOWeakHand { get; set; }
+        public bool HasCONervous { get; set; }
     }
 
     // =========================================================================
@@ -1857,13 +1859,18 @@ namespace SeraphLeveling
         // CO negative trait penalty values
         public const float CO_TREMBLING_AIM_PENALTY = 0.3f;
         public const float CO_CLUMSY_HANDS_PENALTY = 0.3f;
-        public const int CO_FRIGHTENED_MELEE_TIER_PENALTY = 1;
+        public const int CO_FEAR_OF_MELEE_TIER_PENALTY = 1;
+        public const float CO_WEAK_HAND_PENALTY = 0.3f;  // -0.3 to ranged proficiencies (similar to Clumsy Hands)
+        public const int CO_NERVOUS_TIER_PENALTY = 1;    // -1 damage tier for piercing melee
 
         // WatchedAttributes keys for CO (client sync)
         public const string WATCHED_CO_STEADY_AIM_CREDITS = "sitCOSteadyAimCredits";
         public const string WATCHED_CO_TREMBLING_AIM_REMAINING = "sitCOTremblingAimRemaining";
+        public const string WATCHED_CO_HAS_TREMBLING_AIM = "sitCOHasTremblingAim";
         public const string WATCHED_CO_CLUMSY_HANDS_REMAINING = "sitCOClumsyHandsRemaining";
-        public const string WATCHED_CO_FRIGHTENED_MELEE_REMAINING = "sitCOFrightenedMeleeRemaining";
+        public const string WATCHED_CO_FEAR_OF_MELEE_REMAINING = "sitCOFearOfMeleeRemaining";
+        public const string WATCHED_CO_WEAK_HAND_REMAINING = "sitCOWeakHandRemaining";
+        public const string WATCHED_CO_NERVOUS_REMAINING = "sitCONervousRemaining";
 
         // CO stat codes (prefixed to avoid collisions)
         public const string CO_STAT_PREFIX = "sitCO";
@@ -2442,6 +2449,12 @@ namespace SeraphLeveling
                     .RequiresPrivilege(Privilege.controlserver)
                     .RequiresPlayer()
                     .HandleWith(OnTraitCOResetCommand)
+                .EndSubCommand()
+                .BeginSubCommand("comaxall")
+                    .WithDescription("Set all Combat Overhaul proficiencies to max for testing (admin only)")
+                    .RequiresPrivilege(Privilege.controlserver)
+                    .RequiresPlayer()
+                    .HandleWith(OnTraitCOMaxAllCommand)
                 .EndSubCommand();
 
             // Hook into block breaking for mining progression
@@ -5182,6 +5195,9 @@ namespace SeraphLeveling
             string[] characterTraits = entity.WatchedAttributes.GetStringArray("characterTraits", null) ?? Array.Empty<string>();
             string characterClass = entity.WatchedAttributes.GetString("characterClass", "")?.ToLowerInvariant() ?? "";
 
+            // Debug logging for trait detection
+            ServerApi?.Logger?.Debug($"[SeraphLeveling] PopulateVanillaTraitsCache for {player.PlayerName}: class='{characterClass}', traits=[{string.Join(", ", characterTraits)}]");
+
             // Create a HashSet for O(1) lookups
             var traitSet = new HashSet<string>(characterTraits, StringComparer.OrdinalIgnoreCase);
 
@@ -5208,13 +5224,17 @@ namespace SeraphLeveling
                 HasResourceful = traitSet.Contains("resourceful") || characterClass == "hunter" || characterClass == "malefactor",
                 HasForager = traitSet.Contains("forager") || characterClass == "hunter" || characterClass == "malefactor",
 
-                // Combat Overhaul negative traits (using CO trait naming conventions)
-                HasCOTremblingAim = traitSet.Contains("tremblingaim") || traitSet.Contains("trembling aim"),
+                // Combat Overhaul negative traits (using CO trait naming conventions, with class fallbacks)
+                HasCOTremblingAim = traitSet.Contains("tremblingaim") || traitSet.Contains("trembling aim") || characterClass == "blackguard",
                 HasCOClumsyHands = traitSet.Contains("clumsyhands") || traitSet.Contains("clumsy hands"),
-                HasCOFrightenedOfMelee = traitSet.Contains("frightenedofmelee") || traitSet.Contains("frightened of melee") || traitSet.Contains("frightened")
+                HasCOFearOfMelee = traitSet.Contains("fearofmelee") || traitSet.Contains("fear of melee"),
+                HasCOWeakHand = traitSet.Contains("weakhand") || traitSet.Contains("weak hand"),
+                HasCONervous = traitSet.Contains("nervous") || characterClass == "malefactor" || characterClass == "clockmaker"
             };
 
             VanillaTraitsCache[playerUid] = cache;
+
+            ServerApi?.Logger?.Debug($"[SeraphLeveling] Cached traits: HasClaustrophobic={cache.HasClaustrophobic}, HasFocused={cache.HasFocused}, HasFleetfooted={cache.HasFleetfooted}, HasFarsighted={cache.HasFarsighted}");
         }
 
         /// <summary>
@@ -7834,6 +7854,22 @@ namespace SeraphLeveling
         }
 
         /// <summary>
+        /// Get max Steady Aim credits for a player, accounting for Trembling Aim.
+        /// Players with Trembling Aim get extra credits to compensate for the penalty.
+        /// </summary>
+        public static int GetCOSteadyAimMaxCreditsForPlayer(string playerUid)
+        {
+            int baseMax = GetCOProficiencyMaxCredits(CO_STEADY_AIM); // 50
+            var cache = GetCachedTraits(playerUid);
+            if (cache?.HasCOTremblingAim == true)
+            {
+                // Add 30 credits to cancel Trembling Aim penalty (0.30 * 100 = 30)
+                return baseMax + (int)(CO_TREMBLING_AIM_PENALTY * 100); // 50 + 30 = 80
+            }
+            return baseMax;
+        }
+
+        /// <summary>
         /// Calculate proficiency bonus from credits.
         /// Each credit = 0.01 bonus.
         /// </summary>
@@ -8051,7 +8087,8 @@ namespace SeraphLeveling
         /// </summary>
         private static void ProcessCOSteadyAimProgress(IServerPlayer player, COPlayerProgressData playerProgress, float damage)
         {
-            int maxSteadyAimCredits = GetCOProficiencyMaxCredits(CO_STEADY_AIM);
+            // Use player-aware max that accounts for Trembling Aim
+            int maxSteadyAimCredits = GetCOSteadyAimMaxCreditsForPlayer(player.PlayerUID);
 
             // Skip if already at max
             if (playerProgress.SteadyAimCredits >= maxSteadyAimCredits) return;
@@ -8131,12 +8168,15 @@ namespace SeraphLeveling
             // Sync to WatchedAttributes
             player.Entity.WatchedAttributes.SetInt(WATCHED_CO_STEADY_AIM_CREDITS, credits);
             player.Entity.WatchedAttributes.SetFloat(WATCHED_CO_TREMBLING_AIM_REMAINING, tremblingAimRemaining);
+            player.Entity.WatchedAttributes.SetBool(WATCHED_CO_HAS_TREMBLING_AIM, hasTremblingAim);
             player.Entity.WatchedAttributes.MarkPathDirty(WATCHED_CO_STEADY_AIM_CREDITS);
+            player.Entity.WatchedAttributes.MarkPathDirty(WATCHED_CO_TREMBLING_AIM_REMAINING);
+            player.Entity.WatchedAttributes.MarkPathDirty(WATCHED_CO_HAS_TREMBLING_AIM);
         }
 
         /// <summary>
         /// Apply a Combat Overhaul proficiency bonus to a player.
-        /// Handles Clumsy Hands negative trait cancellation for ranged proficiencies.
+        /// Handles negative trait cancellation for various proficiencies.
         /// </summary>
         private static void ApplyCOProficiencyBonusWithCancellation(IServerPlayer player, string proficiencyStat, int credits)
         {
@@ -8144,13 +8184,17 @@ namespace SeraphLeveling
 
             var cache = GetCachedTraits(player.PlayerUID);
             bool hasClumsyHands = cache?.HasCOClumsyHands ?? false;
-            bool hasFrightenedOfMelee = cache?.HasCOFrightenedOfMelee ?? false;
+            bool hasWeakHand = cache?.HasCOWeakHand ?? false;
+            bool hasFearOfMelee = cache?.HasCOFearOfMelee ?? false;
+            bool hasNervous = cache?.HasCONervous ?? false;
 
             float maxBonus = GetCOProficiencyMax(proficiencyStat);
             float netBonus = 0f;
+            bool isRanged = IsCORangedProficiency(proficiencyStat);
+            bool isPiercing = IsCOPiercingProficiency(proficiencyStat);
 
-            // Handle Clumsy Hands for ranged proficiencies
-            if (hasClumsyHands && IsCORangedProficiency(proficiencyStat))
+            // Handle Clumsy Hands for ranged proficiencies (bows, crossbows, firearms)
+            if (hasClumsyHands && isRanged)
             {
                 // Clumsy Hands gives -0.3 to bows, crossbows, firearms (30 credits to cancel each)
                 int creditsToCancel = (int)(CO_CLUMSY_HANDS_PENALTY * 100); // 30
@@ -8159,18 +8203,45 @@ namespace SeraphLeveling
                 // Sync remaining penalty for UI
                 float remaining = Math.Max(0, CO_CLUMSY_HANDS_PENALTY - credits * 0.01f);
                 player.Entity.WatchedAttributes.SetFloat(WATCHED_CO_CLUMSY_HANDS_REMAINING, remaining);
+                player.Entity.WatchedAttributes.MarkPathDirty(WATCHED_CO_CLUMSY_HANDS_REMAINING);
             }
-            // Handle Frightened of Melee for melee proficiencies (tier-based, more complex)
-            else if (hasFrightenedOfMelee && !IsCORangedProficiency(proficiencyStat))
+            // Handle Weak Hand for ranged proficiencies (similar to Clumsy Hands)
+            else if (hasWeakHand && isRanged)
             {
-                // Frightened of Melee gives -1 slashing damage tier
-                // This needs 100 credits to cancel (1 tier = 100 credits in our system)
-                int creditsToCancel = CO_FRIGHTENED_MELEE_TIER_PENALTY * 100; // 100
+                // Weak Hand gives -0.3 to ranged proficiencies (30 credits to cancel each)
+                int creditsToCancel = (int)(CO_WEAK_HAND_PENALTY * 100); // 30
                 netBonus = CalculateCOProficiencyBonus(Math.Max(0, credits - creditsToCancel), maxBonus);
 
                 // Sync remaining penalty for UI
-                int remainingTiers = Math.Max(0, CO_FRIGHTENED_MELEE_TIER_PENALTY - credits / 100);
-                player.Entity.WatchedAttributes.SetInt(WATCHED_CO_FRIGHTENED_MELEE_REMAINING, remainingTiers);
+                float remaining = Math.Max(0, CO_WEAK_HAND_PENALTY - credits * 0.01f);
+                player.Entity.WatchedAttributes.SetFloat(WATCHED_CO_WEAK_HAND_REMAINING, remaining);
+                player.Entity.WatchedAttributes.MarkPathDirty(WATCHED_CO_WEAK_HAND_REMAINING);
+            }
+            // Handle Fear of Melee for melee proficiencies (tier-based)
+            else if (hasFearOfMelee && !isRanged)
+            {
+                // Fear of Melee gives -1 slashing damage tier
+                // This needs 100 credits to cancel (1 tier = 100 credits in our system)
+                int creditsToCancel = CO_FEAR_OF_MELEE_TIER_PENALTY * 100; // 100
+                netBonus = CalculateCOProficiencyBonus(Math.Max(0, credits - creditsToCancel), maxBonus);
+
+                // Sync remaining penalty for UI
+                int remainingTiers = Math.Max(0, CO_FEAR_OF_MELEE_TIER_PENALTY - credits / 100);
+                player.Entity.WatchedAttributes.SetInt(WATCHED_CO_FEAR_OF_MELEE_REMAINING, remainingTiers);
+                player.Entity.WatchedAttributes.MarkPathDirty(WATCHED_CO_FEAR_OF_MELEE_REMAINING);
+            }
+            // Handle Nervous for piercing melee (spears, javelins) - tier-based
+            else if (hasNervous && isPiercing)
+            {
+                // Nervous gives -1 damage tier for piercing melee
+                // This needs 100 credits to cancel (1 tier = 100 credits in our system)
+                int creditsToCancel = CO_NERVOUS_TIER_PENALTY * 100; // 100
+                netBonus = CalculateCOProficiencyBonus(Math.Max(0, credits - creditsToCancel), maxBonus);
+
+                // Sync remaining penalty for UI
+                int remainingTiers = Math.Max(0, CO_NERVOUS_TIER_PENALTY - credits / 100);
+                player.Entity.WatchedAttributes.SetInt(WATCHED_CO_NERVOUS_REMAINING, remainingTiers);
+                player.Entity.WatchedAttributes.MarkPathDirty(WATCHED_CO_NERVOUS_REMAINING);
             }
             else
             {
@@ -8185,6 +8256,14 @@ namespace SeraphLeveling
             string watchedKey = $"sitCO{proficiencyStat}Credits";
             player.Entity.WatchedAttributes.SetInt(watchedKey, credits);
             player.Entity.WatchedAttributes.MarkPathDirty(watchedKey);
+        }
+
+        /// <summary>
+        /// Check if a proficiency is a piercing melee proficiency (affected by Nervous trait).
+        /// </summary>
+        private static bool IsCOPiercingProficiency(string proficiencyStat)
+        {
+            return proficiencyStat == CO_SPEARS_PROFICIENCY || proficiencyStat == CO_JAVELINS_PROFICIENCY;
         }
 
         /// <summary>
@@ -11613,10 +11692,23 @@ namespace SeraphLeveling
                 return TextCommandResult.Success(sb.ToString());
             }
 
-            // Show Steady Aim
-            float steadyAimBonus = CalculateCOProficiencyBonus(playerProgress.SteadyAimCredits, COSteadyAimMax);
-            int steadyAimMaxCredits = GetCOProficiencyMaxCredits(CO_STEADY_AIM);
-            sb.AppendLine($"Steady Aim: {playerProgress.SteadyAimCredits}/{steadyAimMaxCredits} credits (+{steadyAimBonus:F2})");
+            // Show Steady Aim (use player-aware max for Trembling Aim)
+            var cache = GetCachedTraits(playerUid);
+            bool hasTremblingAim = cache?.HasCOTremblingAim == true;
+            int steadyAimMaxCredits = GetCOSteadyAimMaxCreditsForPlayer(playerUid);
+
+            // Calculate net bonus (after cancellation if applicable)
+            float steadyAimNetBonus;
+            if (hasTremblingAim)
+            {
+                int creditsForBonus = Math.Max(0, playerProgress.SteadyAimCredits - 30);
+                steadyAimNetBonus = Math.Min(creditsForBonus * 0.01f, COSteadyAimMax);
+            }
+            else
+            {
+                steadyAimNetBonus = CalculateCOProficiencyBonus(playerProgress.SteadyAimCredits, COSteadyAimMax);
+            }
+            sb.AppendLine($"Steady Aim: {playerProgress.SteadyAimCredits}/{steadyAimMaxCredits} credits (net +{steadyAimNetBonus:F2})");
 
             // Show each proficiency
             sb.AppendLine("\n--- Ranged Proficiencies ---");
@@ -11714,14 +11806,16 @@ namespace SeraphLeveling
                 return TextCommandResult.Error($"Unknown proficiency '{proficiencyArg}'. Valid options: bows, crossbows, firearms, slings, 1hswords, 2hswords, spears, javelins, maces, clubs, halberds, axes, quarterstaff, steadyaim");
             }
 
-            // Get max credits for this proficiency
-            int maxCredits = GetCOProficiencyMaxCredits(proficiencyStat);
+            string playerUid = player.PlayerUID;
+
+            // Get max credits for this proficiency (player-aware for Steady Aim)
+            int maxCredits = proficiencyStat == CO_STEADY_AIM
+                ? GetCOSteadyAimMaxCreditsForPlayer(playerUid)
+                : GetCOProficiencyMaxCredits(proficiencyStat);
             if (credits < 0 || credits > maxCredits)
             {
                 return TextCommandResult.Error($"Credits must be between 0 and {maxCredits} for {GetCOProficiencyDisplayName(proficiencyStat)}.");
             }
-
-            string playerUid = player.PlayerUID;
             var playerProgress = COProgress.GetOrAdd(playerUid, _ => new COPlayerProgressData());
 
             if (proficiencyStat == CO_STEADY_AIM)
@@ -11766,15 +11860,101 @@ namespace SeraphLeveling
                 pendingCOProgressSave = true;
             }
 
-            // Clear all CO stats
+            // Clear all CO stats and reapply with 0 credits (properly recalculates negative trait penalties)
             foreach (var proficiencyStat in AllCOProficiencies)
             {
                 string statCode = CO_STAT_PREFIX + proficiencyStat;
                 player.Entity.Stats.Remove(proficiencyStat, statCode);
+
+                // Reapply with 0 credits to properly set remaining penalty values
+                ApplyCOProficiencyBonusWithCancellation(player, proficiencyStat, 0);
             }
             player.Entity.Stats.Remove(CO_STEADY_AIM, CO_STAT_PREFIX + CO_STEADY_AIM);
 
+            // Reapply Steady Aim with 0 credits to properly set Trembling Aim remaining
+            ApplyCOSteadyAimBonus(player, 0);
+
             return TextCommandResult.Success("All Combat Overhaul proficiency progression has been reset to 0.");
+        }
+
+        /// <summary>
+        /// Handler for /trait comaxall command.
+        /// Sets all Combat Overhaul proficiencies to max for testing.
+        /// Dynamically adapts based on player's class and negative traits.
+        /// </summary>
+        private TextCommandResult OnTraitCOMaxAllCommand(TextCommandCallingArgs args)
+        {
+            IServerPlayer player = args.Caller.Player as IServerPlayer;
+            if (player?.Entity == null) return TextCommandResult.Error("Player not found.");
+
+            if (!IsCombatOverhaulLoaded)
+            {
+                return TextCommandResult.Error("Combat Overhaul mod is not installed.");
+            }
+
+            string playerUid = player.PlayerUID;
+            var cache = GetCachedTraits(playerUid);
+            var playerProgress = COProgress.GetOrAdd(playerUid, _ => new COPlayerProgressData());
+
+            var sb = new StringBuilder();
+            sb.AppendLine("=== Setting all CO proficiencies to max ===");
+
+            // Set each proficiency to max (accounting for negative traits)
+            foreach (var proficiencyStat in AllCOProficiencies)
+            {
+                int maxCredits = GetCOProficiencyMaxCredits(proficiencyStat);
+
+                // Add extra credits for negative trait cancellation
+                bool isRanged = IsCORangedProficiency(proficiencyStat);
+                bool isPiercing = IsCOPiercingProficiency(proficiencyStat);
+
+                if (isRanged && (cache?.HasCOClumsyHands == true))
+                {
+                    maxCredits += (int)(CO_CLUMSY_HANDS_PENALTY * 100); // +30
+                }
+                else if (isRanged && (cache?.HasCOWeakHand == true))
+                {
+                    maxCredits += (int)(CO_WEAK_HAND_PENALTY * 100); // +30
+                }
+                else if (!isRanged && (cache?.HasCOFearOfMelee == true))
+                {
+                    maxCredits += CO_FEAR_OF_MELEE_TIER_PENALTY * 100; // +100
+                }
+                else if (isPiercing && (cache?.HasCONervous == true))
+                {
+                    maxCredits += CO_NERVOUS_TIER_PENALTY * 100; // +100
+                }
+
+                var profProgress = playerProgress.GetProficiencyProgress(proficiencyStat);
+                profProgress.TotalCredits = maxCredits;
+                profProgress.WeaponProgress.Clear();
+                ApplyCOProficiencyBonusWithCancellation(player, proficiencyStat, maxCredits);
+
+                float bonus = CalculateCOProficiencyBonus(maxCredits, GetCOProficiencyMax(proficiencyStat));
+                sb.AppendLine($"  {GetCOProficiencyDisplayName(proficiencyStat)}: {maxCredits} credits (+{bonus:F2})");
+            }
+
+            // Set Steady Aim to max (accounting for Trembling Aim)
+            int steadyAimMax = GetCOSteadyAimMaxCreditsForPlayer(playerUid);
+            playerProgress.SteadyAimCredits = steadyAimMax;
+            ApplyCOSteadyAimBonus(player, steadyAimMax);
+
+            float steadyAimBonus;
+            if (cache?.HasCOTremblingAim == true)
+            {
+                int creditsForBonus = Math.Max(0, steadyAimMax - 30);
+                steadyAimBonus = Math.Min(creditsForBonus * 0.01f, COSteadyAimMax);
+            }
+            else
+            {
+                steadyAimBonus = CalculateCOProficiencyBonus(steadyAimMax, COSteadyAimMax);
+            }
+            sb.AppendLine($"  Steady Aim: {steadyAimMax} credits (net +{steadyAimBonus:F2})");
+
+            pendingCOProgressSave = true;
+
+            sb.AppendLine("\nAll CO proficiencies set to max!");
+            return TextCommandResult.Success(sb.ToString());
         }
 
         // =========================================================================
@@ -14672,13 +14852,29 @@ namespace SeraphLeveling
                 }
             }
 
-            // Steady Aim (separate since it's a shared ranged proficiency)
+            // Steady Aim and Trembling Aim display
             int steadyAimCredits = eplr.WatchedAttributes.GetInt(SeraphLevelingModSystem.WATCHED_CO_STEADY_AIM_CREDITS, 0);
-            if (steadyAimCredits > 0)
+            float tremblingAimRemaining = eplr.WatchedAttributes.GetFloat(SeraphLevelingModSystem.WATCHED_CO_TREMBLING_AIM_REMAINING, 0f);
+            bool hasTremblingAim = eplr.WatchedAttributes.GetBool(SeraphLevelingModSystem.WATCHED_CO_HAS_TREMBLING_AIM, false);
+
+            // Calculate net Steady Aim bonus (after cancellation if applicable)
+            float steadyAimNetBonus = 0f;
+            if (hasTremblingAim)
             {
-                float steadyAimBonus = steadyAimCredits * 0.01f;
-                if (steadyAimBonus > 0.5f) steadyAimBonus = 0.5f;
-                string steadyAimTrait = $"<font color=\"#84ff84\">• Steady Aim </font> <font opacity=\"0.6\">(+{steadyAimBonus:F2})</font>";
+                // For players with Trembling Aim: first 30 credits cancel the penalty, rest is bonus
+                int creditsForBonus = Math.Max(0, steadyAimCredits - 30);
+                steadyAimNetBonus = creditsForBonus * 0.01f;
+            }
+            else
+            {
+                steadyAimNetBonus = steadyAimCredits * 0.01f;
+            }
+            if (steadyAimNetBonus > 0.5f) steadyAimNetBonus = 0.5f;
+
+            // Show Steady Aim positive trait only if there's a net bonus
+            if (steadyAimNetBonus > 0)
+            {
+                string steadyAimTrait = $"<font color=\"#84ff84\">• Steady Aim </font> <font opacity=\"0.6\">(+{steadyAimNetBonus:F2})</font>";
 
                 hasNoTraits = string.IsNullOrEmpty(__result) ||
                               __result.Trim() == noTraitsMsg.Trim() ||
@@ -14696,12 +14892,45 @@ namespace SeraphLeveling
                 }
             }
 
-            // CO Negative traits display (Trembling Aim, Clumsy Hands, etc.)
-            float tremblingAimRemaining = eplr.WatchedAttributes.GetFloat(SeraphLevelingModSystem.WATCHED_CO_TREMBLING_AIM_REMAINING, 0f);
+            // Get other CO negative trait remaining values
+            float clumsyHandsRemaining = eplr.WatchedAttributes.GetFloat(SeraphLevelingModSystem.WATCHED_CO_CLUMSY_HANDS_REMAINING, 0f);
+            float weakHandRemaining = eplr.WatchedAttributes.GetFloat(SeraphLevelingModSystem.WATCHED_CO_WEAK_HAND_REMAINING, 0f);
+            int fearOfMeleeRemaining = eplr.WatchedAttributes.GetInt(SeraphLevelingModSystem.WATCHED_CO_FEAR_OF_MELEE_REMAINING, 0);
+            int coNervousRemaining = eplr.WatchedAttributes.GetInt(SeraphLevelingModSystem.WATCHED_CO_NERVOUS_REMAINING, 0);
+
+            // Show Trembling Aim negative trait only if there's remaining penalty
             if (tremblingAimRemaining > 0)
             {
                 string tremblingTrait = $"<font color=\"#ff8484\">• Trembling Aim </font> <font opacity=\"0.6\">(-{tremblingAimRemaining:F2} steady aim)</font>";
                 __result = __result + "\n" + tremblingTrait;
+            }
+
+            // Show Clumsy Hands negative trait only if there's remaining penalty
+            if (clumsyHandsRemaining > 0)
+            {
+                string clumsyTrait = $"<font color=\"#ff8484\">• Clumsy Hands </font> <font opacity=\"0.6\">(-{clumsyHandsRemaining:F2} ranged proficiency)</font>";
+                __result = __result + "\n" + clumsyTrait;
+            }
+
+            // Show Weak Hand negative trait only if there's remaining penalty
+            if (weakHandRemaining > 0)
+            {
+                string weakHandTrait = $"<font color=\"#ff8484\">• Weak Hand </font> <font opacity=\"0.6\">(-{weakHandRemaining:F2} ranged proficiency)</font>";
+                __result = __result + "\n" + weakHandTrait;
+            }
+
+            // Show Fear of Melee negative trait only if there's remaining penalty
+            if (fearOfMeleeRemaining > 0)
+            {
+                string fearTrait = $"<font color=\"#ff8484\">• Fear of Melee </font> <font opacity=\"0.6\">(-{fearOfMeleeRemaining} melee tier)</font>";
+                __result = __result + "\n" + fearTrait;
+            }
+
+            // Show CO Nervous negative trait only if there's remaining penalty (piercing melee)
+            if (coNervousRemaining > 0)
+            {
+                string coNervousTrait = $"<font color=\"#ff8484\">• Nervous </font> <font opacity=\"0.6\">(-{coNervousRemaining} piercing tier)</font>";
+                __result = __result + "\n" + coNervousTrait;
             }
 
             // Clean up any newline issues that might have been introduced
@@ -14709,14 +14938,76 @@ namespace SeraphLeveling
             __result = __result.Replace("\r\n", "\n").Replace("\r", "\n");
 
             // Remove any lines that are empty or whitespace-only
+            // Also filter out CO's native negative trait displays when we're handling them
             var lines = __result.Split('\n');
             var nonEmptyLines = new System.Collections.Generic.List<string>();
             foreach (var line in lines)
             {
-                if (!string.IsNullOrWhiteSpace(line))
+                if (string.IsNullOrWhiteSpace(line)) continue;
+
+                string trimmedLine = line.Trim();
+                string lowerLine = trimmedLine.ToLowerInvariant();
+
+                // Filter out CO's native negative trait displays - we handle them ourselves
+                // Check for various CO trait name patterns (case-insensitive)
+                bool isCONativeTrait = false;
+
+                // Trembling Aim - CO displays as "Trembling Aim (30% more aim drift)" or similar
+                if (lowerLine.Contains("trembling") && (lowerLine.Contains("aim") || lowerLine.Contains("drift")))
                 {
-                    nonEmptyLines.Add(line.Trim());
+                    // Only filter if it's NOT our display (our display has "steady aim" in it)
+                    if (!lowerLine.Contains("steady aim"))
+                    {
+                        isCONativeTrait = true;
+                    }
                 }
+
+                // Clumsy Hands - CO displays as "Clumsy Hands" with some description
+                if (lowerLine.Contains("clumsy") && lowerLine.Contains("hands"))
+                {
+                    // Only filter if it's NOT our display (our display has "ranged proficiency" in it)
+                    if (!lowerLine.Contains("ranged proficiency"))
+                    {
+                        isCONativeTrait = true;
+                    }
+                }
+
+                // Weak Hand - CO displays as "Weak Hand" with some description
+                if (lowerLine.Contains("weak") && lowerLine.Contains("hand"))
+                {
+                    // Only filter if it's NOT our display (our display has "ranged proficiency" in it)
+                    if (!lowerLine.Contains("ranged proficiency"))
+                    {
+                        isCONativeTrait = true;
+                    }
+                }
+
+                // Fear of Melee - CO displays as "Fear of Melee" with description
+                if (lowerLine.Contains("fear") && lowerLine.Contains("melee"))
+                {
+                    // Only filter if it's NOT our display (our display has "melee tier" in it)
+                    if (!lowerLine.Contains("melee tier"))
+                    {
+                        isCONativeTrait = true;
+                    }
+                }
+
+                // Nervous - CO displays as "Nervous" with description about piercing damage
+                if (lowerLine.Contains("nervous") && (lowerLine.Contains("piercing") || lowerLine.Contains("damage") || lowerLine.Contains("tier")))
+                {
+                    // Only filter if it's NOT our display (our display has "piercing tier" in it)
+                    if (!lowerLine.Contains("piercing tier"))
+                    {
+                        isCONativeTrait = true;
+                    }
+                }
+
+                if (isCONativeTrait)
+                {
+                    continue; // Skip CO's native display
+                }
+
+                nonEmptyLines.Add(trimmedLine);
             }
             __result = string.Join("\n", nonEmptyLines);
 

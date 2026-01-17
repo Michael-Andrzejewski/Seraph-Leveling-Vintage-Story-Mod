@@ -1084,6 +1084,13 @@ namespace SeraphLeveling
         public bool HasCOFearOfMelee { get; set; }
         public bool HasCOWeakHand { get; set; }
         public bool HasCONervous { get; set; }
+
+        // Combat Overhaul mixed/positive traits (Big Head, Thick Skull, Leg Day, Melee Expert, Self Defence)
+        public bool HasCOBigHead { get; set; }
+        public bool HasCOThickSkull { get; set; }
+        public bool HasCOLegDay { get; set; }
+        public bool HasCOMeleeExpert { get; set; }
+        public bool HasCOSelfDefence { get; set; }
     }
 
     // =========================================================================
@@ -1840,6 +1847,10 @@ namespace SeraphLeveling
         public static float COQuarterstaffProficiencyMax = 0.3f;
         public static float COSteadyAimMax = 0.5f;
 
+        // Per-proficiency base and increment overrides (optional, falls back to global values)
+        public static Dictionary<string, int> COProficiencyBaseOverrides = new Dictionary<string, int>();
+        public static Dictionary<string, int> COProficiencyIncrementOverrides = new Dictionary<string, int>();
+
         // CO proficiency stat names (must match Combat Overhaul's stat names)
         public const string CO_BOWS_PROFICIENCY = "bowsProficiency";
         public const string CO_CROSSBOWS_PROFICIENCY = "crossbowsProficiency";
@@ -1863,6 +1874,29 @@ namespace SeraphLeveling
         public const float CO_WEAK_HAND_PENALTY = 0.3f;  // -0.3 to ranged proficiencies (similar to Clumsy Hands)
         public const int CO_NERVOUS_TIER_PENALTY = 1;    // -1 damage tier for piercing melee
 
+        // CO Damage Tier Stats (armor penetration)
+        public const string CO_RANGED_TIER_SLASHING = "rangedDamageTierBonusSlashingAttack";
+        public const string CO_RANGED_TIER_PIERCING = "rangedDamageTierBonusPiercingAttack";
+        public const string CO_RANGED_TIER_BLUNT = "rangedDamageTierBonusBluntAttack";
+        public const string CO_MELEE_TIER_SLASHING = "meleeDamageTierBonusSlashingAttack";
+        public const string CO_MELEE_TIER_PIERCING = "meleeDamageTierBonusPiercingAttack";
+        public const string CO_MELEE_TIER_BLUNT = "meleeDamageTierBonusBluntAttack";
+
+        // CO Body Damage Stats
+        public const string CO_HEAD_DAMAGE_FACTOR = "playerHeadDamageFactor";
+        public const string CO_FACE_DAMAGE_FACTOR = "playerFaceDamageFactor";
+        public const string CO_LEGS_DAMAGE_FACTOR = "playerLegsDamageFactor";
+        public const string CO_FEET_DAMAGE_FACTOR = "playerFeetDamageFactor";
+        public const string CO_JUMP_HEIGHT = "jumpHeightMul";
+
+        // CO Big Head / Thick Skull / Leg Day penalties and bonuses
+        public const float CO_BIG_HEAD_PENALTY = 0.5f;      // +50% head/face damage (Clockmaker)
+        public const float CO_THICK_SKULL_BONUS = 0.5f;     // -50% head/face damage (earnable)
+        public const float CO_LEG_DAY_PENALTY = 1.0f;       // +100% leg/feet damage (Blackguard)
+        public const float CO_LEG_DAY_JUMP_BONUS = 0.25f;   // +25% jump height (Blackguard)
+        public const int CO_MELEE_EXPERT_TIER_BONUS = 1;    // +1 melee slashing tier (Blackguard)
+        public const int CO_FRIGHTENED_TIER_PENALTY = 1;    // -1 melee slashing tier (Clockmaker)
+
         // WatchedAttributes keys for CO (client sync)
         public const string WATCHED_CO_STEADY_AIM_CREDITS = "sitCOSteadyAimCredits";
         public const string WATCHED_CO_TREMBLING_AIM_REMAINING = "sitCOTremblingAimRemaining";
@@ -1871,6 +1905,13 @@ namespace SeraphLeveling
         public const string WATCHED_CO_FEAR_OF_MELEE_REMAINING = "sitCOFearOfMeleeRemaining";
         public const string WATCHED_CO_WEAK_HAND_REMAINING = "sitCOWeakHandRemaining";
         public const string WATCHED_CO_NERVOUS_REMAINING = "sitCONervousRemaining";
+
+        // WatchedAttributes for Big Head / Thick Skull / Leg Day / Melee Expert
+        public const string WATCHED_CO_BIG_HEAD_REMAINING = "sitCOBigHeadRemaining";
+        public const string WATCHED_CO_LEG_DAY_REMAINING = "sitCOLegDayRemaining";
+        public const string WATCHED_CO_FRIGHTENED_REMAINING = "sitCOFrightenedRemaining";
+        public const string WATCHED_CO_MELEE_TIER_BONUS = "sitCOMeleeTierBonus";
+        public const string WATCHED_CO_RANGED_TIER_BONUS = "sitCORangedTierBonus";
 
         // CO stat codes (prefixed to avoid collisions)
         public const string CO_STAT_PREFIX = "sitCO";
@@ -2312,7 +2353,7 @@ namespace SeraphLeveling
                     .HandleWith(OnTraitTechnicalCommand)
                 .EndSubCommand()
                 .BeginSubCommand("technicalunlock")
-                    .WithDescription("Manually unlock/lock technical trait (admin only)")
+                    .WithDescription("Manually unlock or lock technical trait (admin only)")
                     .WithArgs(api.ChatCommands.Parsers.Bool("unlock"))
                     .RequiresPrivilege(Privilege.controlserver)
                     .RequiresPlayer()
@@ -2326,7 +2367,7 @@ namespace SeraphLeveling
                     .HandleWith(OnTraitHardyHealthCommand)
                 .EndSubCommand()
                 .BeginSubCommand("hardyhealthunlock")
-                    .WithDescription("Manually unlock/lock hardy health trait (admin only)")
+                    .WithDescription("Manually unlock or lock hardy health trait (admin only)")
                     .WithArgs(api.ChatCommands.Parsers.Bool("unlock"))
                     .RequiresPrivilege(Privilege.controlserver)
                     .RequiresPlayer()
@@ -2340,7 +2381,7 @@ namespace SeraphLeveling
                     .HandleWith(OnTraitBowyerCommand)
                 .EndSubCommand()
                 .BeginSubCommand("bowyerunlock")
-                    .WithDescription("Manually unlock/lock bowyer trait (admin only)")
+                    .WithDescription("Manually unlock or lock bowyer trait (admin only)")
                     .WithArgs(api.ChatCommands.Parsers.Bool("unlock"))
                     .RequiresPrivilege(Privilege.controlserver)
                     .RequiresPlayer()
@@ -2354,7 +2395,7 @@ namespace SeraphLeveling
                     .HandleWith(OnTraitImproviserCommand)
                 .EndSubCommand()
                 .BeginSubCommand("improviserunlock")
-                    .WithDescription("Manually unlock/lock improviser trait (admin only)")
+                    .WithDescription("Manually unlock or lock improviser trait (admin only)")
                     .WithArgs(api.ChatCommands.Parsers.Bool("unlock"))
                     .RequiresPrivilege(Privilege.controlserver)
                     .RequiresPlayer()
@@ -2368,7 +2409,7 @@ namespace SeraphLeveling
                     .HandleWith(OnTraitTinkererCommand)
                 .EndSubCommand()
                 .BeginSubCommand("tinkererunlock")
-                    .WithDescription("Manually unlock/lock tinkerer trait (admin only)")
+                    .WithDescription("Manually unlock or lock tinkerer trait (admin only)")
                     .WithArgs(api.ChatCommands.Parsers.Bool("unlock"))
                     .RequiresPrivilege(Privilege.controlserver)
                     .RequiresPlayer()
@@ -2382,7 +2423,7 @@ namespace SeraphLeveling
                     .HandleWith(OnTraitMercilessCommand)
                 .EndSubCommand()
                 .BeginSubCommand("mercilessunlock")
-                    .WithDescription("Manually unlock/lock merciless trait (admin only)")
+                    .WithDescription("Manually unlock or lock merciless trait (admin only)")
                     .WithArgs(api.ChatCommands.Parsers.Bool("unlock"))
                     .RequiresPrivilege(Privilege.controlserver)
                     .RequiresPlayer()
@@ -2438,7 +2479,7 @@ namespace SeraphLeveling
                     .HandleWith(OnTraitCOProficiencyCommand)
                 .EndSubCommand()
                 .BeginSubCommand("colevel")
-                    .WithDescription("Set Combat Overhaul proficiency credits (admin only). Usage: /trait colevel <proficiency> <credits>")
+                    .WithDescription("Set Combat Overhaul proficiency credits (admin only). Usage: /trait colevel [proficiency] [credits]")
                     .RequiresPrivilege(Privilege.controlserver)
                     .RequiresPlayer()
                     .WithArgs(api.ChatCommands.Parsers.Word("proficiency"), api.ChatCommands.Parsers.Int("credits"))
@@ -2455,6 +2496,105 @@ namespace SeraphLeveling
                     .RequiresPrivilege(Privilege.controlserver)
                     .RequiresPlayer()
                     .HandleWith(OnTraitCOMaxAllCommand)
+                .EndSubCommand()
+                // Per-proficiency CO commands
+                .BeginSubCommand("bows")
+                    .WithDescription("View or configure Bows proficiency. Usage: /trait bows [base|increment|level|max] [value]")
+                    .RequiresPrivilege(Privilege.chat)
+                    .RequiresPlayer()
+                    .WithArgs(api.ChatCommands.Parsers.OptionalWord("action"), api.ChatCommands.Parsers.OptionalInt("value"))
+                    .HandleWith(args => OnTraitCOProficiencyConfigCommand(args, CO_BOWS_PROFICIENCY))
+                .EndSubCommand()
+                .BeginSubCommand("crossbows")
+                    .WithDescription("View or configure Crossbows proficiency. Usage: /trait crossbows [base|increment|level|max] [value]")
+                    .RequiresPrivilege(Privilege.chat)
+                    .RequiresPlayer()
+                    .WithArgs(api.ChatCommands.Parsers.OptionalWord("action"), api.ChatCommands.Parsers.OptionalInt("value"))
+                    .HandleWith(args => OnTraitCOProficiencyConfigCommand(args, CO_CROSSBOWS_PROFICIENCY))
+                .EndSubCommand()
+                .BeginSubCommand("firearms")
+                    .WithDescription("View or configure Firearms proficiency. Usage: /trait firearms [base|increment|level|max] [value]")
+                    .RequiresPrivilege(Privilege.chat)
+                    .RequiresPlayer()
+                    .WithArgs(api.ChatCommands.Parsers.OptionalWord("action"), api.ChatCommands.Parsers.OptionalInt("value"))
+                    .HandleWith(args => OnTraitCOProficiencyConfigCommand(args, CO_FIREARMS_PROFICIENCY))
+                .EndSubCommand()
+                .BeginSubCommand("slings")
+                    .WithDescription("View or configure Slings proficiency. Usage: /trait slings [base|increment|level|max] [value]")
+                    .RequiresPrivilege(Privilege.chat)
+                    .RequiresPlayer()
+                    .WithArgs(api.ChatCommands.Parsers.OptionalWord("action"), api.ChatCommands.Parsers.OptionalInt("value"))
+                    .HandleWith(args => OnTraitCOProficiencyConfigCommand(args, CO_SLINGS_PROFICIENCY))
+                .EndSubCommand()
+                .BeginSubCommand("onehandedswords")
+                    .WithDescription("View or configure One-Handed Swords proficiency. Usage: /trait onehandedswords [base|increment|level|max] [value]")
+                    .RequiresPrivilege(Privilege.chat)
+                    .RequiresPlayer()
+                    .WithArgs(api.ChatCommands.Parsers.OptionalWord("action"), api.ChatCommands.Parsers.OptionalInt("value"))
+                    .HandleWith(args => OnTraitCOProficiencyConfigCommand(args, CO_ONE_HANDED_SWORDS_PROFICIENCY))
+                .EndSubCommand()
+                .BeginSubCommand("twohandedswords")
+                    .WithDescription("View or configure Two-Handed Swords proficiency. Usage: /trait twohandedswords [base|increment|level|max] [value]")
+                    .RequiresPrivilege(Privilege.chat)
+                    .RequiresPlayer()
+                    .WithArgs(api.ChatCommands.Parsers.OptionalWord("action"), api.ChatCommands.Parsers.OptionalInt("value"))
+                    .HandleWith(args => OnTraitCOProficiencyConfigCommand(args, CO_TWO_HANDED_SWORDS_PROFICIENCY))
+                .EndSubCommand()
+                .BeginSubCommand("cospears")
+                    .WithDescription("View or configure Spears proficiency (CO). Usage: /trait cospears [base|increment|level|max] [value]")
+                    .RequiresPrivilege(Privilege.chat)
+                    .RequiresPlayer()
+                    .WithArgs(api.ChatCommands.Parsers.OptionalWord("action"), api.ChatCommands.Parsers.OptionalInt("value"))
+                    .HandleWith(args => OnTraitCOProficiencyConfigCommand(args, CO_SPEARS_PROFICIENCY))
+                .EndSubCommand()
+                .BeginSubCommand("javelins")
+                    .WithDescription("View or configure Javelins proficiency. Usage: /trait javelins [base|increment|level|max] [value]")
+                    .RequiresPrivilege(Privilege.chat)
+                    .RequiresPlayer()
+                    .WithArgs(api.ChatCommands.Parsers.OptionalWord("action"), api.ChatCommands.Parsers.OptionalInt("value"))
+                    .HandleWith(args => OnTraitCOProficiencyConfigCommand(args, CO_JAVELINS_PROFICIENCY))
+                .EndSubCommand()
+                .BeginSubCommand("maces")
+                    .WithDescription("View or configure Maces proficiency. Usage: /trait maces [base|increment|level|max] [value]")
+                    .RequiresPrivilege(Privilege.chat)
+                    .RequiresPlayer()
+                    .WithArgs(api.ChatCommands.Parsers.OptionalWord("action"), api.ChatCommands.Parsers.OptionalInt("value"))
+                    .HandleWith(args => OnTraitCOProficiencyConfigCommand(args, CO_MACES_PROFICIENCY))
+                .EndSubCommand()
+                .BeginSubCommand("clubs")
+                    .WithDescription("View or configure Clubs proficiency. Usage: /trait clubs [base|increment|level|max] [value]")
+                    .RequiresPrivilege(Privilege.chat)
+                    .RequiresPlayer()
+                    .WithArgs(api.ChatCommands.Parsers.OptionalWord("action"), api.ChatCommands.Parsers.OptionalInt("value"))
+                    .HandleWith(args => OnTraitCOProficiencyConfigCommand(args, CO_CLUBS_PROFICIENCY))
+                .EndSubCommand()
+                .BeginSubCommand("halberds")
+                    .WithDescription("View or configure Halberds proficiency. Usage: /trait halberds [base|increment|level|max] [value]")
+                    .RequiresPrivilege(Privilege.chat)
+                    .RequiresPlayer()
+                    .WithArgs(api.ChatCommands.Parsers.OptionalWord("action"), api.ChatCommands.Parsers.OptionalInt("value"))
+                    .HandleWith(args => OnTraitCOProficiencyConfigCommand(args, CO_HALBERDS_PROFICIENCY))
+                .EndSubCommand()
+                .BeginSubCommand("coaxes")
+                    .WithDescription("View or configure Axes proficiency (CO). Usage: /trait coaxes [base|increment|level|max] [value]")
+                    .RequiresPrivilege(Privilege.chat)
+                    .RequiresPlayer()
+                    .WithArgs(api.ChatCommands.Parsers.OptionalWord("action"), api.ChatCommands.Parsers.OptionalInt("value"))
+                    .HandleWith(args => OnTraitCOProficiencyConfigCommand(args, CO_AXES_PROFICIENCY))
+                .EndSubCommand()
+                .BeginSubCommand("quarterstaff")
+                    .WithDescription("View or configure Quarterstaff proficiency. Usage: /trait quarterstaff [base|increment|level|max] [value]")
+                    .RequiresPrivilege(Privilege.chat)
+                    .RequiresPlayer()
+                    .WithArgs(api.ChatCommands.Parsers.OptionalWord("action"), api.ChatCommands.Parsers.OptionalInt("value"))
+                    .HandleWith(args => OnTraitCOProficiencyConfigCommand(args, CO_QUARTERSTAFF_PROFICIENCY))
+                .EndSubCommand()
+                .BeginSubCommand("steadyaim")
+                    .WithDescription("View or configure Steady Aim. Usage: /trait steadyaim [base|increment|level|max] [value]")
+                    .RequiresPrivilege(Privilege.chat)
+                    .RequiresPlayer()
+                    .WithArgs(api.ChatCommands.Parsers.OptionalWord("action"), api.ChatCommands.Parsers.OptionalInt("value"))
+                    .HandleWith(args => OnTraitCOProficiencyConfigCommand(args, CO_STEADY_AIM))
                 .EndSubCommand();
 
             // Hook into block breaking for mining progression
@@ -2606,7 +2746,7 @@ namespace SeraphLeveling
             }
             else
             {
-                sb.AppendLine("\nNo pickaxe progress yet. Mine stone/ore with a pickaxe to start!");
+                sb.AppendLine("\nNo pickaxe progress yet. Mine stone or ore with a pickaxe to start!");
             }
 
             if (currentCredits >= maxCredits)
@@ -3920,7 +4060,7 @@ namespace SeraphLeveling
 
             if (!percent.HasValue)
             {
-                return TextCommandResult.Success("Usage: /trait testwalkspeed <percent>\nExample: /trait testwalkspeed 99 (reduces armor penalty by 99%)\nUse 0 to clear the test modifier.");
+                return TextCommandResult.Success("Usage: /trait testwalkspeed [percent]\nExample: /trait testwalkspeed 99 (reduces armor penalty by 99%)\nUse 0 to clear the test modifier.");
             }
 
             if (percent.Value == 0)
@@ -4526,6 +4666,13 @@ namespace SeraphLeveling
                 UpdateExtraTraitStatic(player.Entity, ARMOR_TRAIT_CODE, (durabilityCredits > 0 || walkSpeedCredits > 0) && !hasVanillaSoldier);
 
                 watchedAttrs.MarkPathDirty(WATCHED_ARMOR_DURABILITY_LEVEL);
+            }
+
+            // Apply CO-specific bonuses if enabled (Big Head/Thick Skull, Leg Day)
+            if (IsCOCompatEnabled)
+            {
+                ApplyCOBigHeadThickSkull(player, durabilityCredits);
+                ApplyCOLegDay(player, durabilityCredits);
             }
         }
 
@@ -5227,9 +5374,16 @@ namespace SeraphLeveling
                 // Combat Overhaul negative traits (using CO trait naming conventions, with class fallbacks)
                 HasCOTremblingAim = traitSet.Contains("tremblingaim") || traitSet.Contains("trembling aim") || characterClass == "blackguard",
                 HasCOClumsyHands = traitSet.Contains("clumsyhands") || traitSet.Contains("clumsy hands"),
-                HasCOFearOfMelee = traitSet.Contains("fearofmelee") || traitSet.Contains("fear of melee"),
+                HasCOFearOfMelee = traitSet.Contains("fearofmelee") || traitSet.Contains("fear of melee") || traitSet.Contains("frightenedofmelee") || traitSet.Contains("frightened of melee") || characterClass == "clockmaker",
                 HasCOWeakHand = traitSet.Contains("weakhand") || traitSet.Contains("weak hand"),
-                HasCONervous = traitSet.Contains("nervous") || characterClass == "malefactor" || characterClass == "clockmaker"
+                HasCONervous = traitSet.Contains("nervous") || characterClass == "malefactor" || characterClass == "clockmaker",
+
+                // Combat Overhaul mixed/positive traits (Big Head, Thick Skull, Leg Day, Melee Expert, Self Defence)
+                HasCOBigHead = traitSet.Contains("bighead") || traitSet.Contains("big head") || characterClass == "clockmaker",
+                HasCOThickSkull = traitSet.Contains("thickskull") || traitSet.Contains("thick skull") || characterClass == "malefactor",
+                HasCOLegDay = traitSet.Contains("legday") || traitSet.Contains("leg day") || characterClass == "blackguard",
+                HasCOMeleeExpert = traitSet.Contains("meleeexpert") || traitSet.Contains("melee expert") || traitSet.Contains("expert in melee") || characterClass == "blackguard",
+                HasCOSelfDefence = traitSet.Contains("selfdefence") || traitSet.Contains("self defence") || characterClass == "tailor"
             };
 
             VanillaTraitsCache[playerUid] = cache;
@@ -6022,6 +6176,12 @@ namespace SeraphLeveling
                 watchedAttrs.MarkPathDirty(WATCHED_MELEE_LEVEL);
             }
 
+            // Apply CO melee tier bonus if CO is enabled (Frightened of Melee / Melee Expert)
+            if (IsCOCompatEnabled)
+            {
+                ApplyCOMeleeTier(player, level);
+            }
+
             return netBonusPercent;
         }
 
@@ -6275,6 +6435,12 @@ namespace SeraphLeveling
         {
             if (player?.Entity == null) return (0, 0, 0);
 
+            // When Combat Overhaul is loaded, apply tier-based bonuses instead of percentages
+            if (IsCOCompatEnabled)
+            {
+                return ApplyRangedBonusCO(player, level);
+            }
+
             // Use cached vanilla traits if available, otherwise fall back to direct check
             var cache = GetCachedTraits(player.PlayerUID);
             bool hasVanillaFocused = cache?.HasFocused ?? PlayerHasVanillaFocusedStatic(player.Entity);
@@ -6367,6 +6533,51 @@ namespace SeraphLeveling
             }
 
             return (damagePct, accuracyPct, distancePct);
+        }
+
+        /// <summary>
+        /// Apply ranged bonuses when Combat Overhaul is installed.
+        /// Uses damage tier bonuses instead of percentage damage bonuses.
+        /// CO Focused trait gives +1 ranged slashing tier (not % damage).
+        /// </summary>
+        private static (int damage, int accuracy, int distance) ApplyRangedBonusCO(IServerPlayer player, int level)
+        {
+            if (player?.Entity == null) return (0, 0, 0);
+
+            var cache = GetCachedTraits(player.PlayerUID);
+            bool hasVanillaFocused = cache?.HasFocused ?? PlayerHasVanillaFocusedStatic(player.Entity);
+
+            // In CO: Focused gives +1 ranged slashing tier (not %)
+            // Hunter has Focused (+1 tier already from CO), others can earn up to +1 tier
+            int vanillaTier = hasVanillaFocused ? 1 : 0;
+            int maxEarnableTier = 1; // Cap at 1 tier total for all classes
+
+            // 100 credits = 1 tier
+            int earnedTier = level / 100;
+            int totalTier = Math.Min(vanillaTier + earnedTier, maxEarnableTier);
+            int netEarnedTier = Math.Max(0, totalTier - vanillaTier);
+
+            // Apply tier stat (integer, stored as float for Stats.Set compatibility)
+            player.Entity.Stats.Set(CO_RANGED_TIER_SLASHING, RANGED_DAMAGE_STAT_CODE, (float)netEarnedTier, false);
+
+            // Sync for UI
+            var watchedAttrs = player.Entity.WatchedAttributes;
+            int oldLevel = watchedAttrs.GetInt(WATCHED_RANGED_LEVEL, -1);
+
+            if (oldLevel != level)
+            {
+                watchedAttrs.SetInt(WATCHED_RANGED_LEVEL, level);
+                watchedAttrs.SetInt(WATCHED_CO_RANGED_TIER_BONUS, netEarnedTier);
+                watchedAttrs.SetBool("sitHasVanillaFocused", hasVanillaFocused);
+                watchedAttrs.SetBool("sitCOEnabled", true);
+                watchedAttrs.MarkPathDirty(WATCHED_RANGED_LEVEL);
+
+                // Add our trait to extraTraits only if player doesn't already have Focused
+                UpdateExtraTraitStatic(player.Entity, RANGED_TRAIT_CODE, level > 0 && !hasVanillaFocused);
+            }
+
+            // Return tier as the "damage" value for compatibility (accuracy and distance not used in CO tier system)
+            return (netEarnedTier, 0, 0);
         }
 
         /// <summary>
@@ -7870,6 +8081,44 @@ namespace SeraphLeveling
         }
 
         /// <summary>
+        /// Get max credits for a CO proficiency for a specific player, accounting for negative traits.
+        /// Players with negative traits (Clumsy Hands, Weak Hand, Fear of Melee, Nervous) get extra
+        /// credits to compensate for their penalties before earning positive bonuses.
+        /// </summary>
+        public static int GetCOProficiencyMaxCreditsForPlayer(string playerUid, string proficiencyStat)
+        {
+            int baseMax = GetCOProficiencyMaxCredits(proficiencyStat);
+            var cache = GetCachedTraits(playerUid);
+            if (cache == null) return baseMax;
+
+            bool isRanged = IsCORangedProficiency(proficiencyStat);
+            bool isPiercing = IsCOPiercingProficiency(proficiencyStat);
+
+            // Clumsy Hands: affects ranged proficiencies (bows, crossbows, firearms, slings)
+            if (isRanged && cache.HasCOClumsyHands)
+            {
+                return baseMax + (int)(CO_CLUMSY_HANDS_PENALTY * 100); // +30
+            }
+            // Weak Hand: affects ranged proficiencies (similar to Clumsy Hands)
+            else if (isRanged && cache.HasCOWeakHand)
+            {
+                return baseMax + (int)(CO_WEAK_HAND_PENALTY * 100); // +30
+            }
+            // Fear of Melee: affects melee proficiencies (non-ranged)
+            else if (!isRanged && cache.HasCOFearOfMelee)
+            {
+                return baseMax + CO_FEAR_OF_MELEE_TIER_PENALTY * 100; // +100
+            }
+            // Nervous: affects piercing proficiencies (spears, javelins)
+            else if (isPiercing && cache.HasCONervous)
+            {
+                return baseMax + CO_NERVOUS_TIER_PENALTY * 100; // +100
+            }
+
+            return baseMax;
+        }
+
+        /// <summary>
         /// Calculate proficiency bonus from credits.
         /// Each credit = 0.01 bonus.
         /// </summary>
@@ -8025,8 +8274,8 @@ namespace SeraphLeveling
             // Get or create player CO progress data
             var playerProgress = COProgress.GetOrAdd(playerUid, _ => new COPlayerProgressData());
 
-            // Get max credits for this proficiency
-            int maxCredits = GetCOProficiencyMaxCredits(proficiencyStat);
+            // Get max credits for this proficiency (player-aware, accounts for negative traits)
+            int maxCredits = GetCOProficiencyMaxCreditsForPlayer(playerUid, proficiencyStat);
 
             // Get or create progress for this proficiency type
             var proficiencyProgress = playerProgress.GetProficiencyProgress(proficiencyStat);
@@ -8042,8 +8291,10 @@ namespace SeraphLeveling
                 return;
             }
 
-            // Get or create progress for this specific weapon
-            var weaponProgress = proficiencyProgress.GetWeaponProgress(weaponCode, COBaseDamagePerIncrement);
+            // Get or create progress for this specific weapon (using per-proficiency base)
+            int profBase = GetCOProficiencyBase(proficiencyStat);
+            int profIncrement = GetCOProficiencyIncrement(proficiencyStat);
+            var weaponProgress = proficiencyProgress.GetWeaponProgress(weaponCode, profBase);
 
             int oldCredits = proficiencyProgress.TotalCredits;
 
@@ -8056,7 +8307,7 @@ namespace SeraphLeveling
                 // Earn a credit
                 proficiencyProgress.TotalCredits++;
                 weaponProgress.DamageInIncrement -= weaponProgress.CurrentIncrementSize;
-                weaponProgress.CurrentIncrementSize += COIncrementStep;
+                weaponProgress.CurrentIncrementSize += profIncrement;
 
                 ServerApi.Logger.Debug($"[SeraphLeveling] Player {attackerPlayer.PlayerName} earned CO {proficiencyStat} credit {proficiencyProgress.TotalCredits} with {weaponCode}");
             }
@@ -8071,7 +8322,7 @@ namespace SeraphLeveling
                 // Notify player of level up
                 float bonus = CalculateCOProficiencyBonus(proficiencyProgress.TotalCredits, GetCOProficiencyMax(proficiencyStat));
                 attackerPlayer.SendMessage(GlobalConstants.GeneralChatGroup,
-                    $"Proficiency level up! Your {GetCOProficiencyDisplayName(proficiencyStat)} is now +{bonus:F2}.",
+                    $"Proficiency level up! Your {GetCOProficiencyDisplayName(proficiencyStat)} is now +{bonus * 100:F0}%.",
                     EnumChatType.Notification);
             }
 
@@ -8097,8 +8348,10 @@ namespace SeraphLeveling
             // We'll use SteadyAimCredits to track total credits earned
             // For simplicity, every ranged damage point adds to a shared progress counter
             // We'll track damage in a special "steadyaim" key in the bows proficiency
+            int steadyAimBase = GetCOProficiencyBase(CO_STEADY_AIM);
+            int steadyAimIncrement = GetCOProficiencyIncrement(CO_STEADY_AIM);
             var steadyAimProgress = playerProgress.GetProficiencyProgress(CO_STEADY_AIM);
-            var sharedProgress = steadyAimProgress.GetWeaponProgress("_ranged_combined", COBaseDamagePerIncrement);
+            var sharedProgress = steadyAimProgress.GetWeaponProgress("_ranged_combined", steadyAimBase);
 
             int oldCredits = playerProgress.SteadyAimCredits;
 
@@ -8108,7 +8361,7 @@ namespace SeraphLeveling
             {
                 playerProgress.SteadyAimCredits++;
                 sharedProgress.DamageInIncrement -= sharedProgress.CurrentIncrementSize;
-                sharedProgress.CurrentIncrementSize += COIncrementStep;
+                sharedProgress.CurrentIncrementSize += steadyAimIncrement;
 
                 ServerApi.Logger.Debug($"[SeraphLeveling] Player {player.PlayerName} earned CO Steady Aim credit {playerProgress.SteadyAimCredits}");
             }
@@ -8119,7 +8372,7 @@ namespace SeraphLeveling
 
                 float bonus = CalculateCOProficiencyBonus(playerProgress.SteadyAimCredits, COSteadyAimMax);
                 player.SendMessage(GlobalConstants.GeneralChatGroup,
-                    $"Steady Aim improved! Your aim stability is now +{bonus:F2}.",
+                    $"Steady Aim improved! Your aim stability is now +{bonus * 100:F0}%.",
                     EnumChatType.Notification);
             }
         }
@@ -8259,6 +8512,155 @@ namespace SeraphLeveling
         }
 
         /// <summary>
+        /// Apply Big Head / Thick Skull handling for Combat Overhaul.
+        /// Clockmaker has Big Head (+50% head/face damage), cancelled by armor credits.
+        /// Malefactor has Thick Skull (-50% head/face damage) from start.
+        /// Other classes can earn Thick Skull via armor credits.
+        /// </summary>
+        private static void ApplyCOBigHeadThickSkull(IServerPlayer player, int armorCredits)
+        {
+            if (!IsCOCompatEnabled) return;
+            if (player?.Entity == null) return;
+
+            var cache = GetCachedTraits(player.PlayerUID);
+            bool hasBigHead = cache?.HasCOBigHead ?? false;     // Clockmaker
+            bool hasThickSkull = cache?.HasCOThickSkull ?? false; // Malefactor
+
+            float headFactor = 0f;
+            float faceFactor = 0f;
+            float remainingPenalty = 0f;
+
+            if (hasBigHead)
+            {
+                // Big Head: +0.5 head/face damage, cancelled by 50 armor credits
+                // After cancellation, can earn Thick Skull bonus (up to -0.5)
+                remainingPenalty = Math.Max(0, CO_BIG_HEAD_PENALTY - armorCredits * 0.01f);
+
+                if (armorCredits >= 50)
+                {
+                    // Penalty cancelled, now earning bonus
+                    int bonusCredits = armorCredits - 50;
+                    float bonus = Math.Min(bonusCredits * 0.01f, CO_THICK_SKULL_BONUS);
+                    headFactor = -bonus;
+                    faceFactor = -bonus;
+                }
+                else
+                {
+                    headFactor = remainingPenalty;
+                    faceFactor = remainingPenalty;
+                }
+            }
+            else if (hasThickSkull)
+            {
+                // Malefactor already has Thick Skull (-0.5), can't earn more
+                headFactor = -CO_THICK_SKULL_BONUS;
+                faceFactor = -CO_THICK_SKULL_BONUS;
+            }
+            else
+            {
+                // Other classes: can earn Thick Skull (up to -0.5)
+                float bonus = Math.Min(armorCredits * 0.01f, CO_THICK_SKULL_BONUS);
+                headFactor = -bonus;
+                faceFactor = -bonus;
+            }
+
+            // Apply stats
+            player.Entity.Stats.Set(CO_HEAD_DAMAGE_FACTOR, CO_STAT_PREFIX + "headDamage", headFactor, false);
+            player.Entity.Stats.Set(CO_FACE_DAMAGE_FACTOR, CO_STAT_PREFIX + "faceDamage", faceFactor, false);
+
+            // Sync for UI
+            player.Entity.WatchedAttributes.SetFloat(WATCHED_CO_BIG_HEAD_REMAINING, remainingPenalty);
+            player.Entity.WatchedAttributes.MarkPathDirty(WATCHED_CO_BIG_HEAD_REMAINING);
+        }
+
+        /// <summary>
+        /// Apply Frightened of Melee / Melee Expert handling for Combat Overhaul.
+        /// Clockmaker has Frightened of Melee (-1 melee slashing tier), cancelled by melee credits.
+        /// Blackguard has Melee Expert (+1 melee slashing tier) from start.
+        /// Other classes can earn up to +1 melee slashing tier via melee credits.
+        /// </summary>
+        private static void ApplyCOMeleeTier(IServerPlayer player, int meleeCredits)
+        {
+            if (!IsCOCompatEnabled) return;
+            if (player?.Entity == null) return;
+
+            var cache = GetCachedTraits(player.PlayerUID);
+            bool hasFrightenedOfMelee = cache?.HasCOFearOfMelee ?? false; // Clockmaker
+            bool hasMeleeExpert = cache?.HasCOMeleeExpert ?? false;        // Blackguard
+
+            int netTier = 0;
+            int remainingPenalty = 0;
+
+            if (hasFrightenedOfMelee)
+            {
+                // -1 tier penalty, 100 credits to cancel
+                remainingPenalty = Math.Max(0, CO_FRIGHTENED_TIER_PENALTY - meleeCredits / 100);
+
+                if (meleeCredits >= 100)
+                {
+                    // Penalty cancelled, can earn positive tier
+                    int bonusCredits = meleeCredits - 100;
+                    int earnedTier = Math.Min(bonusCredits / 100, 1);
+                    netTier = earnedTier;
+                }
+                else
+                {
+                    netTier = -remainingPenalty;
+                }
+            }
+            else if (hasMeleeExpert)
+            {
+                // Blackguard has +1 tier from Melee Expert, can't earn more
+                netTier = CO_MELEE_EXPERT_TIER_BONUS;
+            }
+            else
+            {
+                // Other classes: can earn up to +1 tier
+                netTier = Math.Min(meleeCredits / 100, 1);
+            }
+
+            // Apply tier stat
+            player.Entity.Stats.Set(CO_MELEE_TIER_SLASHING, CO_STAT_PREFIX + "meleeTierSlashing", (float)netTier, false);
+
+            // Sync for UI
+            player.Entity.WatchedAttributes.SetInt(WATCHED_CO_FRIGHTENED_REMAINING, remainingPenalty);
+            player.Entity.WatchedAttributes.SetInt(WATCHED_CO_MELEE_TIER_BONUS, netTier);
+            player.Entity.WatchedAttributes.MarkPathDirty(WATCHED_CO_FRIGHTENED_REMAINING);
+            player.Entity.WatchedAttributes.MarkPathDirty(WATCHED_CO_MELEE_TIER_BONUS);
+        }
+
+        /// <summary>
+        /// Apply Leg Day handling for Combat Overhaul.
+        /// Blackguard has Leg Day (+100% leg/feet damage, +25% jump height).
+        /// The leg damage penalty can be reduced by armor credits (100 credits = cancel).
+        /// Jump height bonus is always applied (it's a benefit).
+        /// </summary>
+        private static void ApplyCOLegDay(IServerPlayer player, int armorCredits)
+        {
+            if (!IsCOCompatEnabled) return;
+            if (player?.Entity == null) return;
+
+            var cache = GetCachedTraits(player.PlayerUID);
+            bool hasLegDay = cache?.HasCOLegDay ?? false; // Blackguard
+
+            if (!hasLegDay) return;
+
+            // Leg Day: +1.0 leg/feet damage, +0.25 jump height
+            // Leg damage penalty reduced by armor credits (100 credits = cancel)
+            float remainingPenalty = Math.Max(0, CO_LEG_DAY_PENALTY - armorCredits * 0.01f);
+
+            // Apply stats
+            player.Entity.Stats.Set(CO_LEGS_DAMAGE_FACTOR, CO_STAT_PREFIX + "legsDamage", remainingPenalty, false);
+            player.Entity.Stats.Set(CO_FEET_DAMAGE_FACTOR, CO_STAT_PREFIX + "feetDamage", remainingPenalty, false);
+            // Jump bonus is always applied (benefit, not penalty)
+            player.Entity.Stats.Set(CO_JUMP_HEIGHT, CO_STAT_PREFIX + "jumpHeight", CO_LEG_DAY_JUMP_BONUS, false);
+
+            // Sync for UI
+            player.Entity.WatchedAttributes.SetFloat(WATCHED_CO_LEG_DAY_REMAINING, remainingPenalty);
+            player.Entity.WatchedAttributes.MarkPathDirty(WATCHED_CO_LEG_DAY_REMAINING);
+        }
+
+        /// <summary>
         /// Check if a proficiency is a piercing melee proficiency (affected by Nervous trait).
         /// </summary>
         private static bool IsCOPiercingProficiency(string proficiencyStat)
@@ -8319,7 +8721,7 @@ namespace SeraphLeveling
 
         /// <summary>
         /// Persist config to world save data.
-        /// Version 8 adds armor configuration.
+        /// Version 9 adds Combat Overhaul configuration.
         /// </summary>
         private void PersistConfig()
         {
@@ -8332,7 +8734,7 @@ namespace SeraphLeveling
                 {
                     using (var writer = new BinaryWriter(ms))
                     {
-                        writer.Write((byte)8); // Version 8: adds armor config
+                        writer.Write((byte)10); // Version 10: adds per-proficiency CO config
                         writer.Write(BaseBlocksPerIncrement);
                         writer.Write(IncrementStep);
                         writer.Write(MaxMiningSpeedPercent);
@@ -8364,12 +8766,29 @@ namespace SeraphLeveling
                         writer.Write(ArmorRepairIncrementStep);
                         writer.Write(MaxArmorDurabilityPercent);
                         writer.Write(MaxArmorWalkSpeedPercent);
+                        // Combat Overhaul global defaults
+                        writer.Write(COBaseDamagePerIncrement);
+                        writer.Write(COIncrementStep);
+                        // Per-proficiency base overrides
+                        writer.Write(COProficiencyBaseOverrides.Count);
+                        foreach (var kvp in COProficiencyBaseOverrides)
+                        {
+                            writer.Write(kvp.Key);
+                            writer.Write(kvp.Value);
+                        }
+                        // Per-proficiency increment overrides
+                        writer.Write(COProficiencyIncrementOverrides.Count);
+                        foreach (var kvp in COProficiencyIncrementOverrides)
+                        {
+                            writer.Write(kvp.Key);
+                            writer.Write(kvp.Value);
+                        }
                     }
                     data = ms.ToArray();
                 }
 
                 ServerApi.WorldManager.SaveGame.StoreData(CONFIG_SAVE_KEY, data);
-                ServerApi.Logger.Debug($"[SeraphLeveling] Config saved (Mining: Base={BaseBlocksPerIncrement}, Max={MaxMiningSpeedPercent}% | Melee: Base={BaseDamagePerIncrement}, Max={MaxMeleeDamagePercent}% | Ranged: Base={BaseRangedDamagePerIncrement}, MaxDmg={MaxRangedDamagePercent}% | Walking: Base={BaseBlocksWalkedPerIncrement}, Max={MaxWalkingSpeedPercent}% | Hunger: Base={BaseSecondsPerIncrement}, Max={MaxHungerReductionPercent}% | Armor: MaxDur={MaxArmorDurabilityPercent}%, MaxWalk={MaxArmorWalkSpeedPercent}%)");
+                ServerApi.Logger.Debug($"[SeraphLeveling] Config saved (Mining: Base={BaseBlocksPerIncrement}, Max={MaxMiningSpeedPercent}% | Melee: Base={BaseDamagePerIncrement}, Max={MaxMeleeDamagePercent}% | CO: {COProficiencyBaseOverrides.Count} base overrides, {COProficiencyIncrementOverrides.Count} increment overrides)");
             }
             catch (Exception ex)
             {
@@ -8379,7 +8798,7 @@ namespace SeraphLeveling
 
         /// <summary>
         /// Load config from world save data.
-        /// Supports versions 1-7 for backwards compatibility.
+        /// Supports versions 1-10 for backwards compatibility.
         /// </summary>
         private void LoadConfig()
         {
@@ -8514,7 +8933,7 @@ namespace SeraphLeveling
                         }
                         else if (version == 8)
                         {
-                            // Current format with armor config
+                            // Version 8: has armor config but not CO config
                             BaseBlocksPerIncrement = reader.ReadInt32();
                             IncrementStep = reader.ReadInt32();
                             MaxMiningSpeedPercent = reader.ReadInt32();
@@ -8541,6 +8960,96 @@ namespace SeraphLeveling
                             ArmorRepairIncrementStep = reader.ReadInt32();
                             MaxArmorDurabilityPercent = reader.ReadInt32();
                             MaxArmorWalkSpeedPercent = reader.ReadInt32();
+                            // CO config uses defaults
+
+                            // Mark for re-save in new format
+                            pendingConfigSave = true;
+                        }
+                        else if (version == 9)
+                        {
+                            // Version 9: has global CO config but no per-proficiency overrides
+                            BaseBlocksPerIncrement = reader.ReadInt32();
+                            IncrementStep = reader.ReadInt32();
+                            MaxMiningSpeedPercent = reader.ReadInt32();
+                            OreMultiplier = reader.ReadInt32();
+                            BaseDamagePerIncrement = reader.ReadInt32();
+                            MeleeIncrementStep = reader.ReadInt32();
+                            MaxMeleeDamagePercent = reader.ReadInt32();
+                            BaseRangedDamagePerIncrement = reader.ReadInt32();
+                            RangedIncrementStep = reader.ReadInt32();
+                            MaxRangedDamagePercent = reader.ReadInt32();
+                            MaxRangedAccuracyPercent = reader.ReadInt32();
+                            MaxRangedDistancePercent = reader.ReadInt32();
+                            BaseBlocksWalkedPerIncrement = reader.ReadInt32();
+                            WalkingIncrementStep = reader.ReadInt32();
+                            MaxWalkingSpeedPercent = reader.ReadInt32();
+                            BaseSecondsPerIncrement = reader.ReadInt32();
+                            HungerIncrementStep = reader.ReadInt32();
+                            MaxHungerReductionPercent = reader.ReadInt32();
+                            BaseSecondsInArmorPerIncrement = reader.ReadInt32();
+                            ArmorTimeIncrementStep = reader.ReadInt32();
+                            BaseDamageBlockedPerIncrement = reader.ReadInt32();
+                            ArmorDamageIncrementStep = reader.ReadInt32();
+                            BaseRepairsPerIncrement = reader.ReadInt32();
+                            ArmorRepairIncrementStep = reader.ReadInt32();
+                            MaxArmorDurabilityPercent = reader.ReadInt32();
+                            MaxArmorWalkSpeedPercent = reader.ReadInt32();
+                            COBaseDamagePerIncrement = reader.ReadInt32();
+                            COIncrementStep = reader.ReadInt32();
+                            // Per-proficiency overrides use defaults (empty)
+
+                            // Mark for re-save in new format
+                            pendingConfigSave = true;
+                        }
+                        else if (version == 10)
+                        {
+                            // Current format with per-proficiency CO config
+                            BaseBlocksPerIncrement = reader.ReadInt32();
+                            IncrementStep = reader.ReadInt32();
+                            MaxMiningSpeedPercent = reader.ReadInt32();
+                            OreMultiplier = reader.ReadInt32();
+                            BaseDamagePerIncrement = reader.ReadInt32();
+                            MeleeIncrementStep = reader.ReadInt32();
+                            MaxMeleeDamagePercent = reader.ReadInt32();
+                            BaseRangedDamagePerIncrement = reader.ReadInt32();
+                            RangedIncrementStep = reader.ReadInt32();
+                            MaxRangedDamagePercent = reader.ReadInt32();
+                            MaxRangedAccuracyPercent = reader.ReadInt32();
+                            MaxRangedDistancePercent = reader.ReadInt32();
+                            BaseBlocksWalkedPerIncrement = reader.ReadInt32();
+                            WalkingIncrementStep = reader.ReadInt32();
+                            MaxWalkingSpeedPercent = reader.ReadInt32();
+                            BaseSecondsPerIncrement = reader.ReadInt32();
+                            HungerIncrementStep = reader.ReadInt32();
+                            MaxHungerReductionPercent = reader.ReadInt32();
+                            BaseSecondsInArmorPerIncrement = reader.ReadInt32();
+                            ArmorTimeIncrementStep = reader.ReadInt32();
+                            BaseDamageBlockedPerIncrement = reader.ReadInt32();
+                            ArmorDamageIncrementStep = reader.ReadInt32();
+                            BaseRepairsPerIncrement = reader.ReadInt32();
+                            ArmorRepairIncrementStep = reader.ReadInt32();
+                            MaxArmorDurabilityPercent = reader.ReadInt32();
+                            MaxArmorWalkSpeedPercent = reader.ReadInt32();
+                            COBaseDamagePerIncrement = reader.ReadInt32();
+                            COIncrementStep = reader.ReadInt32();
+                            // Per-proficiency base overrides
+                            int baseCount = reader.ReadInt32();
+                            COProficiencyBaseOverrides.Clear();
+                            for (int i = 0; i < baseCount; i++)
+                            {
+                                string key = reader.ReadString();
+                                int val = reader.ReadInt32();
+                                COProficiencyBaseOverrides[key] = val;
+                            }
+                            // Per-proficiency increment overrides
+                            int incCount = reader.ReadInt32();
+                            COProficiencyIncrementOverrides.Clear();
+                            for (int i = 0; i < incCount; i++)
+                            {
+                                string key = reader.ReadString();
+                                int val = reader.ReadInt32();
+                                COProficiencyIncrementOverrides[key] = val;
+                            }
                         }
                     }
                 }
@@ -9539,7 +10048,7 @@ namespace SeraphLeveling
 
             var sb = new StringBuilder();
             sb.AppendLine($"Mender progression: Level {progress.TotalCredits} / {MaxMenderPercent}");
-            sb.AppendLine($"Current bonus: +{bonusPercent}% armor/clothing durability");
+            sb.AppendLine($"Current bonus: +{bonusPercent}% armor and clothing durability");
             if (hasVanillaMender)
             {
                 sb.AppendLine($"Combined with Mender trait: +{VANILLA_MENDER_ARMOR_DURABILITY_BONUS + bonusPercent}% total");
@@ -10651,18 +11160,11 @@ namespace SeraphLeveling
                 return false;
             }
 
-            // Forageable ground plants (NOT berry bushes - those are replantable)
-            // Note: Tallgrass, flowers, mushrooms are one-time finds in the wild
-            if (blockCode.Contains("tallgrass")) return true;
-            if (blockCode.Contains("flower-")) return true;
+            // Mushrooms count as wild forage
             if (blockCode.Contains("mushroom-")) return true;
-            if (blockCode.Contains("cattail")) return true;
-            if (blockCode.Contains("fern")) return true;
-            if (blockCode.Contains("reeds")) return true;
-            if (blockCode.Contains("waterlily")) return true;
-            if (blockCode.Contains("seaweed")) return true;
 
             // NOT included:
+            // - tallgrass, flowers, ferns, cattails, reeds, waterlily, seaweed (too common/farmable)
             // - berry- (berry bushes can be replanted)
             // - wildvine (can be replanted/grown)
 
@@ -11708,29 +12210,29 @@ namespace SeraphLeveling
             {
                 steadyAimNetBonus = CalculateCOProficiencyBonus(playerProgress.SteadyAimCredits, COSteadyAimMax);
             }
-            sb.AppendLine($"Steady Aim: {playerProgress.SteadyAimCredits}/{steadyAimMaxCredits} credits (net +{steadyAimNetBonus:F2})");
+            sb.AppendLine($"Steady Aim: {playerProgress.SteadyAimCredits}/{steadyAimMaxCredits} credits (net +{steadyAimNetBonus * 100:F0}%)");
 
             // Show each proficiency
             sb.AppendLine("\n--- Ranged Proficiencies ---");
-            ShowCOProficiencyStats(sb, playerProgress, CO_BOWS_PROFICIENCY, "Bows");
-            ShowCOProficiencyStats(sb, playerProgress, CO_CROSSBOWS_PROFICIENCY, "Crossbows");
-            ShowCOProficiencyStats(sb, playerProgress, CO_FIREARMS_PROFICIENCY, "Firearms");
-            ShowCOProficiencyStats(sb, playerProgress, CO_SLINGS_PROFICIENCY, "Slings");
+            ShowCOProficiencyStats(sb, playerProgress, playerUid, CO_BOWS_PROFICIENCY, "Bows");
+            ShowCOProficiencyStats(sb, playerProgress, playerUid, CO_CROSSBOWS_PROFICIENCY, "Crossbows");
+            ShowCOProficiencyStats(sb, playerProgress, playerUid, CO_FIREARMS_PROFICIENCY, "Firearms");
+            ShowCOProficiencyStats(sb, playerProgress, playerUid, CO_SLINGS_PROFICIENCY, "Slings");
 
             sb.AppendLine("\n--- One-Handed Melee ---");
-            ShowCOProficiencyStats(sb, playerProgress, CO_ONE_HANDED_SWORDS_PROFICIENCY, "One-Handed Swords");
-            ShowCOProficiencyStats(sb, playerProgress, CO_MACES_PROFICIENCY, "Maces");
-            ShowCOProficiencyStats(sb, playerProgress, CO_CLUBS_PROFICIENCY, "Clubs");
-            ShowCOProficiencyStats(sb, playerProgress, CO_AXES_PROFICIENCY, "Axes");
+            ShowCOProficiencyStats(sb, playerProgress, playerUid, CO_ONE_HANDED_SWORDS_PROFICIENCY, "One-Handed Swords");
+            ShowCOProficiencyStats(sb, playerProgress, playerUid, CO_MACES_PROFICIENCY, "Maces");
+            ShowCOProficiencyStats(sb, playerProgress, playerUid, CO_CLUBS_PROFICIENCY, "Clubs");
+            ShowCOProficiencyStats(sb, playerProgress, playerUid, CO_AXES_PROFICIENCY, "Axes");
 
             sb.AppendLine("\n--- Two-Handed Melee ---");
-            ShowCOProficiencyStats(sb, playerProgress, CO_TWO_HANDED_SWORDS_PROFICIENCY, "Two-Handed Swords");
-            ShowCOProficiencyStats(sb, playerProgress, CO_HALBERDS_PROFICIENCY, "Halberds");
-            ShowCOProficiencyStats(sb, playerProgress, CO_QUARTERSTAFF_PROFICIENCY, "Quarterstaff");
+            ShowCOProficiencyStats(sb, playerProgress, playerUid, CO_TWO_HANDED_SWORDS_PROFICIENCY, "Two-Handed Swords");
+            ShowCOProficiencyStats(sb, playerProgress, playerUid, CO_HALBERDS_PROFICIENCY, "Halberds");
+            ShowCOProficiencyStats(sb, playerProgress, playerUid, CO_QUARTERSTAFF_PROFICIENCY, "Quarterstaff");
 
             sb.AppendLine("\n--- Polearms ---");
-            ShowCOProficiencyStats(sb, playerProgress, CO_SPEARS_PROFICIENCY, "Spears");
-            ShowCOProficiencyStats(sb, playerProgress, CO_JAVELINS_PROFICIENCY, "Javelins");
+            ShowCOProficiencyStats(sb, playerProgress, playerUid, CO_SPEARS_PROFICIENCY, "Spears");
+            ShowCOProficiencyStats(sb, playerProgress, playerUid, CO_JAVELINS_PROFICIENCY, "Javelins");
 
             return TextCommandResult.Success(sb.ToString());
         }
@@ -11738,13 +12240,13 @@ namespace SeraphLeveling
         /// <summary>
         /// Helper to show CO proficiency stats in the command output.
         /// </summary>
-        private static void ShowCOProficiencyStats(StringBuilder sb, COPlayerProgressData playerProgress, string proficiencyStat, string displayName)
+        private static void ShowCOProficiencyStats(StringBuilder sb, COPlayerProgressData playerProgress, string playerUid, string proficiencyStat, string displayName)
         {
             if (playerProgress.Proficiencies.TryGetValue(proficiencyStat, out var prof))
             {
                 float bonus = CalculateCOProficiencyBonus(prof.TotalCredits, GetCOProficiencyMax(proficiencyStat));
-                int maxCredits = GetCOProficiencyMaxCredits(proficiencyStat);
-                sb.AppendLine($"  {displayName}: {prof.TotalCredits}/{maxCredits} credits (+{bonus:F2})");
+                int maxCredits = GetCOProficiencyMaxCreditsForPlayer(playerUid, proficiencyStat);
+                sb.AppendLine($"  {displayName}: {prof.TotalCredits}/{maxCredits} credits (+{bonus * 100:F0}%)");
 
                 // Show per-weapon progress if any
                 if (prof.WeaponProgress.Count > 0)
@@ -11808,10 +12310,10 @@ namespace SeraphLeveling
 
             string playerUid = player.PlayerUID;
 
-            // Get max credits for this proficiency (player-aware for Steady Aim)
+            // Get max credits for this proficiency (player-aware, accounts for negative traits)
             int maxCredits = proficiencyStat == CO_STEADY_AIM
                 ? GetCOSteadyAimMaxCreditsForPlayer(playerUid)
-                : GetCOProficiencyMaxCredits(proficiencyStat);
+                : GetCOProficiencyMaxCreditsForPlayer(playerUid, proficiencyStat);
             if (credits < 0 || credits > maxCredits)
             {
                 return TextCommandResult.Error($"Credits must be between 0 and {maxCredits} for {GetCOProficiencyDisplayName(proficiencyStat)}.");
@@ -11835,7 +12337,7 @@ namespace SeraphLeveling
             pendingCOProgressSave = true;
 
             float bonus = CalculateCOProficiencyBonus(credits, GetCOProficiencyMax(proficiencyStat));
-            return TextCommandResult.Success($"Set {GetCOProficiencyDisplayName(proficiencyStat)} to {credits} credits (+{bonus:F2}).");
+            return TextCommandResult.Success($"Set {GetCOProficiencyDisplayName(proficiencyStat)} to {credits} credits (+{bonus * 100:F0}%).");
         }
 
         /// <summary>
@@ -11931,7 +12433,7 @@ namespace SeraphLeveling
                 ApplyCOProficiencyBonusWithCancellation(player, proficiencyStat, maxCredits);
 
                 float bonus = CalculateCOProficiencyBonus(maxCredits, GetCOProficiencyMax(proficiencyStat));
-                sb.AppendLine($"  {GetCOProficiencyDisplayName(proficiencyStat)}: {maxCredits} credits (+{bonus:F2})");
+                sb.AppendLine($"  {GetCOProficiencyDisplayName(proficiencyStat)}: {maxCredits} credits (+{bonus * 100:F0}%)");
             }
 
             // Set Steady Aim to max (accounting for Trembling Aim)
@@ -11949,12 +12451,240 @@ namespace SeraphLeveling
             {
                 steadyAimBonus = CalculateCOProficiencyBonus(steadyAimMax, COSteadyAimMax);
             }
-            sb.AppendLine($"  Steady Aim: {steadyAimMax} credits (net +{steadyAimBonus:F2})");
+            sb.AppendLine($"  Steady Aim: {steadyAimMax} credits (net +{steadyAimBonus * 100:F0}%)");
 
             pendingCOProgressSave = true;
 
             sb.AppendLine("\nAll CO proficiencies set to max!");
             return TextCommandResult.Success(sb.ToString());
+        }
+
+        /// <summary>
+        /// Unified handler for per-proficiency CO commands.
+        /// Handles viewing stats and configuring base/increment/level/max.
+        /// Usage: /trait [proficiency] [action] [value]
+        /// Actions: base, increment, level, max (admin only for setting values)
+        /// </summary>
+        private TextCommandResult OnTraitCOProficiencyConfigCommand(TextCommandCallingArgs args, string proficiencyStat)
+        {
+            IServerPlayer player = args.Caller.Player as IServerPlayer;
+            if (player?.Entity == null) return TextCommandResult.Error("Player not found.");
+
+            if (!IsCombatOverhaulLoaded)
+            {
+                return TextCommandResult.Error("Combat Overhaul mod is not installed.");
+            }
+
+            string action = args[0] as string;
+            int? value = args[1] as int?;
+
+            string displayName = GetCOProficiencyDisplayName(proficiencyStat);
+            string playerUid = player.PlayerUID;
+            var playerProgress = COProgress.GetOrAdd(playerUid, _ => new COPlayerProgressData());
+
+            // No action = view stats
+            if (string.IsNullOrEmpty(action))
+            {
+                return ShowCOProficiencyStatsForPlayer(player, playerProgress, proficiencyStat, displayName);
+            }
+
+            // Check admin privilege for configuration actions
+            bool isAdmin = player.HasPrivilege(Privilege.controlserver);
+            action = action.ToLowerInvariant();
+
+            switch (action)
+            {
+                case "base":
+                    if (!value.HasValue)
+                    {
+                        int currentBase = GetCOProficiencyBase(proficiencyStat);
+                        int currentIncrement = GetCOProficiencyIncrement(proficiencyStat);
+                        return TextCommandResult.Success($"{displayName} base damage per increment: {currentBase}\nIncrement step: +{currentIncrement} per credit");
+                    }
+                    if (!isAdmin) return TextCommandResult.Error("Setting base requires admin privileges.");
+                    if (value.Value < 1) return TextCommandResult.Error("Base damage must be at least 1.");
+                    SetCOProficiencyBase(proficiencyStat, value.Value);
+                    pendingConfigSave = true;
+                    return TextCommandResult.Success($"{displayName} base damage per increment set to {value.Value}.");
+
+                case "increment":
+                    if (!value.HasValue)
+                    {
+                        int currentBase = GetCOProficiencyBase(proficiencyStat);
+                        int currentIncrement = GetCOProficiencyIncrement(proficiencyStat);
+                        return TextCommandResult.Success($"{displayName} increment step: +{currentIncrement} per credit\nBase damage: {currentBase}");
+                    }
+                    if (!isAdmin) return TextCommandResult.Error("Setting increment requires admin privileges.");
+                    if (value.Value < 0) return TextCommandResult.Error("Increment step cannot be negative.");
+                    SetCOProficiencyIncrement(proficiencyStat, value.Value);
+                    pendingConfigSave = true;
+                    return TextCommandResult.Success($"{displayName} increment step set to +{value.Value} per credit.");
+
+                case "level":
+                    if (!value.HasValue)
+                    {
+                        int credits = proficiencyStat == CO_STEADY_AIM
+                            ? playerProgress.SteadyAimCredits
+                            : playerProgress.GetProficiencyProgress(proficiencyStat).TotalCredits;
+                        return TextCommandResult.Success($"{displayName} current level: {credits} credits");
+                    }
+                    if (!isAdmin) return TextCommandResult.Error("Setting level requires admin privileges.");
+                    if (value.Value < 0) return TextCommandResult.Error("Level cannot be negative.");
+
+                    if (proficiencyStat == CO_STEADY_AIM)
+                    {
+                        playerProgress.SteadyAimCredits = value.Value;
+                        ApplyCOSteadyAimBonus(player, value.Value);
+                    }
+                    else
+                    {
+                        var profProgress = playerProgress.GetProficiencyProgress(proficiencyStat);
+                        profProgress.TotalCredits = value.Value;
+                        profProgress.WeaponProgress.Clear();
+                        ApplyCOProficiencyBonusWithCancellation(player, proficiencyStat, value.Value);
+                    }
+                    pendingCOProgressSave = true;
+                    return TextCommandResult.Success($"{displayName} set to {value.Value} credits.");
+
+                case "max":
+                    if (!value.HasValue)
+                    {
+                        float currentMax = GetCOProficiencyMax(proficiencyStat);
+                        return TextCommandResult.Success($"{displayName} max bonus: +{currentMax * 100:F0}%");
+                    }
+                    if (!isAdmin) return TextCommandResult.Error("Setting max requires admin privileges.");
+                    // Max is stored as float (0.5 = +0.5 bonus), but user enters as percentage points (50 = +0.5)
+                    float newMax = value.Value / 100f;
+                    if (newMax < 0) return TextCommandResult.Error("Max bonus cannot be negative.");
+                    SetCOProficiencyMax(proficiencyStat, newMax);
+                    pendingConfigSave = true;
+                    return TextCommandResult.Success($"{displayName} max bonus set to +{newMax * 100:F0}% ({value.Value} credits).");
+
+                default:
+                    return TextCommandResult.Error($"Unknown action '{action}'. Valid actions: base, increment, level, max");
+            }
+        }
+
+        /// <summary>
+        /// Show detailed stats for a specific CO proficiency.
+        /// </summary>
+        private TextCommandResult ShowCOProficiencyStatsForPlayer(IServerPlayer player, COPlayerProgressData playerProgress, string proficiencyStat, string displayName)
+        {
+            var sb = new StringBuilder();
+            sb.AppendLine($"=== {displayName} ===");
+
+            int credits;
+            float maxBonus = GetCOProficiencyMax(proficiencyStat);
+            int maxCredits = (int)(maxBonus * 100);
+
+            if (proficiencyStat == CO_STEADY_AIM)
+            {
+                credits = playerProgress.SteadyAimCredits;
+                var steadyAimProgress = playerProgress.GetProficiencyProgress(CO_STEADY_AIM);
+
+                sb.AppendLine($"Credits: {credits} / {maxCredits}");
+                sb.AppendLine($"Bonus: +{CalculateCOProficiencyBonus(credits, maxBonus) * 100:F0}%");
+                sb.AppendLine($"Base damage: {GetCOProficiencyBase(proficiencyStat)}");
+                sb.AppendLine($"Increment step: +{GetCOProficiencyIncrement(proficiencyStat)} per credit");
+
+                if (steadyAimProgress.WeaponProgress.Count > 0)
+                {
+                    sb.AppendLine("\nWeapon progress:");
+                    foreach (var kvp in steadyAimProgress.WeaponProgress.OrderBy(p => p.Value.CurrentIncrementSize))
+                    {
+                        string weaponName = kvp.Key;
+                        if (weaponName.Contains(":"))
+                            weaponName = weaponName.Substring(weaponName.IndexOf(':') + 1);
+                        sb.AppendLine($"  {weaponName}: {kvp.Value.DamageInIncrement:F0}/{kvp.Value.CurrentIncrementSize} damage");
+                    }
+                }
+            }
+            else
+            {
+                var profProgress = playerProgress.GetProficiencyProgress(proficiencyStat);
+                credits = profProgress.TotalCredits;
+
+                sb.AppendLine($"Credits: {credits} / {maxCredits}");
+                sb.AppendLine($"Bonus: +{CalculateCOProficiencyBonus(credits, maxBonus) * 100:F0}%");
+                sb.AppendLine($"Base damage: {GetCOProficiencyBase(proficiencyStat)}");
+                sb.AppendLine($"Increment step: +{GetCOProficiencyIncrement(proficiencyStat)} per credit");
+
+                if (profProgress.WeaponProgress.Count > 0)
+                {
+                    sb.AppendLine("\nWeapon progress:");
+                    foreach (var kvp in profProgress.WeaponProgress.OrderBy(p => p.Value.CurrentIncrementSize))
+                    {
+                        string weaponName = kvp.Key;
+                        if (weaponName.Contains(":"))
+                            weaponName = weaponName.Substring(weaponName.IndexOf(':') + 1);
+                        sb.AppendLine($"  {weaponName}: {kvp.Value.DamageInIncrement:F0}/{kvp.Value.CurrentIncrementSize} damage");
+                    }
+                }
+            }
+
+            return TextCommandResult.Success(sb.ToString().TrimEnd());
+        }
+
+        /// <summary>
+        /// Get the base damage per increment for a specific CO proficiency.
+        /// Returns per-proficiency value if set, otherwise falls back to global default.
+        /// </summary>
+        private static int GetCOProficiencyBase(string proficiencyStat)
+        {
+            if (COProficiencyBaseOverrides.TryGetValue(proficiencyStat, out int value))
+                return value;
+            return COBaseDamagePerIncrement;
+        }
+
+        /// <summary>
+        /// Set the base damage per increment for a specific CO proficiency.
+        /// </summary>
+        private static void SetCOProficiencyBase(string proficiencyStat, int value)
+        {
+            COProficiencyBaseOverrides[proficiencyStat] = value;
+        }
+
+        /// <summary>
+        /// Get the increment step for a specific CO proficiency.
+        /// Returns per-proficiency value if set, otherwise falls back to global default.
+        /// </summary>
+        private static int GetCOProficiencyIncrement(string proficiencyStat)
+        {
+            if (COProficiencyIncrementOverrides.TryGetValue(proficiencyStat, out int value))
+                return value;
+            return COIncrementStep;
+        }
+
+        /// <summary>
+        /// Set the increment step for a specific CO proficiency.
+        /// </summary>
+        private static void SetCOProficiencyIncrement(string proficiencyStat, int value)
+        {
+            COProficiencyIncrementOverrides[proficiencyStat] = value;
+        }
+
+        /// <summary>
+        /// Set the max bonus for a specific CO proficiency.
+        /// </summary>
+        private static void SetCOProficiencyMax(string proficiencyStat, float value)
+        {
+            switch (proficiencyStat)
+            {
+                case CO_BOWS_PROFICIENCY: COBowsProficiencyMax = value; break;
+                case CO_CROSSBOWS_PROFICIENCY: COCrossbowsProficiencyMax = value; break;
+                case CO_FIREARMS_PROFICIENCY: COFirearmsProficiencyMax = value; break;
+                case CO_SLINGS_PROFICIENCY: COSlingsProficiencyMax = value; break;
+                case CO_ONE_HANDED_SWORDS_PROFICIENCY: COOneHandedSwordsProficiencyMax = value; break;
+                case CO_TWO_HANDED_SWORDS_PROFICIENCY: COTwoHandedSwordsProficiencyMax = value; break;
+                case CO_SPEARS_PROFICIENCY: COSpearsProficiencyMax = value; break;
+                case CO_JAVELINS_PROFICIENCY: COJavelinsProficiencyMax = value; break;
+                case CO_MACES_PROFICIENCY: COMacesProficiencyMax = value; break;
+                case CO_CLUBS_PROFICIENCY: COClubsProficiencyMax = value; break;
+                case CO_HALBERDS_PROFICIENCY: COHalberdsProficiencyMax = value; break;
+                case CO_AXES_PROFICIENCY: COAxesProficiencyMax = value; break;
+                case CO_QUARTERSTAFF_PROFICIENCY: COQuarterstaffProficiencyMax = value; break;
+                case CO_STEADY_AIM: COSteadyAimMax = value; break;
+            }
         }
 
         // =========================================================================
@@ -14832,7 +15562,7 @@ namespace SeraphLeveling
                 {
                     float bonus = credits * 0.01f;
                     if (bonus > maxBonus) bonus = maxBonus;
-                    string coTrait = $"<font color=\"#84ff84\">• {displayName} </font> <font opacity=\"0.6\">(+{bonus:F2})</font>";
+                    string coTrait = $"<font color=\"#84ff84\">• {displayName} </font> <font opacity=\"0.6\">(+{bonus * 100:F0}% attack speed)</font>";
 
                     // Re-check hasNoTraits
                     hasNoTraits = string.IsNullOrEmpty(__result) ||
@@ -14874,7 +15604,7 @@ namespace SeraphLeveling
             // Show Steady Aim positive trait only if there's a net bonus
             if (steadyAimNetBonus > 0)
             {
-                string steadyAimTrait = $"<font color=\"#84ff84\">• Steady Aim </font> <font opacity=\"0.6\">(+{steadyAimNetBonus:F2})</font>";
+                string steadyAimTrait = $"<font color=\"#84ff84\">• Steady Aim </font> <font opacity=\"0.6\">(+{steadyAimNetBonus * 100:F0}% aim stability)</font>";
 
                 hasNoTraits = string.IsNullOrEmpty(__result) ||
                               __result.Trim() == noTraitsMsg.Trim() ||
@@ -14901,21 +15631,21 @@ namespace SeraphLeveling
             // Show Trembling Aim negative trait only if there's remaining penalty
             if (tremblingAimRemaining > 0)
             {
-                string tremblingTrait = $"<font color=\"#ff8484\">• Trembling Aim </font> <font opacity=\"0.6\">(-{tremblingAimRemaining:F2} steady aim)</font>";
+                string tremblingTrait = $"<font color=\"#ff8484\">• Trembling Aim </font> <font opacity=\"0.6\">(-{tremblingAimRemaining * 100:F0}% steady aim)</font>";
                 __result = __result + "\n" + tremblingTrait;
             }
 
             // Show Clumsy Hands negative trait only if there's remaining penalty
             if (clumsyHandsRemaining > 0)
             {
-                string clumsyTrait = $"<font color=\"#ff8484\">• Clumsy Hands </font> <font opacity=\"0.6\">(-{clumsyHandsRemaining:F2} ranged proficiency)</font>";
+                string clumsyTrait = $"<font color=\"#ff8484\">• Clumsy Hands </font> <font opacity=\"0.6\">(-{clumsyHandsRemaining * 100:F0}% ranged proficiency)</font>";
                 __result = __result + "\n" + clumsyTrait;
             }
 
             // Show Weak Hand negative trait only if there's remaining penalty
             if (weakHandRemaining > 0)
             {
-                string weakHandTrait = $"<font color=\"#ff8484\">• Weak Hand </font> <font opacity=\"0.6\">(-{weakHandRemaining:F2} ranged proficiency)</font>";
+                string weakHandTrait = $"<font color=\"#ff8484\">• Weak Hand </font> <font opacity=\"0.6\">(-{weakHandRemaining * 100:F0}% ranged proficiency)</font>";
                 __result = __result + "\n" + weakHandTrait;
             }
 
@@ -14997,6 +15727,41 @@ namespace SeraphLeveling
                 {
                     // Only filter if it's NOT our display (our display has "piercing tier" in it)
                     if (!lowerLine.Contains("piercing tier"))
+                    {
+                        isCONativeTrait = true;
+                    }
+                }
+
+                // Filter out CO's native positive proficiency trait displays
+                // CO displays proficiencies like "Halberds Proficiency (+30% attack speed)"
+                // We replace these with our own dynamic version that shows current progress
+                // Only filter if this is NOT our display (our display has green font markup #84ff84)
+                if (!lowerLine.Contains("#84ff84"))
+                {
+                    // Check for proficiency names in the line with a percentage bonus
+                    string[] proficiencyNames = new[] {
+                        "bows proficiency", "crossbows proficiency", "firearms proficiency", "slings proficiency",
+                        "one-handed swords", "two-handed swords", "spears proficiency", "javelins proficiency",
+                        "maces proficiency", "clubs proficiency", "halberds proficiency", "axes proficiency",
+                        "quarterstaff proficiency"
+                    };
+
+                    foreach (var profName in proficiencyNames)
+                    {
+                        // Filter if line has proficiency name AND a percentage (CO's format)
+                        // Match patterns like "(+30%", "(+30% attack speed)", etc.
+                        if (lowerLine.Contains(profName) && (lowerLine.Contains("attack speed") ||
+                            System.Text.RegularExpressions.Regex.IsMatch(lowerLine, @"\(\+\d+%")))
+                        {
+                            isCONativeTrait = true;
+                            break;
+                        }
+                    }
+
+                    // Steady Aim is separate - filter if it has a percentage but not our markup
+                    // CO might display "Steady Aim (+50% reduced aim drift)" or similar
+                    if (lowerLine.Contains("steady aim") &&
+                        System.Text.RegularExpressions.Regex.IsMatch(lowerLine, @"\(\+\d+%"))
                     {
                         isCONativeTrait = true;
                     }
@@ -15549,13 +16314,13 @@ namespace SeraphLeveling
                 sb.AppendLine("Available test categories:");
                 sb.AppendLine("  mining      - Mining calculation tests");
                 sb.AppendLine("  melee       - Melee damage calculation tests");
-                sb.AppendLine("  ranged      - Ranged damage/accuracy/distance tests");
+                sb.AppendLine("  ranged      - Ranged damage, accuracy, and distance tests");
                 sb.AppendLine("  walking     - Walking speed calculation tests");
                 sb.AppendLine("  hunger      - Hunger rate calculation tests");
-                sb.AppendLine("  armor       - Armor durability/walk speed tests");
+                sb.AppendLine("  armor       - Armor durability and walk speed tests");
                 sb.AppendLine("  negative    - Negative trait cancellation tests");
-                sb.AppendLine("  detection   - Block/weapon/armor detection tests");
-                sb.AppendLine("  persistence - Data save/load consistency tests");
+                sb.AppendLine("  detection   - Block, weapon, and armor detection tests");
+                sb.AppendLine("  persistence - Data save and load consistency tests");
                 sb.AppendLine("  all         - Run all tests");
                 return sb.ToString();
             }

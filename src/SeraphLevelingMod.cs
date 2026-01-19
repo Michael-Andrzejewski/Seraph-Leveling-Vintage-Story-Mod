@@ -9910,11 +9910,19 @@ namespace SeraphLeveling
 
         /// <summary>
         /// Apply Bowyer trait (unlocks crude bow/arrows crafting).
+        /// Also adds "bowyer" to extraTraits to unlock crude bow/arrows recipes.
         /// </summary>
         private static void ApplyBowyerBonusStatic(IServerPlayer player, bool unlocked)
         {
             player.Entity.WatchedAttributes.SetBool(WATCHED_BOWYER_UNLOCKED, unlocked);
+
+            // Update extraTraits to show Bowyer trait if unlocked (for UI display)
             UpdateExtraTraitStatic(player.Entity, BOWYER_TRAIT_CODE, unlocked);
+
+            // IMPORTANT: Add "bowyer" to extraTraits to unlock crude bow/arrows recipes
+            // The game's recipe system checks extraTraits for dynamically granted traits
+            // that unlock recipes via requiresTrait (e.g., crude bow/arrows require "bowyer")
+            UpdateExtraTraitStatic(player.Entity, "bowyer", unlocked);
         }
 
         /// <summary>
@@ -9949,11 +9957,19 @@ namespace SeraphLeveling
 
         /// <summary>
         /// Apply Improviser trait (unlocks sling crafting).
+        /// Also adds "improviser" to extraTraits to unlock sling recipes.
         /// </summary>
         private static void ApplyImproviserBonusStatic(IServerPlayer player, bool unlocked)
         {
             player.Entity.WatchedAttributes.SetBool(WATCHED_IMPROVISER_UNLOCKED, unlocked);
+
+            // Update extraTraits to show Improviser trait if unlocked (for UI display)
             UpdateExtraTraitStatic(player.Entity, IMPROVISER_TRAIT_CODE, unlocked);
+
+            // IMPORTANT: Add "improviser" to extraTraits to unlock sling recipes
+            // The game's recipe system checks extraTraits for dynamically granted traits
+            // that unlock recipes via requiresTrait (e.g., sling requires "improviser")
+            UpdateExtraTraitStatic(player.Entity, "improviser", unlocked);
         }
 
         /// <summary>

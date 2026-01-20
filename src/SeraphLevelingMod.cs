@@ -156,6 +156,17 @@ namespace SeraphLeveling
         /// Max Steady Aim bonus (earned alongside ranged proficiencies).
         /// </summary>
         public float COSteadyAimMax { get; set; } = 0.5f;
+
+        // =========================================================================
+        // DEBUG SETTINGS
+        // =========================================================================
+
+        /// <summary>
+        /// Enable verbose debug logging for damage tracking and other systems.
+        /// WARNING: This can spam server logs with hundreds of messages per minute!
+        /// Only enable for testing/debugging purposes.
+        /// </summary>
+        public bool EnableDebugLogging { get; set; } = false;
     }
 
     /// <summary>
@@ -1846,6 +1857,9 @@ namespace SeraphLeveling
         public static float COAxesProficiencyMax = 0.3f;
         public static float COQuarterstaffProficiencyMax = 0.3f;
         public static float COSteadyAimMax = 0.5f;
+
+        // Debug logging (disabled by default to avoid log spam)
+        public static bool DebugLoggingEnabled = false;
 
         // Per-proficiency base and increment overrides (optional, falls back to global values)
         public static Dictionary<string, int> COProficiencyBaseOverrides = new Dictionary<string, int>();
@@ -6670,8 +6684,11 @@ namespace SeraphLeveling
         /// </summary>
         public static bool IsRangedDamage(DamageSource damageSource)
         {
-            // Debug logging at start to diagnose CO issues
-            ServerApi?.Logger.Debug($"[SeraphLeveling] IsRangedDamage called: SourceEntity={damageSource?.SourceEntity?.Code}, CauseEntity={damageSource?.CauseEntity?.Code}, Type={damageSource?.Type}, Same={damageSource?.SourceEntity == damageSource?.CauseEntity}");
+            // Debug logging at start to diagnose CO issues (disabled by default)
+            if (DebugLoggingEnabled)
+            {
+                ServerApi?.Logger.Debug($"[SeraphLeveling] IsRangedDamage called: SourceEntity={damageSource?.SourceEntity?.Code}, CauseEntity={damageSource?.CauseEntity?.Code}, Type={damageSource?.Type}, Same={damageSource?.SourceEntity == damageSource?.CauseEntity}");
+            }
 
             // CauseEntity is non-null for projectile damage (it's the shooter)
             // SourceEntity is the projectile itself
@@ -8002,6 +8019,13 @@ namespace SeraphLeveling
                 COQuarterstaffProficiencyMax = config.COQuarterstaffProficiencyMax;
                 COSteadyAimMax = config.COSteadyAimMax;
 
+                // Debug settings
+                DebugLoggingEnabled = config.EnableDebugLogging;
+                if (DebugLoggingEnabled)
+                {
+                    api.Logger.Warning("[SeraphLeveling] Debug logging is ENABLED - this can spam server logs!");
+                }
+
                 api.Logger.Notification("[SeraphLeveling] Config loaded from ModConfig/" + CONFIG_FILE_NAME);
             }
             catch (Exception ex)
@@ -8235,11 +8259,12 @@ namespace SeraphLeveling
                 return (CO_SLINGS_PROFICIENCY, itemCode);
 
             // Debug logging for unmatched weapons - helps identify missing item codes
-            if (lowerCode.Contains("sword") || lowerCode.Contains("blade") || lowerCode.Contains("spear") ||
+            if (DebugLoggingEnabled &&
+                (lowerCode.Contains("sword") || lowerCode.Contains("blade") || lowerCode.Contains("spear") ||
                 lowerCode.Contains("javelin") || lowerCode.Contains("axe") || lowerCode.Contains("mace") ||
                 lowerCode.Contains("hammer") || lowerCode.Contains("club") || lowerCode.Contains("bow") ||
                 lowerCode.Contains("staff") || lowerCode.Contains("halberd") || lowerCode.Contains("pike") ||
-                lowerCode.Contains("sabre") || lowerCode.Contains("weapon") || lowerCode.Contains("dagger"))
+                lowerCode.Contains("sabre") || lowerCode.Contains("weapon") || lowerCode.Contains("dagger")))
             {
                 ServerApi?.Logger?.Debug($"[SeraphLeveling] CO: Unmatched weapon item code: '{itemCode}' (normalized: '{lowerCode}')");
             }
@@ -15810,8 +15835,11 @@ namespace SeraphLeveling
         /// </summary>
         public static void ReceiveDamage_Postfix(Entity __instance, DamageSource damageSource, float damage, bool __result)
         {
-            // Debug: Log all damage events to diagnose CO issues
-            SeraphLevelingModSystem.ServerApi?.Logger.Debug($"[SeraphLeveling] ReceiveDamage_Postfix: target={__instance?.Code}, damage={damage}, result={__result}, SourceEntity={damageSource?.SourceEntity?.Code}, CauseEntity={damageSource?.CauseEntity?.Code}, Type={damageSource?.Type}");
+            // Debug: Log all damage events to diagnose CO issues (disabled by default to avoid log spam)
+            if (SeraphLevelingModSystem.DebugLoggingEnabled)
+            {
+                SeraphLevelingModSystem.ServerApi?.Logger.Debug($"[SeraphLeveling] ReceiveDamage_Postfix: target={__instance?.Code}, damage={damage}, result={__result}, SourceEntity={damageSource?.SourceEntity?.Code}, CauseEntity={damageSource?.CauseEntity?.Code}, Type={damageSource?.Type}");
+            }
 
             // Only process if damage was actually dealt
             if (!__result || damage <= 0) return;
@@ -15855,7 +15883,10 @@ namespace SeraphLeveling
                     if (!string.IsNullOrEmpty(projectileCode))
                     {
                         var (projProficiency, projWeaponCode) = SeraphLevelingModSystem.GetCOWeaponType(projectileCode);
-                        SeraphLevelingModSystem.ServerApi?.Logger?.Debug($"[SeraphLeveling] CO ranged projectile check: '{projectileCode}' -> proficiency='{projProficiency ?? "null"}'");
+                        if (SeraphLevelingModSystem.DebugLoggingEnabled)
+                        {
+                            SeraphLevelingModSystem.ServerApi?.Logger?.Debug($"[SeraphLeveling] CO ranged projectile check: '{projectileCode}' -> proficiency='{projProficiency ?? "null"}'");
+                        }
                         if (projProficiency != null)
                         {
                             // Javelins proficiency is NOT in IsCORangedProficiency, so process it here
@@ -15893,7 +15924,10 @@ namespace SeraphLeveling
             if (heldItem == null) return;
 
             string itemCode = heldItem.Code?.ToString();
-            SeraphLevelingModSystem.ServerApi?.Logger?.Debug($"[SeraphLeveling] Melee hit with held item: '{itemCode}'");
+            if (SeraphLevelingModSystem.DebugLoggingEnabled)
+            {
+                SeraphLevelingModSystem.ServerApi?.Logger?.Debug($"[SeraphLeveling] Melee hit with held item: '{itemCode}'");
+            }
 
             string weaponType = SeraphLevelingModSystem.GetWeaponTypeFromCode(itemCode);
 
@@ -15912,7 +15946,10 @@ namespace SeraphLeveling
             if (SeraphLevelingModSystem.IsCOCompatEnabled)
             {
                 var (proficiencyStat, coWeaponCode) = SeraphLevelingModSystem.GetCOWeaponType(itemCode);
-                SeraphLevelingModSystem.ServerApi?.Logger?.Debug($"[SeraphLeveling] CO weapon check: itemCode='{itemCode}' -> proficiency='{proficiencyStat ?? "null"}', weaponCode='{coWeaponCode ?? "null"}'");
+                if (SeraphLevelingModSystem.DebugLoggingEnabled)
+                {
+                    SeraphLevelingModSystem.ServerApi?.Logger?.Debug($"[SeraphLeveling] CO weapon check: itemCode='{itemCode}' -> proficiency='{proficiencyStat ?? "null"}', weaponCode='{coWeaponCode ?? "null"}'");
+                }
                 if (proficiencyStat != null && !SeraphLevelingModSystem.IsCORangedProficiency(proficiencyStat))
                 {
                     SeraphLevelingModSystem.ProcessCOProficiencyDamage(attackerPlayer, proficiencyStat, coWeaponCode, damage);

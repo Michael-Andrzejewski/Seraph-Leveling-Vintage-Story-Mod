@@ -4,7 +4,7 @@
   "name": "Seraph Leveling",
   "authors": ["Soareverix"],
   "description": "A progression system that improves player traits through gameplay. Mine blocks to increase your mining speed, deal damage to improve your combat prowess, and more!",
-  "version": "1.0.8",
+  "version": "1.0.9",
   "side": "Universal",
   "website": "https://github.com/Soareverix/Simple-Improving-Traits-Vintage-Story-Mod",
   "dependencies": {

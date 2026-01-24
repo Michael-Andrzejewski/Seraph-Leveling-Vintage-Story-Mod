@@ -6,6 +6,7 @@ using System.Linq;
 using System.Text;
 using HarmonyLib;
 using Vintagestory.API.Client;
+using Vintagestory.GameContent;
 using Vintagestory.API.Common;
 using Vintagestory.API.Common.Entities;
 using Vintagestory.API.Config;
@@ -14372,12 +14373,20 @@ namespace SeraphLeveling
 
     /// <summary>
     /// Client-side mod system that displays mining progression in the character traits dialog.
-    /// Uses Harmony to patch the CharacterSystem's trait display method.
+    /// Uses Harmony to patch the CharacterSystem's trait display method and adds scrollable traits UI.
     /// </summary>
     public class SeraphLevelingClientSystem : ModSystem
     {
         private ICoreClientAPI clientApi;
         private Harmony harmony;
+
+        // Scroll-related fields for traits UI
+        private GuiDialogCharacterBase charDlg;
+        private ElementBounds clippingBounds;
+        private ElementBounds scrollbarBounds;
+        private GuiElementRichtext richtextElem;
+        private bool hasHookedDialog = false;
+        private object characterSystemInstance;
 
         public override bool ShouldLoad(EnumAppSide forSide)
         {
@@ -14400,6 +14409,177 @@ namespace SeraphLeveling
             {
                 api.Logger.Error($"[SeraphLeveling] Failed to apply Harmony patches: {ex.Message}");
                 api.Logger.Error($"[SeraphLeveling] Stack trace: {ex.StackTrace}");
+            }
+
+            // Register event to hook into character dialog when it's loaded
+            api.Event.PlayerJoin += OnPlayerJoin;
+        }
+
+        private void OnPlayerJoin(IClientPlayer byPlayer)
+        {
+            // Try to hook into the character dialog after a short delay to ensure it's loaded
+            clientApi.Event.RegisterCallback(TryHookCharacterDialog, 500);
+        }
+
+        private void TryHookCharacterDialog(float dt)
+        {
+            if (hasHookedDialog) return;
+
+            try
+            {
+                // Find the character dialog in loaded GUIs
+                charDlg = clientApi.Gui.LoadedGuis.Find(dlg => dlg is GuiDialogCharacterBase) as GuiDialogCharacterBase;
+
+                if (charDlg == null)
+                {
+                    // Dialog not loaded yet, try again later
+                    clientApi.Event.RegisterCallback(TryHookCharacterDialog, 1000);
+                    return;
+                }
+
+                // Find the CharacterSystem instance to call getClassTraitText
+                var characterSystemType = AccessTools.TypeByName("Vintagestory.GameContent.CharacterSystem");
+                if (characterSystemType != null)
+                {
+                    // Get the mod system using the type's full name
+                    characterSystemInstance = clientApi.ModLoader.GetModSystem(characterSystemType.FullName);
+                }
+
+                // Remove the vanilla CharacterSystem's trait tab handler
+                Action<GuiComposer> handlerToRemove = null;
+                foreach (var handler in charDlg.RenderTabHandlers)
+                {
+                    if (handler.Target?.ToString()?.Contains("CharacterSystem") == true)
+                    {
+                        handlerToRemove = handler;
+                        break;
+                    }
+                }
+
+                if (handlerToRemove != null)
+                {
+                    charDlg.RenderTabHandlers.Remove(handlerToRemove);
+                    clientApi.Logger.Debug("[SeraphLeveling] Removed vanilla CharacterSystem trait tab handler");
+                }
+
+                // Add our scrollable trait tab handler
+                charDlg.RenderTabHandlers.Add(ComposeTraitsTab);
+                hasHookedDialog = true;
+
+                clientApi.Logger.Notification("[SeraphLeveling] Successfully hooked into character dialog for scrollable traits");
+            }
+            catch (Exception ex)
+            {
+                clientApi.Logger.Error($"[SeraphLeveling] Failed to hook character dialog: {ex.Message}");
+                // Retry after a delay
+                clientApi.Event.RegisterCallback(TryHookCharacterDialog, 2000);
+            }
+        }
+
+        /// <summary>
+        /// Composes the traits tab with scrolling support.
+        /// </summary>
+        private void ComposeTraitsTab(GuiComposer compo)
+        {
+            // Get the trait text from the CharacterSystem (our postfix patch will modify it)
+            string traitText = GetClassTraitText();
+
+            // Define bounds for the scrollable area
+            // Standard traits tab area is approximately 385x310 pixels
+            clippingBounds = ElementBounds.Fixed(0, 25, 385, 310);
+
+            // Begin clip area for scrollable content
+            compo.BeginClip(clippingBounds);
+
+            // Add richtext element for trait display
+            // Use a tall container to hold all traits (will be clipped and scrolled)
+            ElementBounds textBounds = ElementBounds.Fixed(0, 0, 370, 1000);
+            compo.AddRichtext(traitText, CairoFont.WhiteDetailText().WithLineHeightMultiplier(1.15), textBounds, "traitsText");
+
+            compo.EndClip();
+
+            // Add scrollbar to the right of the clipping area
+            scrollbarBounds = clippingBounds.RightCopy().WithFixedWidth(10).WithFixedPadding(3, 0);
+            compo.AddVerticalScrollbar(OnNewScrollbarValue, scrollbarBounds, "traitsScrollbar");
+
+            // Get reference to the richtext element for scroll updates
+            richtextElem = compo.GetRichtext("traitsText");
+
+            // Calculate and set scroll heights after composition
+            // We need to set this after the composer has composed to get accurate heights
+            compo.OnComposed += () =>
+            {
+                SetScrollbarHeights(compo);
+            };
+        }
+
+        /// <summary>
+        /// Sets the scrollbar heights based on actual content size.
+        /// </summary>
+        private void SetScrollbarHeights(GuiComposer compo)
+        {
+            try
+            {
+                var scrollbar = compo.GetScrollbar("traitsScrollbar");
+                var richtext = compo.GetRichtext("traitsText");
+
+                if (scrollbar != null && richtext != null)
+                {
+                    float visibleHeight = (float)clippingBounds.fixedHeight;
+                    // Get actual content height from richtext bounds
+                    float totalHeight = (float)richtext.Bounds.fixedHeight;
+
+                    // If content fits, use visible height as total (no scrolling needed)
+                    if (totalHeight < visibleHeight)
+                    {
+                        totalHeight = visibleHeight;
+                    }
+
+                    scrollbar.SetHeights(visibleHeight, totalHeight);
+                }
+            }
+            catch (Exception ex)
+            {
+                clientApi?.Logger?.Debug($"[SeraphLeveling] Error setting scrollbar heights: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// Callback when scrollbar value changes - adjusts content position.
+        /// </summary>
+        private void OnNewScrollbarValue(float value)
+        {
+            if (richtextElem != null)
+            {
+                richtextElem.Bounds.fixedY = 0 - value;
+                richtextElem.Bounds.CalcWorldBounds();
+            }
+        }
+
+        /// <summary>
+        /// Gets the trait text by calling the CharacterSystem's getClassTraitText method.
+        /// Our postfix patch will modify this text to include dynamic trait values.
+        /// </summary>
+        private string GetClassTraitText()
+        {
+            try
+            {
+                if (characterSystemInstance != null)
+                {
+                    var method = AccessTools.Method(characterSystemInstance.GetType(), "getClassTraitText");
+                    if (method != null)
+                    {
+                        return method.Invoke(characterSystemInstance, null) as string ?? "";
+                    }
+                }
+
+                // Fallback: return empty if we can't get the trait text
+                return Lang.Get("charactersheet-notraits");
+            }
+            catch (Exception ex)
+            {
+                clientApi?.Logger?.Debug($"[SeraphLeveling] Error getting trait text: {ex.Message}");
+                return "";
             }
         }
 
@@ -14451,6 +14631,22 @@ namespace SeraphLeveling
         public override void Dispose()
         {
             harmony?.UnpatchAll("seraphleveling");
+
+            // Unhook from character dialog
+            if (charDlg != null && hasHookedDialog)
+            {
+                try
+                {
+                    charDlg.RenderTabHandlers.Remove(ComposeTraitsTab);
+                }
+                catch { }
+            }
+
+            if (clientApi != null)
+            {
+                clientApi.Event.PlayerJoin -= OnPlayerJoin;
+            }
+
             base.Dispose();
         }
     }

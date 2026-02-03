@@ -60,6 +60,28 @@ namespace SeraphLeveling
         public int ArmorMaxDurabilityPercent { get; set; } = 50;
         public int ArmorMaxWalkSpeedPercent { get; set; } = 50;
 
+        // First-equip bonus configuration (durability)
+        public int ArmorFirstEquipLightDurability { get; set; } = 1;
+        public int ArmorFirstEquipChainDurability { get; set; } = 1;
+        public int ArmorFirstEquipBrigandineDurability { get; set; } = 2;
+        public int ArmorFirstEquipScaleDurability { get; set; } = 3;
+        public int ArmorFirstEquipPlateDurability { get; set; } = 3;
+
+        // First-equip bonus configuration (walk speed penalty reduction)
+        public int ArmorFirstEquipLightWalkSpeed { get; set; } = 1;
+        public int ArmorFirstEquipChainWalkSpeed { get; set; } = 1;
+        public int ArmorFirstEquipBrigandineWalkSpeed { get; set; } = 2;
+        public int ArmorFirstEquipScaleWalkSpeed { get; set; } = 3;
+        public int ArmorFirstEquipPlateWalkSpeed { get; set; } = 3;
+
+        // Armor hunger reduction (optional feature, disabled by default)
+        public bool EnableArmorHungerReduction { get; set; } = false;
+        public int ArmorMaxHungerReductionPercent { get; set; } = 50;
+
+        // Armor healing effectiveness (optional feature, disabled by default)
+        public bool EnableArmorHealingBonus { get; set; } = false;
+        public int ArmorMaxHealingPercent { get; set; } = 25;
+
         // Clothier progression
         public int ClothierRequiredUniqueClothes { get; set; } = 20;
         /// <summary>
@@ -204,6 +226,39 @@ namespace SeraphLeveling
         public float COSteadyAimMax { get; set; } = 0.5f;
 
         // =========================================================================
+        // SKILL DECAY SETTINGS
+        // =========================================================================
+
+        /// <summary>
+        /// Enable skill decay when players don't use skills for extended periods.
+        /// Disabled by default.
+        /// </summary>
+        public bool EnableSkillDecay { get; set; } = false;
+
+        /// <summary>
+        /// Grace period in in-game days before decay starts.
+        /// During this period after last activity, no decay occurs.
+        /// </summary>
+        public double DecayGracePeriodDays { get; set; } = 1.0;
+
+        /// <summary>
+        /// Base points lost per day past grace period.
+        /// Decay increases triangularly: Day 1 = base, Day 2 = 2*base, Day 3 = 3*base, etc.
+        /// </summary>
+        public int DecayBasePointsPerDay { get; set; } = 10;
+
+        /// <summary>
+        /// Maximum total decay points applied per login.
+        /// Prevents losing all progress after long absences.
+        /// </summary>
+        public int DecayMaxPointsPerLogin { get; set; } = 100;
+
+        /// <summary>
+        /// Skills exempt from decay. Valid values: mining, melee, ranged, coproficiency
+        /// </summary>
+        public string[] DecayExemptSkills { get; set; } = Array.Empty<string>();
+
+        // =========================================================================
         // DEBUG SETTINGS
         // =========================================================================
 
@@ -255,10 +310,14 @@ namespace SeraphLeveling
         /// <summary>Per-weapon progress tracking. Key is weapon combination (e.g., "bow-long+arrow-copper").</summary>
         public Dictionary<string, RangedWeaponProgressData> WeaponProgress { get; set; }
 
+        /// <summary>Last in-game day when this skill was used. Used for skill decay.</summary>
+        public double LastActivityDay { get; set; }
+
         public RangedProgressData()
         {
             TotalCredits = 0;
             WeaponProgress = new Dictionary<string, RangedWeaponProgressData>();
+            LastActivityDay = 0;
         }
 
         /// <summary>
@@ -287,6 +346,7 @@ namespace SeraphLeveling
             var clone = new RangedProgressData
             {
                 TotalCredits = this.TotalCredits,
+                LastActivityDay = this.LastActivityDay,
                 WeaponProgress = new Dictionary<string, RangedWeaponProgressData>()
             };
             foreach (var kvp in this.WeaponProgress)
@@ -450,6 +510,12 @@ namespace SeraphLeveling
         /// <summary>Total walk speed penalty reduction credits earned (each = 1% reduction).</summary>
         public int TotalWalkSpeedCredits { get; set; }
 
+        /// <summary>Total hunger reduction credits earned (each = 1% hunger rate reduction). Optional feature.</summary>
+        public int TotalHungerReductionCredits { get; set; }
+
+        /// <summary>Total healing effectiveness credits earned (each = 1% healing bonus). Optional feature.</summary>
+        public int TotalHealingCredits { get; set; }
+
         /// <summary>Per-armor piece progress tracking. Key is armor code (e.g., "game:armor-body-plate-iron").</summary>
         public Dictionary<string, ArmorPieceProgressData> ArmorProgress { get; set; }
 
@@ -457,6 +523,8 @@ namespace SeraphLeveling
         {
             TotalDurabilityCredits = 0;
             TotalWalkSpeedCredits = 0;
+            TotalHungerReductionCredits = 0;
+            TotalHealingCredits = 0;
             ArmorProgress = new Dictionary<string, ArmorPieceProgressData>();
         }
 
@@ -487,6 +555,8 @@ namespace SeraphLeveling
             {
                 TotalDurabilityCredits = this.TotalDurabilityCredits,
                 TotalWalkSpeedCredits = this.TotalWalkSpeedCredits,
+                TotalHungerReductionCredits = this.TotalHungerReductionCredits,
+                TotalHealingCredits = this.TotalHealingCredits,
                 ArmorProgress = new Dictionary<string, ArmorPieceProgressData>()
             };
             foreach (var kvp in this.ArmorProgress)
@@ -537,10 +607,14 @@ namespace SeraphLeveling
         /// <summary>Per-weapon progress tracking. Key is weapon type (e.g., "sword", "falx", "spear").</summary>
         public Dictionary<string, WeaponProgressData> WeaponProgress { get; set; }
 
+        /// <summary>Last in-game day when this skill was used. Used for skill decay.</summary>
+        public double LastActivityDay { get; set; }
+
         public MeleeProgressData()
         {
             TotalCredits = 0;
             WeaponProgress = new Dictionary<string, WeaponProgressData>();
+            LastActivityDay = 0;
         }
 
         /// <summary>
@@ -569,6 +643,7 @@ namespace SeraphLeveling
             var clone = new MeleeProgressData
             {
                 TotalCredits = this.TotalCredits,
+                LastActivityDay = this.LastActivityDay,
                 WeaponProgress = new Dictionary<string, WeaponProgressData>()
             };
             foreach (var kvp in this.WeaponProgress)
@@ -619,10 +694,14 @@ namespace SeraphLeveling
         /// <summary>Per-pickaxe progress tracking. Key is pickaxe code (e.g., "game:pickaxe-copper").</summary>
         public Dictionary<string, PickaxeProgressData> PickaxeProgress { get; set; }
 
+        /// <summary>Last in-game day when this skill was used. Used for skill decay.</summary>
+        public double LastActivityDay { get; set; }
+
         public MiningProgressData()
         {
             TotalCredits = 0;
             PickaxeProgress = new Dictionary<string, PickaxeProgressData>();
+            LastActivityDay = 0;
         }
 
         /// <summary>
@@ -651,6 +730,7 @@ namespace SeraphLeveling
             var clone = new MiningProgressData
             {
                 TotalCredits = this.TotalCredits,
+                LastActivityDay = this.LastActivityDay,
                 PickaxeProgress = new Dictionary<string, PickaxeProgressData>()
             };
             foreach (var kvp in this.PickaxeProgress)
@@ -1484,23 +1564,35 @@ namespace SeraphLeveling
 
         // First-equip bonuses (durability):
         // +1% for light armor and chain, +2% for brigandine, +3% for scale and plate
-        public const int FIRST_EQUIP_LIGHT_BONUS = 1;
-        public const int FIRST_EQUIP_CHAIN_BONUS = 1;
-        public const int FIRST_EQUIP_BRIGANDINE_BONUS = 2;
-        public const int FIRST_EQUIP_SCALE_BONUS = 3;
-        public const int FIRST_EQUIP_PLATE_BONUS = 3;
+        // Now configurable via config file
+        public static int FirstEquipLightBonus = 1;
+        public static int FirstEquipChainBonus = 1;
+        public static int FirstEquipBrigandineBonus = 2;
+        public static int FirstEquipScaleBonus = 3;
+        public static int FirstEquipPlateBonus = 3;
 
         // First-equip bonuses (walk speed penalty reduction):
         // Same values as durability - grants walk speed bonus on first equip
-        public const int FIRST_EQUIP_WALKSPEED_LIGHT_BONUS = 1;
-        public const int FIRST_EQUIP_WALKSPEED_CHAIN_BONUS = 1;
-        public const int FIRST_EQUIP_WALKSPEED_BRIGANDINE_BONUS = 2;
-        public const int FIRST_EQUIP_WALKSPEED_SCALE_BONUS = 3;
-        public const int FIRST_EQUIP_WALKSPEED_PLATE_BONUS = 3;
+        // Now configurable via config file
+        public static int FirstEquipWalkSpeedLightBonus = 1;
+        public static int FirstEquipWalkSpeedChainBonus = 1;
+        public static int FirstEquipWalkSpeedBrigandineBonus = 2;
+        public static int FirstEquipWalkSpeedScaleBonus = 3;
+        public static int FirstEquipWalkSpeedPlateBonus = 3;
 
         // Max bonuses
         public static int MaxArmorDurabilityPercent = 50;          // 50% max armor durability bonus
         public static int MaxArmorWalkSpeedPercent = 50;           // 50% max walk speed penalty reduction
+
+        // Optional armor features (disabled by default)
+        public static bool EnableArmorHungerReduction = false;     // If true, armor time grants hunger rate reduction
+        public static int MaxArmorHungerReductionPercent = 50;     // Max hunger rate reduction from armor
+        public static bool EnableArmorHealingBonus = false;        // If true, armor time grants healing effectiveness
+        public static int MaxArmorHealingPercent = 25;             // Max healing effectiveness from armor
+
+        // WatchedAttributes keys for new armor stats
+        public const string WATCHED_ARMOR_HUNGER_REDUCTION = "sitArmorHungerReduction";
+        public const string WATCHED_ARMOR_HEALING_BONUS = "sitArmorHealingBonus";
 
         // Vanilla Soldier trait armor bonuses (used for cap calculations)
         public const int VANILLA_SOLDIER_ARMOR_DURABILITY_BONUS = 15;
@@ -1927,6 +2019,13 @@ namespace SeraphLeveling
 
         // Debug logging (disabled by default to avoid log spam)
         public static bool DebugLoggingEnabled = false;
+
+        // Skill decay settings
+        public static bool EnableSkillDecay = false;
+        public static double DecayGracePeriodDays = 1.0;
+        public static int DecayBasePointsPerDay = 10;
+        public static int DecayMaxPointsPerLogin = 100;
+        public static HashSet<string> DecayExemptSkills = new HashSet<string>();
 
         // Per-proficiency base and increment overrides (optional, falls back to global values)
         public static Dictionary<string, int> COProficiencyBaseOverrides = new Dictionary<string, int>();
@@ -2985,6 +3084,13 @@ namespace SeraphLeveling
 
             // Ore blocks: code contains "ore-" (e.g., "ore-lignite-chalk", "ore-copper-granite")
             if (codeToCheck.Contains("ore-"))
+            {
+                return OreMultiplier;
+            }
+
+            // Meteoric iron blocks (treat same as ore - high value)
+            if (codeToCheck.StartsWith("meteorite") ||
+                codeToCheck.Contains("meteoriciron"))
             {
                 return OreMultiplier;
             }
@@ -4692,8 +4798,12 @@ namespace SeraphLeveling
         {
             if (player?.Entity == null) return;
 
+            // Get the full armor progress data for optional features
+            string playerUid = player.PlayerUID;
+            ArmorProgress.TryGetValue(playerUid, out var armorProgressData);
+
             // Use cached vanilla traits if available, otherwise fall back to direct check
-            var cache = GetCachedTraits(player.PlayerUID);
+            var cache = GetCachedTraits(playerUid);
             bool hasVanillaSoldier = cache?.HasSoldier ?? PlayerHasVanillaSoldierForArmor(player.Entity);
 
             // Calculate durability bonus (reduces armor damage taken)
@@ -4711,6 +4821,27 @@ namespace SeraphLeveling
             // Base value is 1.0, so setting -0.5 gives 1.0 + (-0.5) = 0.5 (50% of penalty applied)
             float armorWalkSpeedReduction = -(walkSpeedBonus * 0.01f);
             player.Entity.Stats["armorWalkSpeedAffectedness"].Set(ARMOR_WALKSPEED_STAT_CODE, armorWalkSpeedReduction);
+
+            // Apply optional armor features if enabled
+            if (EnableArmorHungerReduction && armorProgressData != null)
+            {
+                int hungerReductionCredits = armorProgressData.TotalHungerReductionCredits;
+                int hungerReductionBonus = Math.Min(hungerReductionCredits, MaxArmorHungerReductionPercent);
+                // hungerrate is a multiplier: lower = slower hunger drain
+                float hungerMultiplier = -(hungerReductionBonus * 0.01f);
+                player.Entity.Stats.Set("hungerrate", "sitArmorHunger", hungerMultiplier, false);
+                player.Entity.WatchedAttributes.SetInt(WATCHED_ARMOR_HUNGER_REDUCTION, hungerReductionBonus);
+            }
+
+            if (EnableArmorHealingBonus && armorProgressData != null)
+            {
+                int healingCredits = armorProgressData.TotalHealingCredits;
+                int healingBonus = Math.Min(healingCredits, MaxArmorHealingPercent);
+                // healingeffectivenesstypical is additive: +0.25 = +25% healing received
+                float healingModifier = healingBonus * 0.01f;
+                player.Entity.Stats.Set("healingeffectivenesstypical", "sitArmorHealing", healingModifier, false);
+                player.Entity.WatchedAttributes.SetInt(WATCHED_ARMOR_HEALING_BONUS, healingBonus);
+            }
 
             // Debug: Log the stat values
             float blendedValue = player.Entity.Stats.GetBlended("armorWalkSpeedAffectedness");
@@ -4790,33 +4921,35 @@ namespace SeraphLeveling
 
         /// <summary>
         /// Gets the first-equip durability bonus for an armor type.
+        /// Values are now configurable via config file.
         /// </summary>
         public static int GetFirstEquipBonus(string armorType)
         {
             switch (armorType?.ToLowerInvariant())
             {
-                case "plate": return FIRST_EQUIP_PLATE_BONUS;
-                case "scale": return FIRST_EQUIP_SCALE_BONUS;
-                case "brigandine": return FIRST_EQUIP_BRIGANDINE_BONUS;
-                case "chain": return FIRST_EQUIP_CHAIN_BONUS;
+                case "plate": return FirstEquipPlateBonus;
+                case "scale": return FirstEquipScaleBonus;
+                case "brigandine": return FirstEquipBrigandineBonus;
+                case "chain": return FirstEquipChainBonus;
                 case "light":
-                default: return FIRST_EQUIP_LIGHT_BONUS;
+                default: return FirstEquipLightBonus;
             }
         }
 
         /// <summary>
         /// Gets the first-equip walk speed penalty reduction bonus for an armor type.
+        /// Values are now configurable via config file.
         /// </summary>
         public static int GetFirstEquipWalkSpeedBonus(string armorType)
         {
             switch (armorType?.ToLowerInvariant())
             {
-                case "plate": return FIRST_EQUIP_WALKSPEED_PLATE_BONUS;
-                case "scale": return FIRST_EQUIP_WALKSPEED_SCALE_BONUS;
-                case "brigandine": return FIRST_EQUIP_WALKSPEED_BRIGANDINE_BONUS;
-                case "chain": return FIRST_EQUIP_WALKSPEED_CHAIN_BONUS;
+                case "plate": return FirstEquipWalkSpeedPlateBonus;
+                case "scale": return FirstEquipWalkSpeedScaleBonus;
+                case "brigandine": return FirstEquipWalkSpeedBrigandineBonus;
+                case "chain": return FirstEquipWalkSpeedChainBonus;
                 case "light":
-                default: return FIRST_EQUIP_WALKSPEED_LIGHT_BONUS;
+                default: return FirstEquipWalkSpeedLightBonus;
             }
         }
 
@@ -4964,35 +5097,71 @@ namespace SeraphLeveling
                         }
                     }
 
-                    // Track time worn for walk speed credits (only if not at max)
-                    if (armorProgress.TotalWalkSpeedCredits < MaxArmorWalkSpeedPercent)
+                    // Track time worn for walk speed credits (only if not at max for any time-based stat)
+                    bool hasRoomForWalkSpeed = armorProgress.TotalWalkSpeedCredits < MaxArmorWalkSpeedPercent;
+                    bool hasRoomForHunger = EnableArmorHungerReduction && armorProgress.TotalHungerReductionCredits < MaxArmorHungerReductionPercent;
+                    bool hasRoomForHealing = EnableArmorHealingBonus && armorProgress.TotalHealingCredits < MaxArmorHealingPercent;
+
+                    if (hasRoomForWalkSpeed || hasRoomForHunger || hasRoomForHealing)
                     {
                         int oldWalkSpeedCredits = armorProgress.TotalWalkSpeedCredits;
+                        int oldHungerCredits = armorProgress.TotalHungerReductionCredits;
+                        int oldHealingCredits = armorProgress.TotalHealingCredits;
 
                         // Add 1 second (tick interval) to this armor piece's time
                         pieceProgress.SecondsWornInIncrement += 1f;
 
                         // Check if we've earned any new time credits
-                        while (pieceProgress.SecondsWornInIncrement >= pieceProgress.CurrentTimeIncrementSize &&
-                               armorProgress.TotalWalkSpeedCredits < MaxArmorWalkSpeedPercent)
+                        while (pieceProgress.SecondsWornInIncrement >= pieceProgress.CurrentTimeIncrementSize)
                         {
-                            pieceProgress.TimeCredits++;
-                            armorProgress.TotalWalkSpeedCredits++;
+                            bool anyEarned = false;
+
+                            // Award walk speed credit if not at max
+                            if (armorProgress.TotalWalkSpeedCredits < MaxArmorWalkSpeedPercent)
+                            {
+                                pieceProgress.TimeCredits++;
+                                armorProgress.TotalWalkSpeedCredits++;
+                                anyEarned = true;
+                            }
+
+                            // Award hunger reduction credit if feature enabled and not at max
+                            if (EnableArmorHungerReduction && armorProgress.TotalHungerReductionCredits < MaxArmorHungerReductionPercent)
+                            {
+                                armorProgress.TotalHungerReductionCredits++;
+                                anyEarned = true;
+                            }
+
+                            // Award healing credit if feature enabled and not at max
+                            if (EnableArmorHealingBonus && armorProgress.TotalHealingCredits < MaxArmorHealingPercent)
+                            {
+                                armorProgress.TotalHealingCredits++;
+                                anyEarned = true;
+                            }
+
+                            if (!anyEarned) break; // All time-based stats are at max
+
                             pieceProgress.SecondsWornInIncrement -= pieceProgress.CurrentTimeIncrementSize;
                             pieceProgress.CurrentTimeIncrementSize += ArmorTimeIncrementStep;
 
                             ServerApi.Logger.Debug($"[SeraphLeveling] Player {player.PlayerName} earned time credit {pieceProgress.TimeCredits} with {itemCode}");
                         }
 
-                        if (armorProgress.TotalWalkSpeedCredits > oldWalkSpeedCredits)
+                        bool creditsChanged = (armorProgress.TotalWalkSpeedCredits > oldWalkSpeedCredits) ||
+                                               (armorProgress.TotalHungerReductionCredits > oldHungerCredits) ||
+                                               (armorProgress.TotalHealingCredits > oldHealingCredits);
+
+                        if (creditsChanged)
                         {
                             pendingArmorProgressSave = true;
                             ApplyArmorBonusesStatic(player, armorProgress.TotalDurabilityCredits, armorProgress.TotalWalkSpeedCredits);
 
-                            // Notify player of level up
-                            player.SendMessage(GlobalConstants.GeneralChatGroup,
-                                Lang.Get("seraphleveling:message-armor-time-level-up", armorProgress.TotalWalkSpeedCredits),
-                                EnumChatType.Notification);
+                            // Notify player of level up (only for walk speed, as it's the primary stat)
+                            if (armorProgress.TotalWalkSpeedCredits > oldWalkSpeedCredits)
+                            {
+                                player.SendMessage(GlobalConstants.GeneralChatGroup,
+                                    Lang.Get("seraphleveling:message-armor-time-level-up", armorProgress.TotalWalkSpeedCredits),
+                                    EnumChatType.Notification);
+                            }
                         }
                     }
                 }
@@ -5209,6 +5378,9 @@ namespace SeraphLeveling
             }
 
             pendingMiningProgressSave = true;
+
+            // Update last activity day for skill decay
+            UpdateSkillActivityDay(playerUid, "mining");
 
             // If credits increased, update the stat and notify player
             if (playerProgress.TotalCredits > oldCredits)
@@ -5504,6 +5676,9 @@ namespace SeraphLeveling
 
             // Populate vanilla traits cache first (before applying any bonuses)
             PopulateVanillaTraitsCache(byPlayer);
+
+            // Apply skill decay before applying bonuses
+            ApplySkillDecay(byPlayer);
 
             // Apply mining bonus (Stats always applied, WatchedAttributes only sync if changed)
             var miningProg = MiningProgress.GetOrAdd(playerUid, _ => new MiningProgressData());
@@ -6186,6 +6361,9 @@ namespace SeraphLeveling
 
             pendingMeleeProgressSave = true;
 
+            // Update last activity day for skill decay
+            UpdateSkillActivityDay(playerUid, "melee");
+
             // If credits increased, update the stat and notify player
             if (playerProgress.TotalCredits > oldCredits)
             {
@@ -6384,6 +6562,15 @@ namespace SeraphLeveling
                 return itemCode; // Return full code for per-weapon tracking
             }
 
+            // Check for quarterstaff types (vanilla melee weapon)
+            if (codeToCheck.StartsWith("quarterstaff-") ||
+                codeToCheck.StartsWith("staff-") ||
+                codeToCheck.StartsWith("bo-") ||
+                codeToCheck.Contains("bo-staff"))
+            {
+                return itemCode; // Return full code for per-weapon tracking
+            }
+
             // Ancient Armory mod weapons
             // aa-blade: gladius, arming, claymore, sabre, longsword, falchion (swords)
             if (codeToCheck.StartsWith("aa-blade-"))
@@ -6459,6 +6646,9 @@ namespace SeraphLeveling
             }
 
             pendingRangedProgressSave = true;
+
+            // Update last activity day for skill decay
+            UpdateSkillActivityDay(playerUid, "ranged");
 
             // If credits increased, update the stat and notify player
             if (playerProgress.TotalCredits > oldCredits)
@@ -8061,6 +8251,25 @@ namespace SeraphLeveling
                 MaxArmorDurabilityPercent = config.ArmorMaxDurabilityPercent;
                 MaxArmorWalkSpeedPercent = config.ArmorMaxWalkSpeedPercent;
 
+                // First-equip bonus configuration
+                FirstEquipLightBonus = config.ArmorFirstEquipLightDurability;
+                FirstEquipChainBonus = config.ArmorFirstEquipChainDurability;
+                FirstEquipBrigandineBonus = config.ArmorFirstEquipBrigandineDurability;
+                FirstEquipScaleBonus = config.ArmorFirstEquipScaleDurability;
+                FirstEquipPlateBonus = config.ArmorFirstEquipPlateDurability;
+
+                FirstEquipWalkSpeedLightBonus = config.ArmorFirstEquipLightWalkSpeed;
+                FirstEquipWalkSpeedChainBonus = config.ArmorFirstEquipChainWalkSpeed;
+                FirstEquipWalkSpeedBrigandineBonus = config.ArmorFirstEquipBrigandineWalkSpeed;
+                FirstEquipWalkSpeedScaleBonus = config.ArmorFirstEquipScaleWalkSpeed;
+                FirstEquipWalkSpeedPlateBonus = config.ArmorFirstEquipPlateWalkSpeed;
+
+                // Optional armor features
+                EnableArmorHungerReduction = config.EnableArmorHungerReduction;
+                MaxArmorHungerReductionPercent = config.ArmorMaxHungerReductionPercent;
+                EnableArmorHealingBonus = config.EnableArmorHealingBonus;
+                MaxArmorHealingPercent = config.ArmorMaxHealingPercent;
+
                 ClothierRequiredUniqueClothes = config.ClothierRequiredUniqueClothes;
                 if (config.ClothierBlacklistedItems != null)
                 {
@@ -8138,6 +8347,23 @@ namespace SeraphLeveling
                 COQuarterstaffProficiencyMax = config.COQuarterstaffProficiencyMax;
                 COSteadyAimMax = config.COSteadyAimMax;
 
+                // Skill decay settings
+                EnableSkillDecay = config.EnableSkillDecay;
+                DecayGracePeriodDays = config.DecayGracePeriodDays;
+                DecayBasePointsPerDay = config.DecayBasePointsPerDay;
+                DecayMaxPointsPerLogin = config.DecayMaxPointsPerLogin;
+                DecayExemptSkills.Clear();
+                if (config.DecayExemptSkills != null)
+                {
+                    foreach (var skill in config.DecayExemptSkills)
+                    {
+                        if (!string.IsNullOrWhiteSpace(skill))
+                        {
+                            DecayExemptSkills.Add(skill.Trim().ToLowerInvariant());
+                        }
+                    }
+                }
+
                 // Debug settings
                 DebugLoggingEnabled = config.EnableDebugLogging;
                 if (DebugLoggingEnabled)
@@ -8145,11 +8371,166 @@ namespace SeraphLeveling
                     api.Logger.Warning("[SeraphLeveling] Debug logging is ENABLED - this can spam server logs!");
                 }
 
+                if (EnableSkillDecay)
+                {
+                    api.Logger.Notification($"[SeraphLeveling] Skill decay ENABLED: {DecayGracePeriodDays} day grace, {DecayBasePointsPerDay} base decay/day, max {DecayMaxPointsPerLogin}/login");
+                }
+
                 api.Logger.Notification("[SeraphLeveling] Config loaded from ModConfig/" + CONFIG_FILE_NAME);
             }
             catch (Exception ex)
             {
                 api.Logger.Error($"[SeraphLeveling] Failed to load config file: {ex.Message}. Using default values.");
+            }
+        }
+
+        // =========================================================================
+        // SKILL DECAY SYSTEM
+        // =========================================================================
+
+        /// <summary>
+        /// Calculate decay points based on days since last activity.
+        /// Uses triangular sum: Day 1 = base, Day 2 = 2*base, Day 3 = 3*base, etc.
+        /// </summary>
+        private static int CalculateDecayPoints(double lastActivityDay, double currentDay)
+        {
+            if (lastActivityDay <= 0) return 0; // No activity recorded yet, no decay
+            if (currentDay <= lastActivityDay) return 0; // No time passed
+
+            double daysSinceActivity = currentDay - lastActivityDay;
+            double daysAfterGrace = daysSinceActivity - DecayGracePeriodDays;
+
+            if (daysAfterGrace <= 0) return 0; // Still in grace period
+
+            // Triangular sum: 1 + 2 + 3 + ... + n = n*(n+1)/2
+            // Each day past grace loses (day number) * base points
+            int fullDays = (int)daysAfterGrace;
+            int totalDecay = 0;
+
+            for (int day = 1; day <= fullDays; day++)
+            {
+                totalDecay += day * DecayBasePointsPerDay;
+            }
+
+            // Cap at maximum per login
+            return Math.Min(totalDecay, DecayMaxPointsPerLogin);
+        }
+
+        /// <summary>
+        /// Apply skill decay to a player on join. Called before bonuses are applied.
+        /// </summary>
+        private void ApplySkillDecay(IServerPlayer player)
+        {
+            if (!EnableSkillDecay) return;
+            if (player?.Entity == null) return;
+
+            string playerUid = player.PlayerUID;
+            double currentDay = ServerApi.World.Calendar.TotalDays;
+
+            int totalDecayApplied = 0;
+
+            // Mining decay
+            if (!DecayExemptSkills.Contains("mining"))
+            {
+                if (MiningProgress.TryGetValue(playerUid, out var miningProg) && miningProg.TotalCredits > 0)
+                {
+                    int decay = CalculateDecayPoints(miningProg.LastActivityDay, currentDay);
+                    if (decay > 0)
+                    {
+                        int oldCredits = miningProg.TotalCredits;
+                        miningProg.TotalCredits = Math.Max(0, miningProg.TotalCredits - decay);
+                        int actualDecay = oldCredits - miningProg.TotalCredits;
+                        if (actualDecay > 0)
+                        {
+                            totalDecayApplied += actualDecay;
+                            pendingMiningProgressSave = true;
+                            ServerApi.Logger.Debug($"[SeraphLeveling] Mining decay: {actualDecay} credits for {player.PlayerName}");
+                        }
+                    }
+                }
+            }
+
+            // Melee decay
+            if (!DecayExemptSkills.Contains("melee"))
+            {
+                if (MeleeProgress.TryGetValue(playerUid, out var meleeProg) && meleeProg.TotalCredits > 0)
+                {
+                    int decay = CalculateDecayPoints(meleeProg.LastActivityDay, currentDay);
+                    if (decay > 0)
+                    {
+                        int oldCredits = meleeProg.TotalCredits;
+                        meleeProg.TotalCredits = Math.Max(0, meleeProg.TotalCredits - decay);
+                        int actualDecay = oldCredits - meleeProg.TotalCredits;
+                        if (actualDecay > 0)
+                        {
+                            totalDecayApplied += actualDecay;
+                            pendingMeleeProgressSave = true;
+                            ServerApi.Logger.Debug($"[SeraphLeveling] Melee decay: {actualDecay} credits for {player.PlayerName}");
+                        }
+                    }
+                }
+            }
+
+            // Ranged decay
+            if (!DecayExemptSkills.Contains("ranged"))
+            {
+                if (RangedProgress.TryGetValue(playerUid, out var rangedProg) && rangedProg.TotalCredits > 0)
+                {
+                    int decay = CalculateDecayPoints(rangedProg.LastActivityDay, currentDay);
+                    if (decay > 0)
+                    {
+                        int oldCredits = rangedProg.TotalCredits;
+                        rangedProg.TotalCredits = Math.Max(0, rangedProg.TotalCredits - decay);
+                        int actualDecay = oldCredits - rangedProg.TotalCredits;
+                        if (actualDecay > 0)
+                        {
+                            totalDecayApplied += actualDecay;
+                            pendingRangedProgressSave = true;
+                            ServerApi.Logger.Debug($"[SeraphLeveling] Ranged decay: {actualDecay} credits for {player.PlayerName}");
+                        }
+                    }
+                }
+            }
+
+            // Notify player if decay occurred
+            if (totalDecayApplied > 0)
+            {
+                player.SendMessage(GlobalConstants.GeneralChatGroup,
+                    $"Some skills have decayed due to lack of use (-{totalDecayApplied} total credits). Use them to regain your progress!",
+                    EnumChatType.Notification);
+            }
+        }
+
+        /// <summary>
+        /// Update the LastActivityDay for a skill when it's used.
+        /// </summary>
+        private static void UpdateSkillActivityDay(string playerUid, string skillType)
+        {
+            if (!EnableSkillDecay) return;
+            if (ServerApi == null) return;
+
+            double currentDay = ServerApi.World.Calendar.TotalDays;
+
+            switch (skillType)
+            {
+                case "mining":
+                    if (MiningProgress.TryGetValue(playerUid, out var miningProg))
+                    {
+                        miningProg.LastActivityDay = currentDay;
+                    }
+                    break;
+                case "melee":
+                    if (MeleeProgress.TryGetValue(playerUid, out var meleeProg))
+                    {
+                        meleeProg.LastActivityDay = currentDay;
+                    }
+                    break;
+                case "ranged":
+                    if (RangedProgress.TryGetValue(playerUid, out var rangedProg))
+                    {
+                        rangedProg.LastActivityDay = currentDay;
+                    }
+                    break;
             }
         }
 
@@ -8482,6 +8863,9 @@ namespace SeraphLeveling
             {
                 ApplyCOProficiencyBonus(attackerPlayer, proficiencyStat, proficiencyProgress.TotalCredits);
 
+                // Update negative trait remaining display based on all proficiencies
+                UpdateCONegativeTraitRemaining(attackerPlayer);
+
                 // Notify player of level up
                 float bonus = CalculateCOProficiencyBonus(proficiencyProgress.TotalCredits, GetCOProficiencyMax(proficiencyStat));
                 attackerPlayer.SendMessage(GlobalConstants.GeneralChatGroup,
@@ -8615,11 +8999,7 @@ namespace SeraphLeveling
                 // Clumsy Hands gives -0.3 to bows, crossbows, firearms (30 credits to cancel each)
                 int creditsToCancel = (int)(CO_CLUMSY_HANDS_PENALTY * 100); // 30
                 netBonus = CalculateCOProficiencyBonus(Math.Max(0, credits - creditsToCancel), maxBonus);
-
-                // Sync remaining penalty for UI
-                float remaining = Math.Max(0, CO_CLUMSY_HANDS_PENALTY - credits * 0.01f);
-                player.Entity.WatchedAttributes.SetFloat(WATCHED_CO_CLUMSY_HANDS_REMAINING, remaining);
-                player.Entity.WatchedAttributes.MarkPathDirty(WATCHED_CO_CLUMSY_HANDS_REMAINING);
+                // Note: Remaining penalty UI is updated by UpdateCONegativeTraitRemaining() after all proficiencies are applied
             }
             // Handle Weak Hand for ranged proficiencies (similar to Clumsy Hands)
             else if (hasWeakHand && isRanged)
@@ -8627,11 +9007,7 @@ namespace SeraphLeveling
                 // Weak Hand gives -0.3 to ranged proficiencies (30 credits to cancel each)
                 int creditsToCancel = (int)(CO_WEAK_HAND_PENALTY * 100); // 30
                 netBonus = CalculateCOProficiencyBonus(Math.Max(0, credits - creditsToCancel), maxBonus);
-
-                // Sync remaining penalty for UI
-                float remaining = Math.Max(0, CO_WEAK_HAND_PENALTY - credits * 0.01f);
-                player.Entity.WatchedAttributes.SetFloat(WATCHED_CO_WEAK_HAND_REMAINING, remaining);
-                player.Entity.WatchedAttributes.MarkPathDirty(WATCHED_CO_WEAK_HAND_REMAINING);
+                // Note: Remaining penalty UI is updated by UpdateCONegativeTraitRemaining() after all proficiencies are applied
             }
             // Handle Fear of Melee for melee proficiencies (tier-based)
             else if (hasFearOfMelee && !isRanged)
@@ -8640,11 +9016,7 @@ namespace SeraphLeveling
                 // This needs 100 credits to cancel (1 tier = 100 credits in our system)
                 int creditsToCancel = CO_FEAR_OF_MELEE_TIER_PENALTY * 100; // 100
                 netBonus = CalculateCOProficiencyBonus(Math.Max(0, credits - creditsToCancel), maxBonus);
-
-                // Sync remaining penalty for UI
-                int remainingTiers = Math.Max(0, CO_FEAR_OF_MELEE_TIER_PENALTY - credits / 100);
-                player.Entity.WatchedAttributes.SetInt(WATCHED_CO_FEAR_OF_MELEE_REMAINING, remainingTiers);
-                player.Entity.WatchedAttributes.MarkPathDirty(WATCHED_CO_FEAR_OF_MELEE_REMAINING);
+                // Note: Remaining penalty UI is updated by UpdateCONegativeTraitRemaining() after all proficiencies are applied
             }
             // Handle Nervous for piercing melee (spears, javelins) - tier-based
             else if (hasNervous && isPiercing)
@@ -8653,11 +9025,7 @@ namespace SeraphLeveling
                 // This needs 100 credits to cancel (1 tier = 100 credits in our system)
                 int creditsToCancel = CO_NERVOUS_TIER_PENALTY * 100; // 100
                 netBonus = CalculateCOProficiencyBonus(Math.Max(0, credits - creditsToCancel), maxBonus);
-
-                // Sync remaining penalty for UI
-                int remainingTiers = Math.Max(0, CO_NERVOUS_TIER_PENALTY - credits / 100);
-                player.Entity.WatchedAttributes.SetInt(WATCHED_CO_NERVOUS_REMAINING, remainingTiers);
-                player.Entity.WatchedAttributes.MarkPathDirty(WATCHED_CO_NERVOUS_REMAINING);
+                // Note: Remaining penalty UI is updated by UpdateCONegativeTraitRemaining() after all proficiencies are applied
             }
             else
             {
@@ -8672,6 +9040,115 @@ namespace SeraphLeveling
             string watchedKey = $"sitCO{proficiencyStat}Credits";
             player.Entity.WatchedAttributes.SetInt(watchedKey, credits);
             player.Entity.WatchedAttributes.MarkPathDirty(watchedKey);
+        }
+
+        /// <summary>
+        /// Update the remaining penalty display for CO negative traits.
+        /// This calculates the MAXIMUM remaining penalty across all affected proficiencies
+        /// to show the worst-case remaining penalty in the UI.
+        /// Should be called after all proficiency bonuses are applied.
+        /// </summary>
+        private static void UpdateCONegativeTraitRemaining(IServerPlayer player)
+        {
+            if (!IsCOCompatEnabled || player?.Entity == null) return;
+
+            string playerUid = player.PlayerUID;
+            var cache = GetCachedTraits(playerUid);
+            if (cache == null) return;
+
+            if (!COProgress.TryGetValue(playerUid, out var playerProgress)) return;
+
+            // Clumsy Hands: affects bows, crossbows, firearms, slings (all ranged)
+            if (cache.HasCOClumsyHands)
+            {
+                float maxRemaining = CO_CLUMSY_HANDS_PENALTY; // Start with full penalty
+                var rangedProficiencies = new[] { CO_BOWS_PROFICIENCY, CO_CROSSBOWS_PROFICIENCY, CO_FIREARMS_PROFICIENCY, CO_SLINGS_PROFICIENCY };
+
+                foreach (var prof in rangedProficiencies)
+                {
+                    if (playerProgress.Proficiencies.TryGetValue(prof, out var profData))
+                    {
+                        float remaining = Math.Max(0, CO_CLUMSY_HANDS_PENALTY - profData.TotalCredits * 0.01f);
+                        maxRemaining = Math.Max(maxRemaining, remaining);
+                    }
+                }
+
+                // Find the minimum remaining (most progress made on any proficiency)
+                float minRemaining = CO_CLUMSY_HANDS_PENALTY;
+                foreach (var prof in rangedProficiencies)
+                {
+                    if (playerProgress.Proficiencies.TryGetValue(prof, out var profData))
+                    {
+                        float remaining = Math.Max(0, CO_CLUMSY_HANDS_PENALTY - profData.TotalCredits * 0.01f);
+                        minRemaining = Math.Min(minRemaining, remaining);
+                    }
+                }
+
+                player.Entity.WatchedAttributes.SetFloat(WATCHED_CO_CLUMSY_HANDS_REMAINING, minRemaining);
+                player.Entity.WatchedAttributes.MarkPathDirty(WATCHED_CO_CLUMSY_HANDS_REMAINING);
+            }
+
+            // Weak Hand: similar to Clumsy Hands, affects ranged proficiencies
+            if (cache.HasCOWeakHand)
+            {
+                var rangedProficiencies = new[] { CO_BOWS_PROFICIENCY, CO_CROSSBOWS_PROFICIENCY, CO_FIREARMS_PROFICIENCY, CO_SLINGS_PROFICIENCY };
+
+                float minRemaining = CO_WEAK_HAND_PENALTY;
+                foreach (var prof in rangedProficiencies)
+                {
+                    if (playerProgress.Proficiencies.TryGetValue(prof, out var profData))
+                    {
+                        float remaining = Math.Max(0, CO_WEAK_HAND_PENALTY - profData.TotalCredits * 0.01f);
+                        minRemaining = Math.Min(minRemaining, remaining);
+                    }
+                }
+
+                player.Entity.WatchedAttributes.SetFloat(WATCHED_CO_WEAK_HAND_REMAINING, minRemaining);
+                player.Entity.WatchedAttributes.MarkPathDirty(WATCHED_CO_WEAK_HAND_REMAINING);
+            }
+
+            // Fear of Melee: affects all melee proficiencies (tier-based)
+            if (cache.HasCOFearOfMelee)
+            {
+                var meleeProficiencies = new[] {
+                    CO_ONE_HANDED_SWORDS_PROFICIENCY, CO_TWO_HANDED_SWORDS_PROFICIENCY,
+                    CO_SPEARS_PROFICIENCY, CO_JAVELINS_PROFICIENCY, CO_MACES_PROFICIENCY,
+                    CO_CLUBS_PROFICIENCY, CO_HALBERDS_PROFICIENCY, CO_AXES_PROFICIENCY,
+                    CO_QUARTERSTAFF_PROFICIENCY
+                };
+
+                int minRemainingTiers = CO_FEAR_OF_MELEE_TIER_PENALTY;
+                foreach (var prof in meleeProficiencies)
+                {
+                    if (playerProgress.Proficiencies.TryGetValue(prof, out var profData))
+                    {
+                        int remainingTiers = Math.Max(0, CO_FEAR_OF_MELEE_TIER_PENALTY - profData.TotalCredits / 100);
+                        minRemainingTiers = Math.Min(minRemainingTiers, remainingTiers);
+                    }
+                }
+
+                player.Entity.WatchedAttributes.SetInt(WATCHED_CO_FEAR_OF_MELEE_REMAINING, minRemainingTiers);
+                player.Entity.WatchedAttributes.MarkPathDirty(WATCHED_CO_FEAR_OF_MELEE_REMAINING);
+            }
+
+            // Nervous: affects piercing melee (spears, javelins) - tier-based
+            if (cache.HasCONervous)
+            {
+                var piercingProficiencies = new[] { CO_SPEARS_PROFICIENCY, CO_JAVELINS_PROFICIENCY };
+
+                int minRemainingTiers = CO_NERVOUS_TIER_PENALTY;
+                foreach (var prof in piercingProficiencies)
+                {
+                    if (playerProgress.Proficiencies.TryGetValue(prof, out var profData))
+                    {
+                        int remainingTiers = Math.Max(0, CO_NERVOUS_TIER_PENALTY - profData.TotalCredits / 100);
+                        minRemainingTiers = Math.Min(minRemainingTiers, remainingTiers);
+                    }
+                }
+
+                player.Entity.WatchedAttributes.SetInt(WATCHED_CO_NERVOUS_REMAINING, minRemainingTiers);
+                player.Entity.WatchedAttributes.MarkPathDirty(WATCHED_CO_NERVOUS_REMAINING);
+            }
         }
 
         /// <summary>
@@ -8880,6 +9357,9 @@ namespace SeraphLeveling
             {
                 ApplyCOSteadyAimBonus(player, playerProgress.SteadyAimCredits);
             }
+
+            // Update negative trait remaining display based on all proficiencies
+            UpdateCONegativeTraitRemaining(player);
         }
 
         /// <summary>
@@ -17134,22 +17614,22 @@ namespace SeraphLeveling
             AssertTrue("ARMOR-014", "Null input returns null", nullResult == null, "null", nullResult ?? "null");
 
             // ARMOR-015: First equip bonus - plate
-            AssertEqual("ARMOR-015", "Plate first equip bonus", SeraphLevelingModSystem.FIRST_EQUIP_PLATE_BONUS, SeraphLevelingModSystem.GetFirstEquipBonus("plate"));
+            AssertEqual("ARMOR-015", "Plate first equip bonus", SeraphLevelingModSystem.FirstEquipPlateBonus, SeraphLevelingModSystem.GetFirstEquipBonus("plate"));
 
             // ARMOR-016: First equip bonus - scale
-            AssertEqual("ARMOR-016", "Scale first equip bonus", SeraphLevelingModSystem.FIRST_EQUIP_SCALE_BONUS, SeraphLevelingModSystem.GetFirstEquipBonus("scale"));
+            AssertEqual("ARMOR-016", "Scale first equip bonus", SeraphLevelingModSystem.FirstEquipScaleBonus, SeraphLevelingModSystem.GetFirstEquipBonus("scale"));
 
             // ARMOR-017: First equip bonus - brigandine
-            AssertEqual("ARMOR-017", "Brigandine first equip bonus", SeraphLevelingModSystem.FIRST_EQUIP_BRIGANDINE_BONUS, SeraphLevelingModSystem.GetFirstEquipBonus("brigandine"));
+            AssertEqual("ARMOR-017", "Brigandine first equip bonus", SeraphLevelingModSystem.FirstEquipBrigandineBonus, SeraphLevelingModSystem.GetFirstEquipBonus("brigandine"));
 
             // ARMOR-018: First equip bonus - chain
-            AssertEqual("ARMOR-018", "Chain first equip bonus", SeraphLevelingModSystem.FIRST_EQUIP_CHAIN_BONUS, SeraphLevelingModSystem.GetFirstEquipBonus("chain"));
+            AssertEqual("ARMOR-018", "Chain first equip bonus", SeraphLevelingModSystem.FirstEquipChainBonus, SeraphLevelingModSystem.GetFirstEquipBonus("chain"));
 
             // ARMOR-019: First equip bonus - light (default)
-            AssertEqual("ARMOR-019", "Light first equip bonus", SeraphLevelingModSystem.FIRST_EQUIP_LIGHT_BONUS, SeraphLevelingModSystem.GetFirstEquipBonus("light"));
+            AssertEqual("ARMOR-019", "Light first equip bonus", SeraphLevelingModSystem.FirstEquipLightBonus, SeraphLevelingModSystem.GetFirstEquipBonus("light"));
 
             // ARMOR-020: Walk speed first equip bonus - plate
-            AssertEqual("ARMOR-020", "Plate walk speed bonus", SeraphLevelingModSystem.FIRST_EQUIP_WALKSPEED_PLATE_BONUS, SeraphLevelingModSystem.GetFirstEquipWalkSpeedBonus("plate"));
+            AssertEqual("ARMOR-020", "Plate walk speed bonus", SeraphLevelingModSystem.FirstEquipWalkSpeedPlateBonus, SeraphLevelingModSystem.GetFirstEquipWalkSpeedBonus("plate"));
 
             // ARMOR-021: Full armor code with game: prefix
             AssertEqual("ARMOR-021", "Game prefix handled", "plate", SeraphLevelingModSystem.GetArmorType("game:armor-body-plate-iron"));

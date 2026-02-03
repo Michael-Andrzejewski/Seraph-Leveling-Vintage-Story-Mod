@@ -62,6 +62,51 @@ namespace SeraphLeveling
 
         // Clothier progression
         public int ClothierRequiredUniqueClothes { get; set; } = 20;
+        /// <summary>
+        /// List of specific clothing item codes to exclude from Clothier progression.
+        /// Default excludes starting class outfits only (not Nadiyan or other variants).
+        /// Uses substring matching - items containing any blacklisted string are excluded.
+        /// </summary>
+        public string[] ClothierBlacklistedItems { get; set; } = new string[]
+        {
+            // Hunter starting outfit (8 items)
+            "clothes-upperbody-hunter-shirt",
+            "clothes-upperbodyover-hunter-coat",
+            "clothes-shoulder-hunter-poncho",
+            "clothes-lowerbody-hunter-leggings",
+            "clothes-foot-hunter-boots",
+            "clothes-hand-hunter-gloves",
+            "clothes-head-hunter-hood",
+            "clothes-face-hunter-mask",
+            // Tailor starting outfit (5 items)
+            "clothes-upperbody-tailor-blouse",
+            "clothes-foot-tailor-shoes",
+            "clothes-hand-tailor-gloves",
+            "clothes-waist-tailor-belt",
+            "clothes-shoulder-tailor-jacket",
+            // Malefactor starting outfit (5 items)
+            "clothes-shoulder-malefactor-cloak",
+            "clothes-foot-malefactor-boots",
+            "clothes-hand-malefactor-gloves",
+            "clothes-lowerbody-malefactor-trousers",
+            "clothes-neck-malefactor-pendant",
+            // Blackguard starting outfit (4 items)
+            "clothes-foot-blackguard-shoes",
+            "clothes-lowerbody-blackguard-leggings",
+            "clothes-upperbody-blackguard-shirt",
+            "clothes-waist-blackguard-belt",
+            // Clockmaker starting outfit (4 items)
+            "clothes-hand-clockmaker-wristguard",
+            "clothes-foot-clockmaker-shoes",
+            "clothes-upperbody-clockmaker-shirt",
+            "clothes-shoulder-clockmaker-apron",
+            // Commoner starting outfit (5 items)
+            "clothes-upperbody-commoner-shirt",
+            "clothes-upperbodyover-commoner-coat",
+            "clothes-lowerbody-commoner-trousers",
+            "clothes-foot-commoner-boots",
+            "clothes-hand-commoner-gloves"
+        };
 
         // Mender progression
         public int MenderBaseRepairsPerIncrement { get; set; } = 5;
@@ -99,7 +144,7 @@ namespace SeraphLeveling
         public int TechnicalRequiredTranslocatorRepairs { get; set; } = 5;
 
         // Hardy Health progression
-        public int HardyHealthMiningThreshold { get; set; } = 110;
+        public int HardyHealthMiningThreshold { get; set; } = 10;
         public int HardyHealthArmorDurabilityThreshold { get; set; } = 10;
         public int HardyHealthBonus { get; set; } = 5;
 
@@ -1481,6 +1526,27 @@ namespace SeraphLeveling
 
         // Clothier progression configuration
         public static int ClothierRequiredUniqueClothes = 20; // Number of unique clothes to unlock sewing kit
+        public static string[] ClothierBlacklistedItems = new string[] {
+            // Hunter
+            "clothes-upperbody-hunter-shirt", "clothes-upperbodyover-hunter-coat", "clothes-shoulder-hunter-poncho",
+            "clothes-lowerbody-hunter-leggings", "clothes-foot-hunter-boots", "clothes-hand-hunter-gloves",
+            "clothes-head-hunter-hood", "clothes-face-hunter-mask",
+            // Tailor
+            "clothes-upperbody-tailor-blouse", "clothes-foot-tailor-shoes", "clothes-hand-tailor-gloves",
+            "clothes-waist-tailor-belt", "clothes-shoulder-tailor-jacket",
+            // Malefactor
+            "clothes-shoulder-malefactor-cloak", "clothes-foot-malefactor-boots", "clothes-hand-malefactor-gloves",
+            "clothes-lowerbody-malefactor-trousers", "clothes-neck-malefactor-pendant",
+            // Blackguard
+            "clothes-foot-blackguard-shoes", "clothes-lowerbody-blackguard-leggings",
+            "clothes-upperbody-blackguard-shirt", "clothes-waist-blackguard-belt",
+            // Clockmaker
+            "clothes-hand-clockmaker-wristguard", "clothes-foot-clockmaker-shoes",
+            "clothes-upperbody-clockmaker-shirt", "clothes-shoulder-clockmaker-apron",
+            // Commoner
+            "clothes-upperbody-commoner-shirt", "clothes-upperbodyover-commoner-coat",
+            "clothes-lowerbody-commoner-trousers", "clothes-foot-commoner-boots", "clothes-hand-commoner-gloves"
+        };
 
         // Vanilla Clothier trait (Tailor exclusive)
         public const int VANILLA_CLOTHIER_BONUS = 0; // No vanilla bonus, this is unlock-based
@@ -1665,7 +1731,7 @@ namespace SeraphLeveling
         public const string HARDY_HEALTH_TRAIT_CODE = "sithardyhealthmastery";
 
         // Hardy health unlock thresholds
-        public static int HardyHealthMiningThreshold = 110;          // 110% mining speed bonus required
+        public static int HardyHealthMiningThreshold = 10;           // 10% mining speed bonus required (10 credits)
         public static int HardyHealthArmorDurabilityThreshold = 10;  // 10% armor durability bonus required
         public static int HardyHealthBonus = 5;                      // +5 HP bonus
 
@@ -2869,6 +2935,10 @@ namespace SeraphLeveling
 
             // Apply the bonus
             int bonusPercent = ApplyMiningBonus(player, newCredits.Value);
+
+            // Check for trait unlocks that depend on mining level
+            CheckHardyHealthUnlock(player);
+            CheckClaustrophobicRemoval(player);
 
             return TextCommandResult.Success($"Mining credits set to {newCredits.Value} (+{bonusPercent}% mining speed). Per-pickaxe progress reset.");
         }
@@ -4792,6 +4862,10 @@ namespace SeraphLeveling
                                 ServerApi.Logger.Debug($"[SeraphLeveling] Player {player.PlayerName} first-time equipped {itemCode}, +{firstEquipBonus}% durability bonus");
 
                                 ApplyArmorBonusesStatic(player, armorProgress.TotalDurabilityCredits, armorProgress.TotalWalkSpeedCredits);
+
+                                // Check for trait unlocks that depend on armor durability
+                                CheckHardyHealthUnlock(player);
+                                CheckMercilessUnlock(player);
                             }
                         }
                     }
@@ -4883,6 +4957,10 @@ namespace SeraphLeveling
                                     Lang.Get("seraphleveling:message-armor-first-equip-both", actualDurabilityBonus, actualWalkSpeedBonus),
                                     EnumChatType.Notification);
                             }
+
+                            // Check for trait unlocks that depend on armor durability
+                            CheckHardyHealthUnlock(player);
+                            CheckMercilessUnlock(player);
                         }
                     }
 
@@ -6278,7 +6356,12 @@ namespace SeraphLeveling
         {
             if (string.IsNullOrEmpty(itemCode)) return null;
 
-            string codeToCheck = itemCode.StartsWith("game:") ? itemCode.Substring(5) : itemCode;
+            // Remove namespace prefix for pattern matching
+            string codeToCheck = itemCode;
+            if (itemCode.Contains(":"))
+            {
+                codeToCheck = itemCode.Substring(itemCode.IndexOf(':') + 1);
+            }
 
             // Check for sword types
             if (codeToCheck.StartsWith("sword-") ||
@@ -6299,6 +6382,37 @@ namespace SeraphLeveling
             if (codeToCheck.StartsWith("spear-"))
             {
                 return itemCode; // Return full code for per-weapon tracking
+            }
+
+            // Ancient Armory mod weapons
+            // aa-blade: gladius, arming, claymore, sabre, longsword, falchion (swords)
+            if (codeToCheck.StartsWith("aa-blade-"))
+            {
+                return itemCode;
+            }
+
+            // aa-axe: bearded, battle, bardiche (battle axes - melee weapons)
+            if (codeToCheck.StartsWith("aa-axe-"))
+            {
+                return itemCode;
+            }
+
+            // aa-club: flanged, morningstar, spiked, warhammer (maces)
+            if (codeToCheck.StartsWith("aa-club-"))
+            {
+                return itemCode;
+            }
+
+            // aa-knife: dagger, stiletto, khanjar, baselard (combat knives)
+            if (codeToCheck.StartsWith("aa-knife-"))
+            {
+                return itemCode;
+            }
+
+            // aa-spear: boar, voulge, fork, ranseur (polearms)
+            if (codeToCheck.StartsWith("aa-spear-"))
+            {
+                return itemCode;
             }
 
             return null;
@@ -7948,6 +8062,10 @@ namespace SeraphLeveling
                 MaxArmorWalkSpeedPercent = config.ArmorMaxWalkSpeedPercent;
 
                 ClothierRequiredUniqueClothes = config.ClothierRequiredUniqueClothes;
+                if (config.ClothierBlacklistedItems != null)
+                {
+                    ClothierBlacklistedItems = config.ClothierBlacklistedItems;
+                }
 
                 BaseMenderRepairsPerIncrement = config.MenderBaseRepairsPerIncrement;
                 MenderIncrementStep = config.MenderIncrementStep;
@@ -8184,6 +8302,7 @@ namespace SeraphLeveling
 
             // Two-Handed Swords (check before one-handed)
             // Combat Armory uses "sword-great-" and "sword-long-" formats
+            // Ancient Armory uses "aa-blade-claymore-" and "aa-blade-longsword-" formats
             if (lowerCode.StartsWith("greatsword-") || lowerCode.StartsWith("zweihander-") ||
                 lowerCode.StartsWith("claymore-") || lowerCode.StartsWith("flamberge-") ||
                 lowerCode.StartsWith("montante-") || lowerCode.StartsWith("nodachi-") ||
@@ -8192,12 +8311,15 @@ namespace SeraphLeveling
                 lowerCode.StartsWith("sword-great-") || // Combat Armory greatswords
                 lowerCode.StartsWith("sword-long-") ||  // Combat Armory longswords
                 lowerCode.StartsWith("longsword-") ||   // Standard longsword prefix
+                lowerCode.StartsWith("aa-blade-claymore-") ||  // Ancient Armory claymore
+                lowerCode.StartsWith("aa-blade-longsword-") || // Ancient Armory longsword
                 (lowerCode.Contains("twohanded") && lowerCode.Contains("sword")) ||
                 (lowerCode.Contains("2h") && lowerCode.Contains("sword")))
                 return (CO_TWO_HANDED_SWORDS_PROFICIENCY, itemCode);
 
             // One-Handed Swords
             // Note: sword-long- and longsword- are handled above as two-handed
+            // Ancient Armory: aa-blade-gladius, aa-blade-arming, aa-blade-sabre, aa-blade-falchion, aa-knife-*
             if (lowerCode.StartsWith("sword-") || lowerCode.StartsWith("blade-") ||
                 lowerCode.StartsWith("shortsword-") || lowerCode.StartsWith("sword-short-") ||
                 lowerCode.StartsWith("sword-arming-") || // Combat Armory arming swords
@@ -8206,13 +8328,20 @@ namespace SeraphLeveling
                 lowerCode.StartsWith("cutlass-") || lowerCode.StartsWith("falx-") ||
                 lowerCode.StartsWith("falchion-") || lowerCode.StartsWith("dagger-") ||
                 lowerCode.StartsWith("knife-") || lowerCode.StartsWith("kopis-") ||
-                lowerCode.StartsWith("gladius-") || lowerCode.StartsWith("messer-"))
+                lowerCode.StartsWith("gladius-") || lowerCode.StartsWith("messer-") ||
+                lowerCode.StartsWith("aa-blade-gladius-") ||   // Ancient Armory gladius
+                lowerCode.StartsWith("aa-blade-arming-") ||    // Ancient Armory arming sword
+                lowerCode.StartsWith("aa-blade-sabre-") ||     // Ancient Armory sabre
+                lowerCode.StartsWith("aa-blade-falchion-") ||  // Ancient Armory falchion
+                lowerCode.StartsWith("aa-knife-"))             // Ancient Armory knives (dagger, stiletto, khanjar, baselard)
                 return (CO_ONE_HANDED_SWORDS_PROFICIENCY, itemCode);
 
             // Halberds (polearms with axe heads)
+            // Ancient Armory: aa-spear-voulge is a halberd-type weapon
             if (lowerCode.StartsWith("halberd-") || lowerCode.StartsWith("poleaxe-") ||
                 lowerCode.StartsWith("glaive-") || lowerCode.StartsWith("bardiche-") ||
-                lowerCode.StartsWith("voulge-") || lowerCode.StartsWith("guisarme-"))
+                lowerCode.StartsWith("voulge-") || lowerCode.StartsWith("guisarme-") ||
+                lowerCode.StartsWith("aa-spear-voulge-"))  // Ancient Armory voulge
                 return (CO_HALBERDS_PROFICIENCY, itemCode);
 
             // Quarterstaff
@@ -8221,8 +8350,10 @@ namespace SeraphLeveling
                 return (CO_QUARTERSTAFF_PROFICIENCY, itemCode);
 
             // Maces
+            // Ancient Armory: aa-club-* (flanged, morningstar, spiked, warhammer)
             if (lowerCode.StartsWith("mace-") || lowerCode.StartsWith("morningstar-") ||
-                lowerCode.StartsWith("flail-") || lowerCode.StartsWith("warhammer-"))
+                lowerCode.StartsWith("flail-") || lowerCode.StartsWith("warhammer-") ||
+                lowerCode.StartsWith("aa-club-"))  // Ancient Armory clubs/maces
                 return (CO_MACES_PROFICIENCY, itemCode);
 
             // Clubs
@@ -8231,8 +8362,10 @@ namespace SeraphLeveling
                 return (CO_CLUBS_PROFICIENCY, itemCode);
 
             // Axes (combat axes, not tool axes)
+            // Ancient Armory: aa-axe-* (bearded, battle, bardiche)
             if (lowerCode.StartsWith("battleaxe-") || lowerCode.StartsWith("waraxe-") ||
                 lowerCode.StartsWith("handaxe-") || lowerCode.StartsWith("hatchet-") ||
+                lowerCode.StartsWith("aa-axe-") ||  // Ancient Armory battle axes
                 (lowerCode.StartsWith("axe-") && !lowerCode.Contains("pickaxe")))
                 return (CO_AXES_PROFICIENCY, itemCode);
 
@@ -8245,8 +8378,12 @@ namespace SeraphLeveling
                 return (CO_JAVELINS_PROFICIENCY, itemCode);
 
             // Spears (melee)
+            // Ancient Armory: aa-spear-boar, aa-spear-fork, aa-spear-ranseur (but NOT voulge - that's a halberd)
             if (lowerCode.StartsWith("spear-") || lowerCode.StartsWith("pike-") ||
-                lowerCode.StartsWith("lance-") || lowerCode.StartsWith("trident-"))
+                lowerCode.StartsWith("lance-") || lowerCode.StartsWith("trident-") ||
+                lowerCode.StartsWith("aa-spear-boar-") ||     // Ancient Armory boar spear
+                lowerCode.StartsWith("aa-spear-fork-") ||     // Ancient Armory fork
+                lowerCode.StartsWith("aa-spear-ranseur-"))    // Ancient Armory ranseur
                 return (CO_SPEARS_PROFICIENCY, itemCode);
 
             // Bows (standard - after crossbows check)
@@ -9237,12 +9374,25 @@ namespace SeraphLeveling
         }
 
         /// <summary>
-        /// Check if an item code represents clothing (not armor).
+        /// Check if an item code represents clothing (not armor) and is not blacklisted.
+        /// Starting class outfits are blacklisted by default to prevent easy Clothier progression.
         /// </summary>
         private static bool IsClothingItem(string itemCode)
         {
             if (string.IsNullOrEmpty(itemCode)) return false;
             string lowerCode = itemCode.ToLowerInvariant();
+
+            // Check if item is blacklisted (starting class outfits)
+            if (ClothierBlacklistedItems != null)
+            {
+                foreach (string pattern in ClothierBlacklistedItems)
+                {
+                    if (!string.IsNullOrEmpty(pattern) && lowerCode.Contains(pattern.ToLowerInvariant()))
+                    {
+                        return false;
+                    }
+                }
+            }
 
             // Clothing items include clothes, not armor
             if (lowerCode.Contains("clothes-")) return true;
@@ -12156,6 +12306,27 @@ namespace SeraphLeveling
 
             // Clothier defaults
             ClothierRequiredUniqueClothes = 20;
+            ClothierBlacklistedItems = new string[] {
+                // Hunter
+                "clothes-upperbody-hunter-shirt", "clothes-upperbodyover-hunter-coat", "clothes-shoulder-hunter-poncho",
+                "clothes-lowerbody-hunter-leggings", "clothes-foot-hunter-boots", "clothes-hand-hunter-gloves",
+                "clothes-head-hunter-hood", "clothes-face-hunter-mask",
+                // Tailor
+                "clothes-upperbody-tailor-blouse", "clothes-foot-tailor-shoes", "clothes-hand-tailor-gloves",
+                "clothes-waist-tailor-belt", "clothes-shoulder-tailor-jacket",
+                // Malefactor
+                "clothes-shoulder-malefactor-cloak", "clothes-foot-malefactor-boots", "clothes-hand-malefactor-gloves",
+                "clothes-lowerbody-malefactor-trousers", "clothes-neck-malefactor-pendant",
+                // Blackguard
+                "clothes-foot-blackguard-shoes", "clothes-lowerbody-blackguard-leggings",
+                "clothes-upperbody-blackguard-shirt", "clothes-waist-blackguard-belt",
+                // Clockmaker
+                "clothes-hand-clockmaker-wristguard", "clothes-foot-clockmaker-shoes",
+                "clothes-upperbody-clockmaker-shirt", "clothes-shoulder-clockmaker-apron",
+                // Commoner
+                "clothes-upperbody-commoner-shirt", "clothes-upperbodyover-commoner-coat",
+                "clothes-lowerbody-commoner-trousers", "clothes-foot-commoner-boots", "clothes-hand-commoner-gloves"
+            };
 
             // Mender defaults
             BaseMenderRepairsPerIncrement = 5;
@@ -12193,7 +12364,7 @@ namespace SeraphLeveling
             TechnicalRequiredTranslocatorRepairs = 5;
 
             // Hardy Health defaults
-            HardyHealthMiningThreshold = 110;
+            HardyHealthMiningThreshold = 10;
             HardyHealthArmorDurabilityThreshold = 10;
             HardyHealthBonus = 5;
 
@@ -14445,13 +14616,16 @@ namespace SeraphLeveling
                     characterSystemInstance = clientApi.ModLoader.GetModSystem(characterSystemType.FullName);
                 }
 
-                // Remove the vanilla CharacterSystem's trait tab handler
+                // Remove the vanilla CharacterSystem's trait tab handler and track its position
                 Action<GuiComposer> handlerToRemove = null;
-                foreach (var handler in charDlg.RenderTabHandlers)
+                int handlerIndex = -1;
+                for (int i = 0; i < charDlg.RenderTabHandlers.Count; i++)
                 {
+                    var handler = charDlg.RenderTabHandlers[i];
                     if (handler.Target?.ToString()?.Contains("CharacterSystem") == true)
                     {
                         handlerToRemove = handler;
+                        handlerIndex = i;
                         break;
                     }
                 }
@@ -14459,11 +14633,13 @@ namespace SeraphLeveling
                 if (handlerToRemove != null)
                 {
                     charDlg.RenderTabHandlers.Remove(handlerToRemove);
-                    clientApi.Logger.Debug("[SeraphLeveling] Removed vanilla CharacterSystem trait tab handler");
+                    clientApi.Logger.Debug("[SeraphLeveling] Removed vanilla CharacterSystem trait tab handler at index {0}", handlerIndex);
                 }
 
-                // Add our scrollable trait tab handler
-                charDlg.RenderTabHandlers.Add(ComposeTraitsTab);
+                // Insert our scrollable trait tab handler at the same position (or at index 1 if not found)
+                int insertIndex = handlerIndex >= 0 ? handlerIndex : Math.Min(1, charDlg.RenderTabHandlers.Count);
+                charDlg.RenderTabHandlers.Insert(insertIndex, ComposeTraitsTab);
+                clientApi.Logger.Debug("[SeraphLeveling] Inserted our trait tab handler at index {0}", insertIndex);
                 hasHookedDialog = true;
 
                 clientApi.Logger.Notification("[SeraphLeveling] Successfully hooked into character dialog for scrollable traits");
@@ -17246,6 +17422,18 @@ namespace SeraphLeveling
         {
             if (string.IsNullOrEmpty(itemCode)) return false;
             string lowerCode = itemCode.ToLowerInvariant();
+
+            // Check if item is blacklisted (starting class outfits)
+            if (SeraphLevelingModSystem.ClothierBlacklistedItems != null)
+            {
+                foreach (string pattern in SeraphLevelingModSystem.ClothierBlacklistedItems)
+                {
+                    if (!string.IsNullOrEmpty(pattern) && lowerCode.Contains(pattern.ToLowerInvariant()))
+                    {
+                        return false;
+                    }
+                }
+            }
 
             if (lowerCode.Contains("clothes-")) return true;
             if (lowerCode.Contains("shirt-")) return true;

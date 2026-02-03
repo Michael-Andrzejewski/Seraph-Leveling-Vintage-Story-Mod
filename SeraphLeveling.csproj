@@ -31,6 +31,12 @@
   </ItemGroup>
 
   <Target Name="Package" AfterTargets="PostBuildEvent">
+    <!-- Read version from modinfo.json -->
+    <PropertyGroup>
+      <ModInfoContent>$([System.IO.File]::ReadAllText('$(ProjectDir)modinfo.json'))</ModInfoContent>
+      <ModVersion>$([System.Text.RegularExpressions.Regex]::Match($(ModInfoContent), '"version":\s*"([^"]+)"').Groups[1].Value)</ModVersion>
+      <ModZipName>SeraphLeveling_$(ModVersion).zip</ModZipName>
+    </PropertyGroup>
     <ItemGroup>
       <PackageFiles Include="$(TargetPath)" />
       <PackageFiles Include="modinfo.json" />
@@ -42,11 +48,11 @@
       <AssetFiles Include="$(ProjectDir)assets\**\*.*" />
     </ItemGroup>
     <Copy SourceFiles="@(AssetFiles)" DestinationFiles="@(AssetFiles->'$(ProjectDir)bin\$(Configuration)\$(TargetFramework)\mod\assets\%(RecursiveDir)%(Filename)%(Extension)')" />
-    <!-- Create zip -->
-    <ZipDirectory SourceDirectory="$(ProjectDir)bin\$(Configuration)\$(TargetFramework)\mod\" DestinationFile="$(ProjectDir)bin\$(Configuration)\$(TargetFramework)\SeraphLeveling.zip" Overwrite="true" />
+    <!-- Create zip with version in filename -->
+    <ZipDirectory SourceDirectory="$(ProjectDir)bin\$(Configuration)\$(TargetFramework)\mod\" DestinationFile="$(ProjectDir)bin\$(Configuration)\$(TargetFramework)\$(ModZipName)" Overwrite="true" />
     <!-- Auto-deploy to Vintagestory Mods folder -->
-    <Copy SourceFiles="$(ProjectDir)bin\$(Configuration)\$(TargetFramework)\SeraphLeveling.zip" DestinationFolder="$(APPDATA)\VintagestoryData\Mods\" />
-    <Message Importance="high" Text="Deployed SeraphLeveling.zip to $(APPDATA)\VintagestoryData\Mods\" />
+    <Copy SourceFiles="$(ProjectDir)bin\$(Configuration)\$(TargetFramework)\$(ModZipName)" DestinationFolder="$(APPDATA)\VintagestoryData\Mods\" />
+    <Message Importance="high" Text="Deployed $(ModZipName) to $(APPDATA)\VintagestoryData\Mods\" />
   </Target>
 
 </Project>

@@ -84,11 +84,35 @@ Each pickaxe type tracks progress independently, encouraging use of many differe
 **Max bonus**: 50% | **Base increment**: 100 damage | **Scaling**: +100 per credit
 
 ### Qualifying Weapons
-- Swords (`sword-`, `blade-`, `longsword-`, `shortsword-`)
-- Falx (`falx-`)
-- Spears (`spear-`)
-- Quarterstaves (`quarterstaff-`, `staff-`, `bo-`, `bo-staff`)
-- Ancient Armory (`aa-blade-`, `aa-axe-`, `aa-club-`, `aa-knife-`, `aa-spear-`)
+
+**Swords (one-handed):**
+- Standard: `sword-`, `blade-`, `shortsword-`, `sword-short-`, `sword-arming-`
+- Curved: `saber-`, `sabre-`, `scimitar-`, `cutlass-`, `falx-`, `falchion-`, `kopis-`
+- Thrusting: `rapier-`, `gladius-`, `messer-`
+
+**Swords (two-handed):**
+- `greatsword-`, `zweihander-`, `claymore-`, `flamberge-`, `montante-`, `nodachi-`
+- `longsword-`, `sword-great-`, `sword-long-`, `2hsword-`, `twohandedsword-`
+
+**Daggers/Knives:**
+- `dagger-`, `knife-`, `stiletto-`, `khanjar-`, `baselard-`, `dirk-`, `tanto-`, `kukri-`
+
+**Polearms:**
+- Spears: `spear-`, `pike-`, `lance-`, `trident-`, `pilum-`, `sarissa-`
+- Javelins: `javelin-`, `throwing-spear-`, `dart-`, `plumbata-`
+- Halberds: `halberd-`, `poleaxe-`, `glaive-`, `bardiche-`, `voulge-`, `guisarme-`, `billhook-`, `partisan-`, `naginata-`
+- Staves: `quarterstaff-`, `staff-`, `bo-`
+
+**Blunt Weapons:**
+- Maces: `mace-`, `morningstar-`, `flail-`, `warhammer-`, `maul-`, `hammer-`
+- Clubs: `club-`, `cudgel-`, `baton-`, `truncheon-`, `shillelagh-`
+
+**Axes (combat):**
+- `battleaxe-`, `waraxe-`, `handaxe-`, `hatchet-`, `tomahawk-`, `francisca-`
+- `dane-axe-`, `broadaxe-`, `axe-` (excludes pickaxes)
+
+**Ancient Armory:**
+- `aa-blade-`, `aa-axe-`, `aa-club-`, `aa-knife-`, `aa-spear-`
 
 ### Vanilla Interaction
 - Soldier trait (Blackguard): can earn up to 20% more (50% cap)
@@ -472,7 +496,7 @@ Auto-enabled when AA mod detected. All AA weapons qualify for Soldier trait.
 
 ## Skill Decay (Optional)
 
-Skills can decay over time when not used. **Disabled by default.**
+Skills can decay over time when not used. **Disabled by default.** Decay is checked **online only** — once per in-game day while the player is connected. Offline players are never penalized.
 
 ### Configuration
 
@@ -481,27 +505,57 @@ Skills can decay over time when not used. **Disabled by default.**
   "EnableSkillDecay": false,
   "DecayGracePeriodDays": 1.0,
   "DecayBasePointsPerDay": 10,
-  "DecayMaxPointsPerLogin": 100,
-  "DecayExemptSkills": []
+  "DecayMaxPointsPerDay": 100,
+  "DecayExemptSkills": [],
+  "DecayGracePeriodOverrides": {
+    "walking": 2.0, "hunger": 2.0, "furtive": 2.0, "armor": 2.0,
+    "mender": 3.0, "resourceful": 3.0,
+    "forager": 5.0, "pilferer": 5.0, "precise": 5.0
+  },
+  "DecayBasePointsOverrides": {
+    "walking": 5, "hunger": 5, "furtive": 5, "armor": 5,
+    "mender": 3, "resourceful": 3,
+    "forager": 2, "pilferer": 2, "precise": 2
+  },
+  "DecayMaxPointsOverrides": {
+    "walking": 50, "hunger": 50, "furtive": 50, "armor": 50,
+    "mender": 30, "resourceful": 30,
+    "forager": 20, "pilferer": 20, "precise": 20
+  }
 }
 ```
 
 ### How It Works
 
-1. **Grace Period**: After last skill use, no decay occurs for `DecayGracePeriodDays` (in-game days)
-2. **Triangular Decay**: After grace period, decay increases each day
-   - Day 1 past grace: -10 credits (base)
-   - Day 2 past grace: -20 credits
-   - Day 3 past grace: -30 credits
-   - Total after 3 days: 60 credits lost
-3. **Max Per Login**: Capped at `DecayMaxPointsPerLogin` per session to prevent total loss after long absences
-4. **Activity Updates**: Using a skill resets its decay timer
+1. **Online-Only**: Decay is checked once per in-game day while the player is online. No decay occurs while offline.
+2. **Grace Period**: After last skill use, no decay occurs for the grace period (in-game days). Per-skill overrides allow different grace periods.
+3. **Triangular Decay**: After grace period, decay increases each consecutive inactive day:
+   - Day 1 past grace: 1 × base points
+   - Day 2 past grace: 2 × base points
+   - Day 3 past grace: 3 × base points
+4. **Max Per Day**: Capped at max points per day to prevent catastrophic loss
+5. **Activity Updates**: Using a skill resets its decay timer
+6. **Per-Skill Rates**: Different skills can have different grace periods and decay rates via override dictionaries. Skills not in override dicts use the global defaults.
 
-### Affected Skills
+### Affected Skills (All 13 Progression Skills)
 
-- `mining` - Hardy trait (mining speed)
-- `melee` - Soldier trait (melee damage)
-- `ranged` - Focused trait (ranged damage/accuracy/distance)
+| Skill | Key | Default Grace | Default Base | Default Max |
+|-------|-----|---------------|-------------|------------|
+| Mining | `mining` | 1.0 | 10 | 100 |
+| Melee | `melee` | 1.0 | 10 | 100 |
+| Ranged | `ranged` | 1.0 | 10 | 100 |
+| Walking | `walking` | 2.0* | 5* | 50* |
+| Hunger | `hunger` | 2.0* | 5* | 50* |
+| Armor | `armor` | 2.0* | 5* | 50* |
+| Furtive | `furtive` | 2.0* | 5* | 50* |
+| Mender | `mender` | 3.0* | 3* | 30* |
+| Resourceful | `resourceful` | 3.0* | 3* | 30* |
+| Pilferer | `pilferer` | 5.0* | 2* | 20* |
+| Forager | `forager` | 5.0* | 2* | 20* |
+| Precise | `precise` | 5.0* | 2* | 20* |
+| CO Proficiency | `coproficiency` | 1.0 | 10 | 100 |
+
+\* = via per-skill override (uses global default if override removed)
 
 ### Exempt Skills
 
@@ -514,5 +568,45 @@ Add skill names to `DecayExemptSkills` array to prevent decay:
 
 ### Notification
 
-Players are notified on login if any skills decayed:
-> "Some skills have decayed due to lack of use (-X total credits). Use them to regain your progress!"
+Players are notified in real-time when skills decay (while online):
+> "Skills decayed due to inactivity (-X total credits). Use them to regain your progress!"
+
+---
+
+## Sleep Buff (Optional)
+
+Sleeping in a bed grants an XP multiplier buff. **Disabled by default.**
+
+### Configuration
+
+```json
+{
+  "EnableSleepBuff": false,
+  "SleepBuffLinenBedMultiplier": 2.0,
+  "SleepBuffHayBedMultiplier": 1.5,
+  "SleepBuffDurationDays": 1.0
+}
+```
+
+### How It Works
+
+1. **Bed Quality Matters**: Better beds give higher multipliers
+   - Linen beds and old beds: 2x XP multiplier
+   - Hay beds: 1.5x XP multiplier
+2. **Duration**: Buff lasts for `SleepBuffDurationDays` in-game days (default: 1 day)
+3. **Notification**: Players are notified when they receive the buff:
+   > "Well rested! Skill XP x2 for the next 1 day(s) from sleeping in a comfortable bed."
+
+### Affected Skills
+
+The sleep buff multiplies XP gain for these progression systems:
+- Mining (block points)
+- Melee damage
+- Ranged damage
+- Walking distance
+- Sneaking distance (Furtive)
+- Hunger time tracking
+
+### Buff Expiration
+
+The buff expires after the configured duration. It does **not** persist across server restarts - only the in-game time matters.

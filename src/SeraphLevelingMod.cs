@@ -248,15 +248,71 @@ namespace SeraphLeveling
         public int DecayBasePointsPerDay { get; set; } = 10;
 
         /// <summary>
-        /// Maximum total decay points applied per login.
-        /// Prevents losing all progress after long absences.
+        /// Maximum total decay points applied per day.
+        /// Prevents losing all progress after long inactivity periods.
         /// </summary>
-        public int DecayMaxPointsPerLogin { get; set; } = 100;
+        public int DecayMaxPointsPerDay { get; set; } = 100;
 
         /// <summary>
-        /// Skills exempt from decay. Valid values: mining, melee, ranged, coproficiency
+        /// Skills exempt from decay. Valid values: mining, melee, ranged, walking, hunger, armor,
+        /// mender, pilferer, resourceful, forager, furtive, precise, coproficiency
         /// </summary>
         public string[] DecayExemptSkills { get; set; } = Array.Empty<string>();
+
+        /// <summary>
+        /// Per-skill grace period overrides (in-game days). Skills not listed use DecayGracePeriodDays.
+        /// </summary>
+        public Dictionary<string, double> DecayGracePeriodOverrides { get; set; } = new Dictionary<string, double>
+        {
+            { "walking", 2.0 }, { "hunger", 2.0 }, { "furtive", 2.0 }, { "armor", 2.0 },
+            { "mender", 3.0 }, { "resourceful", 3.0 },
+            { "forager", 5.0 }, { "pilferer", 5.0 }, { "precise", 5.0 }
+        };
+
+        /// <summary>
+        /// Per-skill base decay points per day overrides. Skills not listed use DecayBasePointsPerDay.
+        /// </summary>
+        public Dictionary<string, int> DecayBasePointsOverrides { get; set; } = new Dictionary<string, int>
+        {
+            { "walking", 5 }, { "hunger", 5 }, { "furtive", 5 }, { "armor", 5 },
+            { "mender", 3 }, { "resourceful", 3 },
+            { "forager", 2 }, { "pilferer", 2 }, { "precise", 2 }
+        };
+
+        /// <summary>
+        /// Per-skill max decay points per day overrides. Skills not listed use DecayMaxPointsPerDay.
+        /// </summary>
+        public Dictionary<string, int> DecayMaxPointsOverrides { get; set; } = new Dictionary<string, int>
+        {
+            { "walking", 50 }, { "hunger", 50 }, { "furtive", 50 }, { "armor", 50 },
+            { "mender", 30 }, { "resourceful", 30 },
+            { "forager", 20 }, { "pilferer", 20 }, { "precise", 20 }
+        };
+
+        // =========================================================================
+        // SLEEP BUFF SETTINGS
+        // =========================================================================
+
+        /// <summary>
+        /// Enable XP multiplier buff after sleeping.
+        /// Disabled by default.
+        /// </summary>
+        public bool EnableSleepBuff { get; set; } = false;
+
+        /// <summary>
+        /// XP multiplier when sleeping in a linen or old bed.
+        /// </summary>
+        public float SleepBuffLinenBedMultiplier { get; set; } = 2.0f;
+
+        /// <summary>
+        /// XP multiplier when sleeping in a hay bed.
+        /// </summary>
+        public float SleepBuffHayBedMultiplier { get; set; } = 1.5f;
+
+        /// <summary>
+        /// Duration of the sleep buff in in-game days.
+        /// </summary>
+        public double SleepBuffDurationDays { get; set; } = 1.0;
 
         // =========================================================================
         // DEBUG SETTINGS
@@ -372,11 +428,15 @@ namespace SeraphLeveling
         /// <summary>Blocks needed for the next credit (1000, 2000, 3000, etc.).</summary>
         public int CurrentIncrementSize { get; set; }
 
+        /// <summary>Last in-game day when this skill was used. Used for skill decay.</summary>
+        public double LastActivityDay { get; set; }
+
         public WalkingProgressData()
         {
             TotalCredits = 0;
             BlocksInIncrement = 0;
             CurrentIncrementSize = 1000; // Base increment size
+            LastActivityDay = 0;
         }
 
         /// <summary>
@@ -388,7 +448,8 @@ namespace SeraphLeveling
             {
                 TotalCredits = this.TotalCredits,
                 BlocksInIncrement = this.BlocksInIncrement,
-                CurrentIncrementSize = this.CurrentIncrementSize
+                CurrentIncrementSize = this.CurrentIncrementSize,
+                LastActivityDay = this.LastActivityDay
             };
         }
     }
@@ -409,11 +470,15 @@ namespace SeraphLeveling
         /// <summary>Seconds needed for the next credit (300, 360, 420, etc.).</summary>
         public int CurrentIncrementSize { get; set; }
 
+        /// <summary>Last in-game day when this skill was used. Used for skill decay.</summary>
+        public double LastActivityDay { get; set; }
+
         public HungerProgressData()
         {
             TotalCredits = 0;
             SecondsInIncrement = 0;
             CurrentIncrementSize = 300; // Base increment size (5 minutes)
+            LastActivityDay = 0;
         }
 
         /// <summary>
@@ -425,7 +490,8 @@ namespace SeraphLeveling
             {
                 TotalCredits = this.TotalCredits,
                 SecondsInIncrement = this.SecondsInIncrement,
-                CurrentIncrementSize = this.CurrentIncrementSize
+                CurrentIncrementSize = this.CurrentIncrementSize,
+                LastActivityDay = this.LastActivityDay
             };
         }
     }
@@ -519,6 +585,9 @@ namespace SeraphLeveling
         /// <summary>Per-armor piece progress tracking. Key is armor code (e.g., "game:armor-body-plate-iron").</summary>
         public Dictionary<string, ArmorPieceProgressData> ArmorProgress { get; set; }
 
+        /// <summary>Last in-game day when this skill was used. Used for skill decay.</summary>
+        public double LastActivityDay { get; set; }
+
         public ArmorProgressData()
         {
             TotalDurabilityCredits = 0;
@@ -526,6 +595,7 @@ namespace SeraphLeveling
             TotalHungerReductionCredits = 0;
             TotalHealingCredits = 0;
             ArmorProgress = new Dictionary<string, ArmorPieceProgressData>();
+            LastActivityDay = 0;
         }
 
         /// <summary>
@@ -557,6 +627,7 @@ namespace SeraphLeveling
                 TotalWalkSpeedCredits = this.TotalWalkSpeedCredits,
                 TotalHungerReductionCredits = this.TotalHungerReductionCredits,
                 TotalHealingCredits = this.TotalHealingCredits,
+                LastActivityDay = this.LastActivityDay,
                 ArmorProgress = new Dictionary<string, ArmorPieceProgressData>()
             };
             foreach (var kvp in this.ArmorProgress)
@@ -784,11 +855,15 @@ namespace SeraphLeveling
         /// <summary>Repairs needed for the next credit (5, 6, 7, etc.).</summary>
         public int CurrentIncrementSize { get; set; }
 
+        /// <summary>Last in-game day when this skill was used. Used for skill decay.</summary>
+        public double LastActivityDay { get; set; }
+
         public MenderProgressData()
         {
             TotalCredits = 0;
             RepairsInIncrement = 0;
             CurrentIncrementSize = 5; // Base increment size
+            LastActivityDay = 0;
         }
 
         public MenderProgressData Clone()
@@ -797,7 +872,8 @@ namespace SeraphLeveling
             {
                 TotalCredits = this.TotalCredits,
                 RepairsInIncrement = this.RepairsInIncrement,
-                CurrentIncrementSize = this.CurrentIncrementSize
+                CurrentIncrementSize = this.CurrentIncrementSize,
+                LastActivityDay = this.LastActivityDay
             };
         }
     }
@@ -817,11 +893,15 @@ namespace SeraphLeveling
         /// <summary>Points needed for the next credit (10, 20, 30, etc.).</summary>
         public int CurrentIncrementSize { get; set; }
 
+        /// <summary>Last in-game day when this skill was used. Used for skill decay.</summary>
+        public double LastActivityDay { get; set; }
+
         public PilfererProgressData()
         {
             TotalCredits = 0;
             PointsInIncrement = 0;
             CurrentIncrementSize = 10; // Base increment size
+            LastActivityDay = 0;
         }
 
         public PilfererProgressData Clone()
@@ -830,7 +910,8 @@ namespace SeraphLeveling
             {
                 TotalCredits = this.TotalCredits,
                 PointsInIncrement = this.PointsInIncrement,
-                CurrentIncrementSize = this.CurrentIncrementSize
+                CurrentIncrementSize = this.CurrentIncrementSize,
+                LastActivityDay = this.LastActivityDay
             };
         }
     }
@@ -850,11 +931,15 @@ namespace SeraphLeveling
         /// <summary>Animals needed for the next credit (10, 20, 30, etc.).</summary>
         public int CurrentIncrementSize { get; set; }
 
+        /// <summary>Last in-game day when this skill was used. Used for skill decay.</summary>
+        public double LastActivityDay { get; set; }
+
         public ResourcefulProgressData()
         {
             TotalCredits = 0;
             AnimalsInIncrement = 0;
             CurrentIncrementSize = 10; // Base increment size
+            LastActivityDay = 0;
         }
 
         public ResourcefulProgressData Clone()
@@ -863,7 +948,8 @@ namespace SeraphLeveling
             {
                 TotalCredits = this.TotalCredits,
                 AnimalsInIncrement = this.AnimalsInIncrement,
-                CurrentIncrementSize = this.CurrentIncrementSize
+                CurrentIncrementSize = this.CurrentIncrementSize,
+                LastActivityDay = this.LastActivityDay
             };
         }
     }
@@ -883,11 +969,15 @@ namespace SeraphLeveling
         /// <summary>Crops needed for the next credit (10, 20, 30, etc.).</summary>
         public int CurrentIncrementSize { get; set; }
 
+        /// <summary>Last in-game day when this skill was used. Used for skill decay.</summary>
+        public double LastActivityDay { get; set; }
+
         public ForagerProgressData()
         {
             TotalCredits = 0;
             CropsInIncrement = 0;
             CurrentIncrementSize = 10; // Base increment size
+            LastActivityDay = 0;
         }
 
         public ForagerProgressData Clone()
@@ -896,7 +986,8 @@ namespace SeraphLeveling
             {
                 TotalCredits = this.TotalCredits,
                 CropsInIncrement = this.CropsInIncrement,
-                CurrentIncrementSize = this.CurrentIncrementSize
+                CurrentIncrementSize = this.CurrentIncrementSize,
+                LastActivityDay = this.LastActivityDay
             };
         }
     }
@@ -916,11 +1007,15 @@ namespace SeraphLeveling
         /// <summary>Blocks needed for the next credit (100, 200, 300, etc.).</summary>
         public int CurrentIncrementSize { get; set; }
 
+        /// <summary>Last in-game day when this skill was used. Used for skill decay.</summary>
+        public double LastActivityDay { get; set; }
+
         public FurtiveProgressData()
         {
             TotalCredits = 0;
             BlocksInIncrement = 0;
             CurrentIncrementSize = 100; // Base increment size
+            LastActivityDay = 0;
         }
 
         public FurtiveProgressData Clone()
@@ -929,7 +1024,8 @@ namespace SeraphLeveling
             {
                 TotalCredits = this.TotalCredits,
                 BlocksInIncrement = this.BlocksInIncrement,
-                CurrentIncrementSize = this.CurrentIncrementSize
+                CurrentIncrementSize = this.CurrentIncrementSize,
+                LastActivityDay = this.LastActivityDay
             };
         }
     }
@@ -974,10 +1070,14 @@ namespace SeraphLeveling
         /// <summary>Per-weapon progress tracking. Key is weapon type (e.g., "sword-copper", "spear-iron").</summary>
         public Dictionary<string, PreciseWeaponProgressData> WeaponProgress { get; set; }
 
+        /// <summary>Last in-game day when this skill was used. Used for skill decay.</summary>
+        public double LastActivityDay { get; set; }
+
         public PreciseProgressData()
         {
             TotalCredits = 0;
             WeaponProgress = new Dictionary<string, PreciseWeaponProgressData>();
+            LastActivityDay = 0;
         }
 
         /// <summary>
@@ -1002,6 +1102,7 @@ namespace SeraphLeveling
             var clone = new PreciseProgressData
             {
                 TotalCredits = this.TotalCredits,
+                LastActivityDay = this.LastActivityDay,
                 WeaponProgress = new Dictionary<string, PreciseWeaponProgressData>()
             };
             foreach (var kvp in this.WeaponProgress)
@@ -1324,10 +1425,14 @@ namespace SeraphLeveling
         /// <summary>Steady Aim credits (earned alongside ranged proficiencies).</summary>
         public int SteadyAimCredits { get; set; }
 
+        /// <summary>Last in-game day when any CO proficiency was used. Used for skill decay.</summary>
+        public double LastActivityDay { get; set; }
+
         public COPlayerProgressData()
         {
             Proficiencies = new Dictionary<string, COProficiencyProgressData>();
             SteadyAimCredits = 0;
+            LastActivityDay = 0;
         }
 
         /// <summary>
@@ -1348,7 +1453,8 @@ namespace SeraphLeveling
             var clone = new COPlayerProgressData
             {
                 Proficiencies = new Dictionary<string, COProficiencyProgressData>(),
-                SteadyAimCredits = this.SteadyAimCredits
+                SteadyAimCredits = this.SteadyAimCredits,
+                LastActivityDay = this.LastActivityDay
             };
             foreach (var kvp in this.Proficiencies)
             {
@@ -2024,8 +2130,24 @@ namespace SeraphLeveling
         public static bool EnableSkillDecay = false;
         public static double DecayGracePeriodDays = 1.0;
         public static int DecayBasePointsPerDay = 10;
-        public static int DecayMaxPointsPerLogin = 100;
+        public static int DecayMaxPointsPerDay = 100;
         public static HashSet<string> DecayExemptSkills = new HashSet<string>();
+        public static Dictionary<string, double> DecayGracePeriodOverrides = new Dictionary<string, double>();
+        public static Dictionary<string, int> DecayBasePointsOverrides = new Dictionary<string, int>();
+        public static Dictionary<string, int> DecayMaxPointsOverrides = new Dictionary<string, int>();
+
+        // Per-player tracking for daily decay tick (maps player UID to last checked in-game day)
+        public static ConcurrentDictionary<string, double> LastDecayCheckDay = new ConcurrentDictionary<string, double>();
+
+        // Sleep buff settings
+        public static bool EnableSleepBuff = false;
+        public static float SleepBuffLinenBedMultiplier = 2.0f;
+        public static float SleepBuffHayBedMultiplier = 1.5f;
+        public static double SleepBuffDurationDays = 1.0;
+
+        // Sleep buff tracking - maps player UID to their buff expiration time (in game days)
+        public static ConcurrentDictionary<string, double> SleepBuffExpiration = new ConcurrentDictionary<string, double>();
+        public static ConcurrentDictionary<string, float> SleepBuffMultiplier = new ConcurrentDictionary<string, float>();
 
         // Per-proficiency base and increment overrides (optional, falls back to global values)
         public static Dictionary<string, int> COProficiencyBaseOverrides = new Dictionary<string, int>();
@@ -2775,6 +2897,19 @@ namespace SeraphLeveling
                     .RequiresPlayer()
                     .WithArgs(api.ChatCommands.Parsers.OptionalWord("action"), api.ChatCommands.Parsers.OptionalInt("value"))
                     .HandleWith(args => OnTraitCOProficiencyConfigCommand(args, CO_STEADY_AIM))
+                .EndSubCommand()
+                // Sleep buff and decay status commands
+                .BeginSubCommand("sleepbuff")
+                    .WithDescription("View your current sleep buff status")
+                    .RequiresPrivilege(Privilege.chat)
+                    .RequiresPlayer()
+                    .HandleWith(OnTraitSleepBuffCommand)
+                .EndSubCommand()
+                .BeginSubCommand("decay")
+                    .WithDescription("View your current skill decay status")
+                    .RequiresPrivilege(Privilege.chat)
+                    .RequiresPlayer()
+                    .HandleWith(OnTraitDecayCommand)
                 .EndSubCommand();
 
             // Hook into block breaking for mining progression
@@ -2830,6 +2965,9 @@ namespace SeraphLeveling
 
             // Register game tick listener for sneaking distance tracking (every 500ms for Furtive)
             api.Event.RegisterGameTickListener(OnSneakingTick, 500);
+
+            // Register decay tick (every 10 seconds, checks for daily decay while online)
+            api.Event.RegisterGameTickListener(OnDecayTick, 10000);
 
             // Register auto-save timer if enabled
             if (AutoSaveIntervalSeconds > 0)
@@ -5080,6 +5218,7 @@ namespace SeraphLeveling
                             int actualWalkSpeedBonus = armorProgress.TotalWalkSpeedCredits - oldWalkSpeed;
 
                             pendingArmorProgressSave = true;
+                            UpdateSkillActivityDay(playerUid, "armor");
 
                             ApplyArmorBonusesStatic(player, armorProgress.TotalDurabilityCredits, armorProgress.TotalWalkSpeedCredits);
 
@@ -5109,7 +5248,9 @@ namespace SeraphLeveling
                         int oldHealingCredits = armorProgress.TotalHealingCredits;
 
                         // Add 1 second (tick interval) to this armor piece's time
-                        pieceProgress.SecondsWornInIncrement += 1f;
+                        // Apply sleep buff multiplier if active
+                        float modifiedTime = ApplyXPMultiplier(playerUid, 1f);
+                        pieceProgress.SecondsWornInIncrement += modifiedTime;
 
                         // Check if we've earned any new time credits
                         while (pieceProgress.SecondsWornInIncrement >= pieceProgress.CurrentTimeIncrementSize)
@@ -5153,6 +5294,7 @@ namespace SeraphLeveling
                         if (creditsChanged)
                         {
                             pendingArmorProgressSave = true;
+                            UpdateSkillActivityDay(playerUid, "armor");
                             ApplyArmorBonusesStatic(player, armorProgress.TotalDurabilityCredits, armorProgress.TotalWalkSpeedCredits);
 
                             // Notify player of level up (only for walk speed, as it's the primary stat)
@@ -5187,7 +5329,9 @@ namespace SeraphLeveling
             var pieceProgress = armorProgress.GetArmorProgress(armorCode);
             int oldDurabilityCredits = armorProgress.TotalDurabilityCredits;
 
-            pieceProgress.DamageBlockedInIncrement += damageBlocked;
+            // Apply sleep buff multiplier if active
+            float modifiedDamage = ApplyXPMultiplier(playerUid, damageBlocked);
+            pieceProgress.DamageBlockedInIncrement += modifiedDamage;
 
             // Check if we've earned any new damage credits
             while (pieceProgress.DamageBlockedInIncrement >= pieceProgress.CurrentDamageIncrementSize &&
@@ -5205,6 +5349,7 @@ namespace SeraphLeveling
 
             if (armorProgress.TotalDurabilityCredits > oldDurabilityCredits)
             {
+                UpdateSkillActivityDay(playerUid, "armor");
                 ApplyArmorBonusesStatic(player, armorProgress.TotalDurabilityCredits, armorProgress.TotalWalkSpeedCredits);
 
                 // Notify player of level up with raw improvement (shows progress even when capped)
@@ -5252,6 +5397,7 @@ namespace SeraphLeveling
 
             if (armorProgress.TotalDurabilityCredits > oldDurabilityCredits)
             {
+                UpdateSkillActivityDay(playerUid, "armor");
                 ApplyArmorBonusesStatic(player, armorProgress.TotalDurabilityCredits, armorProgress.TotalWalkSpeedCredits);
 
                 // Notify player of level up with raw improvement (shows progress even when capped)
@@ -5363,8 +5509,11 @@ namespace SeraphLeveling
 
             int oldCredits = playerProgress.TotalCredits;
 
+            // Apply sleep buff multiplier to points
+            int modifiedPoints = ApplyXPMultiplier(playerUid, points);
+
             // Add points to THIS pickaxe's progress
-            pickaxeProgress.BlocksInIncrement += points;
+            pickaxeProgress.BlocksInIncrement += modifiedPoints;
 
             // Check if we've earned any new credits with this pickaxe
             while (pickaxeProgress.BlocksInIncrement >= pickaxeProgress.CurrentIncrementSize && playerProgress.TotalCredits < maxCredits)
@@ -5445,8 +5594,11 @@ namespace SeraphLeveling
 
                 int oldCredits = playerProgress.TotalCredits;
 
+                // Apply sleep buff multiplier to distance
+                float modifiedDistance = ApplyXPMultiplier(playerUid, distance);
+
                 // Add distance to progress
-                playerProgress.BlocksInIncrement += distance;
+                playerProgress.BlocksInIncrement += modifiedDistance;
 
                 // Check if we've earned any new credits
                 while (playerProgress.BlocksInIncrement >= playerProgress.CurrentIncrementSize && playerProgress.TotalCredits < MaxWalkingSpeedPercent)
@@ -5518,8 +5670,11 @@ namespace SeraphLeveling
 
                 int oldCredits = playerProgress.TotalCredits;
 
-                // Add 1 second of time (since tick is every 1000ms)
-                playerProgress.SecondsInIncrement += 1f;
+                // Apply sleep buff multiplier to time (since tick is every 1000ms)
+                float modifiedSeconds = ApplyXPMultiplier(playerUid, 1f);
+
+                // Add time to progress
+                playerProgress.SecondsInIncrement += modifiedSeconds;
 
                 // Check if we've earned any new credits
                 while (playerProgress.SecondsInIncrement >= playerProgress.CurrentIncrementSize && playerProgress.TotalCredits < playerMaxCredits)
@@ -5541,6 +5696,7 @@ namespace SeraphLeveling
                 // If credits increased, update the stat and notify player
                 if (playerProgress.TotalCredits > oldCredits)
                 {
+                    UpdateSkillActivityDay(playerUid, "hunger");
                     ApplyHungerBonusStatic(player, playerProgress.TotalCredits);
 
                     // Notify player of level up with raw improvement (shows progress even when cancelling Ravenous)
@@ -5563,6 +5719,7 @@ namespace SeraphLeveling
             lastSneakingPositions.TryRemove(playerUid, out _);
             playerEquippedArmor.TryRemove(playerUid, out _);
             VanillaTraitsCache.TryRemove(playerUid, out _);
+            LastDecayCheckDay.TryRemove(playerUid, out _);
 
             // Save all pending progress data to prevent data loss on disconnect
             SaveAllPendingProgress();
@@ -5677,8 +5834,12 @@ namespace SeraphLeveling
             // Populate vanilla traits cache first (before applying any bonuses)
             PopulateVanillaTraitsCache(byPlayer);
 
-            // Apply skill decay before applying bonuses
-            ApplySkillDecay(byPlayer);
+            // Initialize decay check day for this player (online-only decay)
+            if (EnableSkillDecay)
+            {
+                double currentDay = ServerApi.World.Calendar.TotalDays;
+                LastDecayCheckDay[playerUid] = currentDay;
+            }
 
             // Apply mining bonus (Stats always applied, WatchedAttributes only sync if changed)
             var miningProg = MiningProgress.GetOrAdd(playerUid, _ => new MiningProgressData());
@@ -6160,10 +6321,55 @@ namespace SeraphLeveling
 
                 // Patch BlockEntityStaticTranslocator.DoRepair for Technical trait (translocator repairs)
                 PatchTranslocatorRepairs(api);
+
+                // Patch BEBehaviorBed.DidSleep for sleep buff system
+                PatchBedSleeping(api);
             }
             catch (Exception ex)
             {
                 api.Logger.Error($"[SeraphLeveling] Failed to apply server Harmony patches: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// Patch BEBehaviorBed.DidSleep to apply sleep buff when players wake up.
+        /// </summary>
+        private void PatchBedSleeping(ICoreServerAPI api)
+        {
+            if (!EnableSleepBuff) return; // Only patch if sleep buff is enabled
+
+            try
+            {
+                // Find BEBehaviorBed type in VSSurvivalMod
+                var bedBehaviorType = AccessTools.TypeByName("Vintagestory.GameContent.BEBehaviorBed");
+                if (bedBehaviorType == null)
+                {
+                    api.Logger.Debug("[SeraphLeveling] Could not find BEBehaviorBed type for sleep buff");
+                    return;
+                }
+
+                // Find the DidSleep method
+                var didSleepMethod = AccessTools.Method(bedBehaviorType, "DidSleep");
+                if (didSleepMethod == null)
+                {
+                    api.Logger.Debug("[SeraphLeveling] Could not find BEBehaviorBed.DidSleep method for sleep buff");
+                    return;
+                }
+
+                // Get our postfix method
+                var postfixMethod = AccessTools.Method(typeof(BedSleepPatches), nameof(BedSleepPatches.DidSleep_Postfix));
+                if (postfixMethod == null)
+                {
+                    api.Logger.Error("[SeraphLeveling] Could not find DidSleep_Postfix method!");
+                    return;
+                }
+
+                serverHarmony.Patch(didSleepMethod, postfix: new HarmonyMethod(postfixMethod));
+                api.Logger.Notification("[SeraphLeveling] Successfully patched BEBehaviorBed.DidSleep for sleep buff");
+            }
+            catch (Exception ex)
+            {
+                api.Logger.Warning($"[SeraphLeveling] Failed to patch BEBehaviorBed.DidSleep: {ex.Message}");
             }
         }
 
@@ -6345,8 +6551,11 @@ namespace SeraphLeveling
 
             int oldCredits = playerProgress.TotalCredits;
 
+            // Apply sleep buff multiplier to damage
+            float modifiedDamage = ApplyXPMultiplier(playerUid, damage);
+
             // Add damage to THIS weapon type's progress
-            weaponProgress.DamageInIncrement += damage;
+            weaponProgress.DamageInIncrement += modifiedDamage;
 
             // Check if we've earned any new credits with this weapon type
             while (weaponProgress.DamageInIncrement >= weaponProgress.CurrentIncrementSize && playerProgress.TotalCredits < maxCredits)
@@ -6540,64 +6749,151 @@ namespace SeraphLeveling
             {
                 codeToCheck = itemCode.Substring(itemCode.IndexOf(':') + 1);
             }
+            string lowerCode = codeToCheck.ToLowerInvariant();
 
-            // Check for sword types
-            if (codeToCheck.StartsWith("sword-") ||
-                codeToCheck.StartsWith("blade-") ||
-                codeToCheck.StartsWith("longsword-") ||
-                codeToCheck.StartsWith("shortsword-"))
-            {
-                return itemCode; // Return full code for per-weapon tracking
-            }
+            // =================================================================
+            // SWORDS (one-handed and two-handed)
+            // =================================================================
 
-            // Check for falx types
-            if (codeToCheck.StartsWith("falx-"))
-            {
-                return itemCode; // Return full code for per-weapon tracking
-            }
-
-            // Check for spear types
-            if (codeToCheck.StartsWith("spear-"))
-            {
-                return itemCode; // Return full code for per-weapon tracking
-            }
-
-            // Check for quarterstaff types (vanilla melee weapon)
-            if (codeToCheck.StartsWith("quarterstaff-") ||
-                codeToCheck.StartsWith("staff-") ||
-                codeToCheck.StartsWith("bo-") ||
-                codeToCheck.Contains("bo-staff"))
-            {
-                return itemCode; // Return full code for per-weapon tracking
-            }
-
-            // Ancient Armory mod weapons
-            // aa-blade: gladius, arming, claymore, sabre, longsword, falchion (swords)
-            if (codeToCheck.StartsWith("aa-blade-"))
+            // Two-handed swords
+            if (lowerCode.StartsWith("greatsword-") || lowerCode.StartsWith("zweihander-") ||
+                lowerCode.StartsWith("claymore-") || lowerCode.StartsWith("flamberge-") ||
+                lowerCode.StartsWith("montante-") || lowerCode.StartsWith("nodachi-") ||
+                lowerCode.StartsWith("2hsword-") || lowerCode.StartsWith("2h-sword-") ||
+                lowerCode.StartsWith("twohandedsword-") || lowerCode.StartsWith("twohanded-sword-") ||
+                lowerCode.StartsWith("sword-great-") || lowerCode.StartsWith("sword-long-") ||
+                lowerCode.StartsWith("longsword-") ||
+                (lowerCode.Contains("twohanded") && lowerCode.Contains("sword")) ||
+                (lowerCode.Contains("2h") && lowerCode.Contains("sword")))
             {
                 return itemCode;
             }
 
-            // aa-axe: bearded, battle, bardiche (battle axes - melee weapons)
-            if (codeToCheck.StartsWith("aa-axe-"))
+            // One-handed swords, blades, and similar
+            if (lowerCode.StartsWith("sword-") || lowerCode.StartsWith("blade-") ||
+                lowerCode.StartsWith("shortsword-") || lowerCode.StartsWith("sword-short-") ||
+                lowerCode.StartsWith("sword-arming-") ||
+                lowerCode.StartsWith("saber-") || lowerCode.StartsWith("sabre-") ||
+                lowerCode.StartsWith("rapier-") || lowerCode.StartsWith("scimitar-") ||
+                lowerCode.StartsWith("cutlass-") || lowerCode.StartsWith("falx-") ||
+                lowerCode.StartsWith("falchion-") || lowerCode.StartsWith("kopis-") ||
+                lowerCode.StartsWith("gladius-") || lowerCode.StartsWith("messer-"))
+            {
+                return itemCode;
+            }
+
+            // Daggers and knives (combat)
+            if (lowerCode.StartsWith("dagger-") || lowerCode.StartsWith("knife-") ||
+                lowerCode.StartsWith("stiletto-") || lowerCode.StartsWith("khanjar-") ||
+                lowerCode.StartsWith("baselard-") || lowerCode.StartsWith("dirk-") ||
+                lowerCode.StartsWith("tanto-") || lowerCode.StartsWith("kukri-"))
+            {
+                return itemCode;
+            }
+
+            // =================================================================
+            // POLEARMS
+            // =================================================================
+
+            // Spears (melee)
+            if (lowerCode.StartsWith("spear-") || lowerCode.StartsWith("pike-") ||
+                lowerCode.StartsWith("lance-") || lowerCode.StartsWith("trident-") ||
+                lowerCode.StartsWith("pilum-") || lowerCode.StartsWith("sarissa-"))
+            {
+                return itemCode;
+            }
+
+            // Javelins (can be used in melee too)
+            if (lowerCode.StartsWith("javelin-") || lowerCode.StartsWith("throwing-spear-") ||
+                lowerCode.StartsWith("thrown-spear-") || lowerCode.StartsWith("dart-") ||
+                lowerCode.StartsWith("plumbata-") ||
+                lowerCode.Contains("javelin") || lowerCode.Contains("throwingspear") ||
+                lowerCode.Contains("thrownspear"))
+            {
+                return itemCode;
+            }
+
+            // Halberds and poleaxes
+            if (lowerCode.StartsWith("halberd-") || lowerCode.StartsWith("poleaxe-") ||
+                lowerCode.StartsWith("glaive-") || lowerCode.StartsWith("bardiche-") ||
+                lowerCode.StartsWith("voulge-") || lowerCode.StartsWith("guisarme-") ||
+                lowerCode.StartsWith("billhook-") || lowerCode.StartsWith("partisan-") ||
+                lowerCode.StartsWith("naginata-") || lowerCode.StartsWith("sovnya-"))
+            {
+                return itemCode;
+            }
+
+            // Quarterstaves
+            if (lowerCode.StartsWith("quarterstaff-") || lowerCode.StartsWith("staff-") ||
+                lowerCode.StartsWith("bo-") || lowerCode.Contains("bo-staff"))
+            {
+                return itemCode;
+            }
+
+            // =================================================================
+            // BLUNT WEAPONS
+            // =================================================================
+
+            // Maces and warhammers
+            if (lowerCode.StartsWith("mace-") || lowerCode.StartsWith("morningstar-") ||
+                lowerCode.StartsWith("flail-") || lowerCode.StartsWith("warhammer-") ||
+                lowerCode.StartsWith("maul-") || lowerCode.StartsWith("hammer-") ||
+                lowerCode.StartsWith("flangedmace-") || lowerCode.StartsWith("spikedmace-"))
+            {
+                return itemCode;
+            }
+
+            // Clubs
+            if (lowerCode.StartsWith("club-") || lowerCode.StartsWith("cudgel-") ||
+                lowerCode.StartsWith("baton-") || lowerCode.StartsWith("truncheon-") ||
+                lowerCode.StartsWith("shillelagh-") || lowerCode.StartsWith("blackjack-"))
+            {
+                return itemCode;
+            }
+
+            // =================================================================
+            // AXES (combat, not tools)
+            // =================================================================
+            if (lowerCode.StartsWith("battleaxe-") || lowerCode.StartsWith("waraxe-") ||
+                lowerCode.StartsWith("handaxe-") || lowerCode.StartsWith("hatchet-") ||
+                lowerCode.StartsWith("tomahawk-") || lowerCode.StartsWith("francisca-") ||
+                lowerCode.StartsWith("dane-axe-") || lowerCode.StartsWith("daneaxe-") ||
+                lowerCode.StartsWith("broadaxe-") || lowerCode.StartsWith("labrys-") ||
+                (lowerCode.StartsWith("axe-") && !lowerCode.Contains("pickaxe")))
+            {
+                return itemCode;
+            }
+
+            // =================================================================
+            // ANCIENT ARMORY MOD WEAPONS
+            // =================================================================
+
+            // aa-blade: gladius, arming, claymore, sabre, longsword, falchion (swords)
+            if (lowerCode.StartsWith("aa-blade-"))
+            {
+                return itemCode;
+            }
+
+            // aa-axe: bearded, battle, bardiche (battle axes)
+            if (lowerCode.StartsWith("aa-axe-"))
             {
                 return itemCode;
             }
 
             // aa-club: flanged, morningstar, spiked, warhammer (maces)
-            if (codeToCheck.StartsWith("aa-club-"))
+            if (lowerCode.StartsWith("aa-club-"))
             {
                 return itemCode;
             }
 
             // aa-knife: dagger, stiletto, khanjar, baselard (combat knives)
-            if (codeToCheck.StartsWith("aa-knife-"))
+            if (lowerCode.StartsWith("aa-knife-"))
             {
                 return itemCode;
             }
 
             // aa-spear: boar, voulge, fork, ranseur (polearms)
-            if (codeToCheck.StartsWith("aa-spear-"))
+            if (lowerCode.StartsWith("aa-spear-"))
             {
                 return itemCode;
             }
@@ -6631,8 +6927,11 @@ namespace SeraphLeveling
 
             int oldCredits = playerProgress.TotalCredits;
 
+            // Apply sleep buff multiplier to damage
+            float modifiedDamage = ApplyXPMultiplier(playerUid, damage);
+
             // Add damage to THIS weapon combination's progress
-            weaponProgress.DamageInIncrement += damage;
+            weaponProgress.DamageInIncrement += modifiedDamage;
 
             // Check if we've earned any new credits with this weapon combination
             while (weaponProgress.DamageInIncrement >= weaponProgress.CurrentIncrementSize && playerProgress.TotalCredits < maxCredits)
@@ -6713,7 +7012,9 @@ namespace SeraphLeveling
             // Already unlocked
             if (progress.IsUnlocked) return;
 
-            progress.TotalBowDamage += damage;
+            // Apply sleep buff multiplier if active
+            float modifiedDamage = ApplyXPMultiplier(playerUid, damage);
+            progress.TotalBowDamage += modifiedDamage;
             pendingBowyerProgressSave = true;
 
             player.Entity.WatchedAttributes.SetFloat(WATCHED_BOWYER_BOW_DAMAGE, progress.TotalBowDamage);
@@ -6735,7 +7036,9 @@ namespace SeraphLeveling
             // Already unlocked
             if (progress.IsUnlocked) return;
 
-            progress.TotalRockDamage += damage;
+            // Apply sleep buff multiplier if active
+            float modifiedDamage = ApplyXPMultiplier(playerUid, damage);
+            progress.TotalRockDamage += modifiedDamage;
             pendingImproviserProgressSave = true;
 
             player.Entity.WatchedAttributes.SetFloat(WATCHED_IMPROVISER_ROCK_DAMAGE, progress.TotalRockDamage);
@@ -7153,6 +7456,7 @@ namespace SeraphLeveling
             lastPlayerPositions.Clear();
             lastSneakingPositions.Clear();
             VanillaTraitsCache.Clear();
+            LastDecayCheckDay.Clear();
             pendingMiningProgressSave = false;
             pendingMeleeProgressSave = false;
             pendingRangedProgressSave = false;
@@ -7344,7 +7648,7 @@ namespace SeraphLeveling
                             writer.Write((byte)0x53); // 'S'
                             writer.Write((byte)0x49); // 'I'
                             writer.Write((byte)0x54); // 'T'
-                            writer.Write((byte)3);    // Version 3: Per-pickaxe progress
+                            writer.Write((byte)4);    // Version 4: Per-pickaxe progress + LastActivityDay
 
                             // Write number of players
                             writer.Write(snapshot.Length);
@@ -7354,6 +7658,7 @@ namespace SeraphLeveling
                                 writer.Write(playerKvp.Key);   // Player UID
                                 var progress = playerKvp.Value;
                                 writer.Write(progress.TotalCredits);
+                                writer.Write(progress.LastActivityDay);
 
                                 // Write per-pickaxe progress dictionary
                                 writer.Write(progress.PickaxeProgress.Count);
@@ -7369,7 +7674,7 @@ namespace SeraphLeveling
                     }
 
                     ServerApi.WorldManager.SaveGame.StoreData(MINING_PROGRESS_SAVE_KEY, data);
-                    ServerApi.Logger.Debug($"[SeraphLeveling] Persisted mining progress for {snapshot.Length} players (v3 format)");
+                    ServerApi.Logger.Debug($"[SeraphLeveling] Persisted mining progress for {snapshot.Length} players (v4 format)");
                 }
                 catch (Exception ex)
                 {
@@ -7474,13 +7779,41 @@ namespace SeraphLeveling
                         }
                         else if (version == 3)
                         {
-                            // Current format: per-pickaxe progress
+                            // V3 format: per-pickaxe progress (no LastActivityDay)
                             for (int i = 0; i < playerCount; i++)
                             {
                                 string playerUid = reader.ReadString();
                                 var progress = new MiningProgressData
                                 {
                                     TotalCredits = reader.ReadInt32()
+                                };
+
+                                int pickaxeCount = reader.ReadInt32();
+                                for (int j = 0; j < pickaxeCount; j++)
+                                {
+                                    string pickaxeCode = reader.ReadString();
+                                    var pickaxeProgress = new PickaxeProgressData
+                                    {
+                                        BlocksInIncrement = reader.ReadInt32(),
+                                        CurrentIncrementSize = reader.ReadInt32()
+                                    };
+                                    progress.PickaxeProgress[pickaxeCode] = pickaxeProgress;
+                                }
+
+                                MiningProgress[playerUid] = progress;
+                            }
+                            pendingMiningProgressSave = true; // Re-save in v4 format
+                        }
+                        else if (version == 4)
+                        {
+                            // Current format: per-pickaxe progress + LastActivityDay
+                            for (int i = 0; i < playerCount; i++)
+                            {
+                                string playerUid = reader.ReadString();
+                                var progress = new MiningProgressData
+                                {
+                                    TotalCredits = reader.ReadInt32(),
+                                    LastActivityDay = reader.ReadDouble()
                                 };
 
                                 int pickaxeCount = reader.ReadInt32();
@@ -7544,7 +7877,7 @@ namespace SeraphLeveling
                             writer.Write((byte)0x53); // 'S'
                             writer.Write((byte)0x49); // 'I'
                             writer.Write((byte)0x4D); // 'M' (for Melee)
-                            writer.Write((byte)1);    // Version 1: Per-weapon progress
+                            writer.Write((byte)2);    // Version 2: Per-weapon progress + LastActivityDay
 
                             // Write number of players
                             writer.Write(snapshot.Length);
@@ -7554,6 +7887,7 @@ namespace SeraphLeveling
                                 writer.Write(playerKvp.Key);   // Player UID
                                 var progress = playerKvp.Value;
                                 writer.Write(progress.TotalCredits);
+                                writer.Write(progress.LastActivityDay);
 
                                 // Write per-weapon progress dictionary
                                 writer.Write(progress.WeaponProgress.Count);
@@ -7569,7 +7903,7 @@ namespace SeraphLeveling
                     }
 
                     ServerApi.WorldManager.SaveGame.StoreData(MELEE_PROGRESS_SAVE_KEY, data);
-                    ServerApi.Logger.Debug($"[SeraphLeveling] Persisted melee progress for {snapshot.Length} players");
+                    ServerApi.Logger.Debug($"[SeraphLeveling] Persisted melee progress for {snapshot.Length} players (v2 format)");
                 }
                 catch (Exception ex)
                 {
@@ -7616,13 +7950,41 @@ namespace SeraphLeveling
 
                         if (version == 1)
                         {
-                            // Current format: per-weapon progress
+                            // Legacy format: per-weapon progress, no LastActivityDay
                             for (int i = 0; i < playerCount; i++)
                             {
                                 string playerUid = reader.ReadString();
                                 var progress = new MeleeProgressData
                                 {
                                     TotalCredits = reader.ReadInt32()
+                                };
+
+                                int weaponCount = reader.ReadInt32();
+                                for (int j = 0; j < weaponCount; j++)
+                                {
+                                    string weaponType = reader.ReadString();
+                                    var weaponProgress = new WeaponProgressData
+                                    {
+                                        DamageInIncrement = reader.ReadSingle(),
+                                        CurrentIncrementSize = reader.ReadInt32()
+                                    };
+                                    progress.WeaponProgress[weaponType] = weaponProgress;
+                                }
+
+                                MeleeProgress[playerUid] = progress;
+                            }
+                            pendingMeleeProgressSave = true;
+                        }
+                        else if (version == 2)
+                        {
+                            // Current format: per-weapon progress + LastActivityDay
+                            for (int i = 0; i < playerCount; i++)
+                            {
+                                string playerUid = reader.ReadString();
+                                var progress = new MeleeProgressData
+                                {
+                                    TotalCredits = reader.ReadInt32(),
+                                    LastActivityDay = reader.ReadDouble()
                                 };
 
                                 int weaponCount = reader.ReadInt32();
@@ -7659,7 +8021,7 @@ namespace SeraphLeveling
 
         /// <summary>
         /// Persist ranged progress to world save data.
-        /// Version 1 format stores per-weapon progress dictionary.
+        /// Version 2 format stores per-weapon progress dictionary + LastActivityDay.
         /// </summary>
         public static void PersistRangedProgress()
         {
@@ -7686,7 +8048,7 @@ namespace SeraphLeveling
                             writer.Write((byte)0x53); // 'S'
                             writer.Write((byte)0x49); // 'I'
                             writer.Write((byte)0x52); // 'R' (for Ranged)
-                            writer.Write((byte)1);    // Version 1: Per-weapon progress
+                            writer.Write((byte)2);    // Version 2: Per-weapon progress + LastActivityDay
 
                             // Write number of players
                             writer.Write(snapshot.Length);
@@ -7696,6 +8058,7 @@ namespace SeraphLeveling
                                 writer.Write(playerKvp.Key);   // Player UID
                                 var progress = playerKvp.Value;
                                 writer.Write(progress.TotalCredits);
+                                writer.Write(progress.LastActivityDay);
 
                                 // Write per-weapon progress dictionary
                                 writer.Write(progress.WeaponProgress.Count);
@@ -7711,7 +8074,7 @@ namespace SeraphLeveling
                     }
 
                     ServerApi.WorldManager.SaveGame.StoreData(RANGED_PROGRESS_SAVE_KEY, data);
-                    ServerApi.Logger.Debug($"[SeraphLeveling] Persisted ranged progress for {snapshot.Length} players");
+                    ServerApi.Logger.Debug($"[SeraphLeveling] Persisted ranged progress for {snapshot.Length} players (v2 format)");
                 }
                 catch (Exception ex)
                 {
@@ -7758,13 +8121,41 @@ namespace SeraphLeveling
 
                         if (version == 1)
                         {
-                            // Current format: per-weapon progress
+                            // Legacy format: per-weapon progress, no LastActivityDay
                             for (int i = 0; i < playerCount; i++)
                             {
                                 string playerUid = reader.ReadString();
                                 var progress = new RangedProgressData
                                 {
                                     TotalCredits = reader.ReadInt32()
+                                };
+
+                                int weaponCount = reader.ReadInt32();
+                                for (int j = 0; j < weaponCount; j++)
+                                {
+                                    string weaponCombo = reader.ReadString();
+                                    var weaponProgress = new RangedWeaponProgressData
+                                    {
+                                        DamageInIncrement = reader.ReadSingle(),
+                                        CurrentIncrementSize = reader.ReadInt32()
+                                    };
+                                    progress.WeaponProgress[weaponCombo] = weaponProgress;
+                                }
+
+                                RangedProgress[playerUid] = progress;
+                            }
+                            pendingRangedProgressSave = true;
+                        }
+                        else if (version == 2)
+                        {
+                            // Current format: per-weapon progress + LastActivityDay
+                            for (int i = 0; i < playerCount; i++)
+                            {
+                                string playerUid = reader.ReadString();
+                                var progress = new RangedProgressData
+                                {
+                                    TotalCredits = reader.ReadInt32(),
+                                    LastActivityDay = reader.ReadDouble()
                                 };
 
                                 int weaponCount = reader.ReadInt32();
@@ -7828,7 +8219,7 @@ namespace SeraphLeveling
                             writer.Write((byte)0x53); // 'S'
                             writer.Write((byte)0x49); // 'I'
                             writer.Write((byte)0x57); // 'W' (for Walking)
-                            writer.Write((byte)1);    // Version 1
+                            writer.Write((byte)2);    // Version 2
 
                             // Write number of players
                             writer.Write(snapshot.Length);
@@ -7840,13 +8231,14 @@ namespace SeraphLeveling
                                 writer.Write(progress.TotalCredits);
                                 writer.Write(progress.BlocksInIncrement);
                                 writer.Write(progress.CurrentIncrementSize);
+                                writer.Write(progress.LastActivityDay);
                             }
                         }
                         data = ms.ToArray();
                     }
 
                     ServerApi.WorldManager.SaveGame.StoreData(WALKING_PROGRESS_SAVE_KEY, data);
-                    ServerApi.Logger.Debug($"[SeraphLeveling] Persisted walking progress for {snapshot.Length} players");
+                    ServerApi.Logger.Debug($"[SeraphLeveling] Persisted walking progress v2 for {snapshot.Length} players");
                 }
                 catch (Exception ex)
                 {
@@ -7905,6 +8297,23 @@ namespace SeraphLeveling
 
                                 WalkingProgress[playerUid] = progress;
                             }
+                            pendingWalkingProgressSave = true;
+                        }
+                        else if (version == 2)
+                        {
+                            for (int i = 0; i < playerCount; i++)
+                            {
+                                string playerUid = reader.ReadString();
+                                var progress = new WalkingProgressData
+                                {
+                                    TotalCredits = reader.ReadInt32(),
+                                    BlocksInIncrement = reader.ReadSingle(),
+                                    CurrentIncrementSize = reader.ReadInt32(),
+                                    LastActivityDay = reader.ReadDouble()
+                                };
+
+                                WalkingProgress[playerUid] = progress;
+                            }
                         }
                         else
                         {
@@ -7952,7 +8361,7 @@ namespace SeraphLeveling
                             writer.Write((byte)0x53); // 'S'
                             writer.Write((byte)0x49); // 'I'
                             writer.Write((byte)0x48); // 'H' (for Hunger)
-                            writer.Write((byte)1);    // Version 1
+                            writer.Write((byte)2);    // Version 2
 
                             // Write number of players
                             writer.Write(snapshot.Length);
@@ -7964,13 +8373,14 @@ namespace SeraphLeveling
                                 writer.Write(progress.TotalCredits);
                                 writer.Write(progress.SecondsInIncrement);
                                 writer.Write(progress.CurrentIncrementSize);
+                                writer.Write(progress.LastActivityDay);
                             }
                         }
                         data = ms.ToArray();
                     }
 
                     ServerApi.WorldManager.SaveGame.StoreData(HUNGER_PROGRESS_SAVE_KEY, data);
-                    ServerApi.Logger.Debug($"[SeraphLeveling] Persisted hunger progress for {snapshot.Length} players");
+                    ServerApi.Logger.Debug($"[SeraphLeveling] Persisted hunger progress v2 for {snapshot.Length} players");
                 }
                 catch (Exception ex)
                 {
@@ -8029,6 +8439,23 @@ namespace SeraphLeveling
 
                                 HungerProgress[playerUid] = progress;
                             }
+                            pendingHungerProgressSave = true;
+                        }
+                        else if (version == 2)
+                        {
+                            for (int i = 0; i < playerCount; i++)
+                            {
+                                string playerUid = reader.ReadString();
+                                var progress = new HungerProgressData
+                                {
+                                    TotalCredits = reader.ReadInt32(),
+                                    SecondsInIncrement = reader.ReadSingle(),
+                                    CurrentIncrementSize = reader.ReadInt32(),
+                                    LastActivityDay = reader.ReadDouble()
+                                };
+
+                                HungerProgress[playerUid] = progress;
+                            }
                         }
                         else
                         {
@@ -8066,7 +8493,7 @@ namespace SeraphLeveling
                         writer.Write((byte)0x53); // 'S'
                         writer.Write((byte)0x49); // 'I'
                         writer.Write((byte)0x41); // 'A' for Armor
-                        writer.Write((byte)1);    // Version 1
+                        writer.Write((byte)2);    // Version 2
 
                         // Number of players
                         writer.Write(ArmorProgress.Count);
@@ -8079,6 +8506,7 @@ namespace SeraphLeveling
                             writer.Write(playerUid);
                             writer.Write(progress.TotalDurabilityCredits);
                             writer.Write(progress.TotalWalkSpeedCredits);
+                            writer.Write(progress.LastActivityDay);
 
                             // Write per-armor progress
                             writer.Write(progress.ArmorProgress.Count);
@@ -8158,6 +8586,43 @@ namespace SeraphLeveling
                                 {
                                     TotalDurabilityCredits = reader.ReadInt32(),
                                     TotalWalkSpeedCredits = reader.ReadInt32()
+                                };
+
+                                // Read per-armor progress
+                                int armorCount = reader.ReadInt32();
+                                for (int j = 0; j < armorCount; j++)
+                                {
+                                    string armorCode = reader.ReadString();
+                                    var armorProg = new ArmorPieceProgressData
+                                    {
+                                        SecondsWornInIncrement = reader.ReadSingle(),
+                                        CurrentTimeIncrementSize = reader.ReadInt32(),
+                                        TimeCredits = reader.ReadInt32(),
+                                        DamageBlockedInIncrement = reader.ReadSingle(),
+                                        CurrentDamageIncrementSize = reader.ReadInt32(),
+                                        DamageCredits = reader.ReadInt32(),
+                                        RepairsInIncrement = reader.ReadInt32(),
+                                        CurrentRepairIncrementSize = reader.ReadInt32(),
+                                        RepairCredits = reader.ReadInt32(),
+                                        HasBeenEquipped = reader.ReadBoolean()
+                                    };
+                                    progress.ArmorProgress[armorCode] = armorProg;
+                                }
+
+                                ArmorProgress[playerUid] = progress;
+                            }
+                            pendingArmorProgressSave = true;
+                        }
+                        else if (version == 2)
+                        {
+                            for (int i = 0; i < playerCount; i++)
+                            {
+                                string playerUid = reader.ReadString();
+                                var progress = new ArmorProgressData
+                                {
+                                    TotalDurabilityCredits = reader.ReadInt32(),
+                                    TotalWalkSpeedCredits = reader.ReadInt32(),
+                                    LastActivityDay = reader.ReadDouble()
                                 };
 
                                 // Read per-armor progress
@@ -8351,7 +8816,7 @@ namespace SeraphLeveling
                 EnableSkillDecay = config.EnableSkillDecay;
                 DecayGracePeriodDays = config.DecayGracePeriodDays;
                 DecayBasePointsPerDay = config.DecayBasePointsPerDay;
-                DecayMaxPointsPerLogin = config.DecayMaxPointsPerLogin;
+                DecayMaxPointsPerDay = config.DecayMaxPointsPerDay;
                 DecayExemptSkills.Clear();
                 if (config.DecayExemptSkills != null)
                 {
@@ -8364,6 +8829,17 @@ namespace SeraphLeveling
                     }
                 }
 
+                // Load per-skill decay override dictionaries
+                DecayGracePeriodOverrides = config.DecayGracePeriodOverrides ?? new Dictionary<string, double>();
+                DecayBasePointsOverrides = config.DecayBasePointsOverrides ?? new Dictionary<string, int>();
+                DecayMaxPointsOverrides = config.DecayMaxPointsOverrides ?? new Dictionary<string, int>();
+
+                // Sleep buff settings
+                EnableSleepBuff = config.EnableSleepBuff;
+                SleepBuffLinenBedMultiplier = config.SleepBuffLinenBedMultiplier;
+                SleepBuffHayBedMultiplier = config.SleepBuffHayBedMultiplier;
+                SleepBuffDurationDays = config.SleepBuffDurationDays;
+
                 // Debug settings
                 DebugLoggingEnabled = config.EnableDebugLogging;
                 if (DebugLoggingEnabled)
@@ -8373,7 +8849,12 @@ namespace SeraphLeveling
 
                 if (EnableSkillDecay)
                 {
-                    api.Logger.Notification($"[SeraphLeveling] Skill decay ENABLED: {DecayGracePeriodDays} day grace, {DecayBasePointsPerDay} base decay/day, max {DecayMaxPointsPerLogin}/login");
+                    api.Logger.Notification($"[SeraphLeveling] Skill decay ENABLED: {DecayGracePeriodDays} day grace, {DecayBasePointsPerDay} base decay/day, max {DecayMaxPointsPerDay}/day (online-only, per-skill overrides active)");
+                }
+
+                if (EnableSleepBuff)
+                {
+                    api.Logger.Notification($"[SeraphLeveling] Sleep buff ENABLED: linen bed {SleepBuffLinenBedMultiplier}x, hay bed {SleepBuffHayBedMultiplier}x, duration {SleepBuffDurationDays} days");
                 }
 
                 api.Logger.Notification("[SeraphLeveling] Config loaded from ModConfig/" + CONFIG_FILE_NAME);
@@ -8389,116 +8870,314 @@ namespace SeraphLeveling
         // =========================================================================
 
         /// <summary>
-        /// Calculate decay points based on days since last activity.
-        /// Uses triangular sum: Day 1 = base, Day 2 = 2*base, Day 3 = 3*base, etc.
+        /// Get per-skill decay parameters, falling back to global defaults.
+        /// Returns (gracePeriodDays, basePointsPerDay, maxPointsPerDay).
         /// </summary>
-        private static int CalculateDecayPoints(double lastActivityDay, double currentDay)
+        private static (double grace, int basePoints, int maxPoints) GetDecayParams(string skillKey)
+        {
+            double grace = DecayGracePeriodOverrides.TryGetValue(skillKey, out var g) ? g : DecayGracePeriodDays;
+            int basePoints = DecayBasePointsOverrides.TryGetValue(skillKey, out var b) ? b : DecayBasePointsPerDay;
+            int maxPoints = DecayMaxPointsOverrides.TryGetValue(skillKey, out var m) ? m : DecayMaxPointsPerDay;
+            return (grace, basePoints, maxPoints);
+        }
+
+        /// <summary>
+        /// Calculate decay points for one day of inactivity based on days since last activity.
+        /// Uses triangular formula: consecutive inactive days multiply the base rate.
+        /// Only calculates decay for a single day tick (not cumulative).
+        /// </summary>
+        private static int CalculateDecayPoints(double lastActivityDay, double currentDay,
+            double gracePeriodDays, int basePointsPerDay, int maxPointsPerDay)
         {
             if (lastActivityDay <= 0) return 0; // No activity recorded yet, no decay
             if (currentDay <= lastActivityDay) return 0; // No time passed
 
             double daysSinceActivity = currentDay - lastActivityDay;
-            double daysAfterGrace = daysSinceActivity - DecayGracePeriodDays;
+            double daysAfterGrace = daysSinceActivity - gracePeriodDays;
 
             if (daysAfterGrace <= 0) return 0; // Still in grace period
 
-            // Triangular sum: 1 + 2 + 3 + ... + n = n*(n+1)/2
-            // Each day past grace loses (day number) * base points
-            int fullDays = (int)daysAfterGrace;
-            int totalDecay = 0;
+            // Triangular: the Nth day past grace loses N * base points
+            int dayNumber = (int)Math.Ceiling(daysAfterGrace);
+            int decayThisDay = dayNumber * basePointsPerDay;
 
-            for (int day = 1; day <= fullDays; day++)
-            {
-                totalDecay += day * DecayBasePointsPerDay;
-            }
-
-            // Cap at maximum per login
-            return Math.Min(totalDecay, DecayMaxPointsPerLogin);
+            // Cap at maximum per day
+            return Math.Min(decayThisDay, maxPointsPerDay);
         }
 
         /// <summary>
-        /// Apply skill decay to a player on join. Called before bonuses are applied.
+        /// Decay tick handler. Runs every 10 seconds, checks if a full in-game day has passed
+        /// for each online player, and applies decay if so.
         /// </summary>
-        private void ApplySkillDecay(IServerPlayer player)
+        private void OnDecayTick(float dt)
         {
             if (!EnableSkillDecay) return;
+            if (ServerApi?.World?.AllOnlinePlayers == null) return;
+
+            double currentDay = ServerApi.World.Calendar.TotalDays;
+
+            foreach (var onlinePlayer in ServerApi.World.AllOnlinePlayers)
+            {
+                var player = onlinePlayer as IServerPlayer;
+                if (player?.Entity == null) continue;
+
+                string playerUid = player.PlayerUID;
+
+                if (!LastDecayCheckDay.TryGetValue(playerUid, out double lastCheck))
+                    continue; // Not initialized yet (hasn't joined)
+
+                // Process one day at a time to handle multi-day skips incrementally
+                while (currentDay - lastCheck >= 1.0)
+                {
+                    lastCheck += 1.0;
+                    ApplyDailyDecay(player, lastCheck);
+                }
+
+                LastDecayCheckDay[playerUid] = lastCheck;
+            }
+        }
+
+        /// <summary>
+        /// Apply one day of decay for a single player across all 13 progression skills.
+        /// Called from OnDecayTick when a full in-game day has elapsed.
+        /// </summary>
+        private void ApplyDailyDecay(IServerPlayer player, double currentDay)
+        {
             if (player?.Entity == null) return;
 
             string playerUid = player.PlayerUID;
-            double currentDay = ServerApi.World.Calendar.TotalDays;
-
+            var sb = new StringBuilder();
             int totalDecayApplied = 0;
 
-            // Mining decay
-            if (!DecayExemptSkills.Contains("mining"))
+            // Mining
+            totalDecayApplied += DecaySkillCredits(playerUid, "mining", currentDay,
+                () => MiningProgress.TryGetValue(playerUid, out var p) && p.TotalCredits > 0 ? p : null,
+                p => ((MiningProgressData)p).TotalCredits,
+                (p, v) => ((MiningProgressData)p).TotalCredits = v,
+                p => ((MiningProgressData)p).LastActivityDay,
+                ref pendingMiningProgressSave, sb);
+
+            // Melee
+            totalDecayApplied += DecaySkillCredits(playerUid, "melee", currentDay,
+                () => MeleeProgress.TryGetValue(playerUid, out var p) && p.TotalCredits > 0 ? p : null,
+                p => ((MeleeProgressData)p).TotalCredits,
+                (p, v) => ((MeleeProgressData)p).TotalCredits = v,
+                p => ((MeleeProgressData)p).LastActivityDay,
+                ref pendingMeleeProgressSave, sb);
+
+            // Ranged
+            totalDecayApplied += DecaySkillCredits(playerUid, "ranged", currentDay,
+                () => RangedProgress.TryGetValue(playerUid, out var p) && p.TotalCredits > 0 ? p : null,
+                p => ((RangedProgressData)p).TotalCredits,
+                (p, v) => ((RangedProgressData)p).TotalCredits = v,
+                p => ((RangedProgressData)p).LastActivityDay,
+                ref pendingRangedProgressSave, sb);
+
+            // Walking
+            totalDecayApplied += DecaySkillCredits(playerUid, "walking", currentDay,
+                () => WalkingProgress.TryGetValue(playerUid, out var p) && p.TotalCredits > 0 ? p : null,
+                p => ((WalkingProgressData)p).TotalCredits,
+                (p, v) => ((WalkingProgressData)p).TotalCredits = v,
+                p => ((WalkingProgressData)p).LastActivityDay,
+                ref pendingWalkingProgressSave, sb);
+
+            // Hunger
+            totalDecayApplied += DecaySkillCredits(playerUid, "hunger", currentDay,
+                () => HungerProgress.TryGetValue(playerUid, out var p) && p.TotalCredits > 0 ? p : null,
+                p => ((HungerProgressData)p).TotalCredits,
+                (p, v) => ((HungerProgressData)p).TotalCredits = v,
+                p => ((HungerProgressData)p).LastActivityDay,
+                ref pendingHungerProgressSave, sb);
+
+            // Armor (decay TotalDurabilityCredits and TotalWalkSpeedCredits equally)
+            if (!DecayExemptSkills.Contains("armor") && !DisabledSkills.Contains("armor"))
             {
-                if (MiningProgress.TryGetValue(playerUid, out var miningProg) && miningProg.TotalCredits > 0)
+                if (ArmorProgress.TryGetValue(playerUid, out var armorProg) &&
+                    (armorProg.TotalDurabilityCredits > 0 || armorProg.TotalWalkSpeedCredits > 0))
                 {
-                    int decay = CalculateDecayPoints(miningProg.LastActivityDay, currentDay);
+                    var (grace, basePoints, maxPoints) = GetDecayParams("armor");
+                    int decay = CalculateDecayPoints(armorProg.LastActivityDay, currentDay, grace, basePoints, maxPoints);
                     if (decay > 0)
                     {
-                        int oldCredits = miningProg.TotalCredits;
-                        miningProg.TotalCredits = Math.Max(0, miningProg.TotalCredits - decay);
-                        int actualDecay = oldCredits - miningProg.TotalCredits;
+                        int durDecay = Math.Min(decay, armorProg.TotalDurabilityCredits);
+                        int wsDecay = Math.Min(decay, armorProg.TotalWalkSpeedCredits);
+                        armorProg.TotalDurabilityCredits -= durDecay;
+                        armorProg.TotalWalkSpeedCredits -= wsDecay;
+                        // Also decay optional features proportionally
+                        if (armorProg.TotalHungerReductionCredits > 0)
+                            armorProg.TotalHungerReductionCredits = Math.Max(0, armorProg.TotalHungerReductionCredits - decay);
+                        if (armorProg.TotalHealingCredits > 0)
+                            armorProg.TotalHealingCredits = Math.Max(0, armorProg.TotalHealingCredits - decay);
+                        int actualDecay = Math.Max(durDecay, wsDecay);
                         if (actualDecay > 0)
                         {
                             totalDecayApplied += actualDecay;
-                            pendingMiningProgressSave = true;
-                            ServerApi.Logger.Debug($"[SeraphLeveling] Mining decay: {actualDecay} credits for {player.PlayerName}");
+                            pendingArmorProgressSave = true;
+                            sb.AppendLine($"  Armor: -{actualDecay}");
                         }
                     }
                 }
             }
 
-            // Melee decay
-            if (!DecayExemptSkills.Contains("melee"))
+            // Mender
+            totalDecayApplied += DecaySkillCredits(playerUid, "mender", currentDay,
+                () => MenderProgress.TryGetValue(playerUid, out var p) && p.TotalCredits > 0 ? p : null,
+                p => ((MenderProgressData)p).TotalCredits,
+                (p, v) => ((MenderProgressData)p).TotalCredits = v,
+                p => ((MenderProgressData)p).LastActivityDay,
+                ref pendingMenderProgressSave, sb);
+
+            // Pilferer
+            totalDecayApplied += DecaySkillCredits(playerUid, "pilferer", currentDay,
+                () => PilfererProgress.TryGetValue(playerUid, out var p) && p.TotalCredits > 0 ? p : null,
+                p => ((PilfererProgressData)p).TotalCredits,
+                (p, v) => ((PilfererProgressData)p).TotalCredits = v,
+                p => ((PilfererProgressData)p).LastActivityDay,
+                ref pendingPilfererProgressSave, sb);
+
+            // Resourceful
+            totalDecayApplied += DecaySkillCredits(playerUid, "resourceful", currentDay,
+                () => ResourcefulProgress.TryGetValue(playerUid, out var p) && p.TotalCredits > 0 ? p : null,
+                p => ((ResourcefulProgressData)p).TotalCredits,
+                (p, v) => ((ResourcefulProgressData)p).TotalCredits = v,
+                p => ((ResourcefulProgressData)p).LastActivityDay,
+                ref pendingResourcefulProgressSave, sb);
+
+            // Forager
+            totalDecayApplied += DecaySkillCredits(playerUid, "forager", currentDay,
+                () => ForagerProgress.TryGetValue(playerUid, out var p) && p.TotalCredits > 0 ? p : null,
+                p => ((ForagerProgressData)p).TotalCredits,
+                (p, v) => ((ForagerProgressData)p).TotalCredits = v,
+                p => ((ForagerProgressData)p).LastActivityDay,
+                ref pendingForagerProgressSave, sb);
+
+            // Furtive
+            totalDecayApplied += DecaySkillCredits(playerUid, "furtive", currentDay,
+                () => FurtiveProgress.TryGetValue(playerUid, out var p) && p.TotalCredits > 0 ? p : null,
+                p => ((FurtiveProgressData)p).TotalCredits,
+                (p, v) => ((FurtiveProgressData)p).TotalCredits = v,
+                p => ((FurtiveProgressData)p).LastActivityDay,
+                ref pendingFurtiveProgressSave, sb);
+
+            // Precise
+            totalDecayApplied += DecaySkillCredits(playerUid, "precise", currentDay,
+                () => PreciseProgress.TryGetValue(playerUid, out var p) && p.TotalCredits > 0 ? p : null,
+                p => ((PreciseProgressData)p).TotalCredits,
+                (p, v) => ((PreciseProgressData)p).TotalCredits = v,
+                p => ((PreciseProgressData)p).LastActivityDay,
+                ref pendingPreciseProgressSave, sb);
+
+            // CO Proficiency (decay each proficiency's TotalCredits and SteadyAimCredits)
+            if (!DecayExemptSkills.Contains("coproficiency") && !DisabledSkills.Contains("coproficiency") && IsCOCompatEnabled)
             {
-                if (MeleeProgress.TryGetValue(playerUid, out var meleeProg) && meleeProg.TotalCredits > 0)
+                if (COProgress.TryGetValue(playerUid, out var coProg))
                 {
-                    int decay = CalculateDecayPoints(meleeProg.LastActivityDay, currentDay);
+                    var (grace, basePoints, maxPoints) = GetDecayParams("coproficiency");
+                    int decay = CalculateDecayPoints(coProg.LastActivityDay, currentDay, grace, basePoints, maxPoints);
                     if (decay > 0)
                     {
-                        int oldCredits = meleeProg.TotalCredits;
-                        meleeProg.TotalCredits = Math.Max(0, meleeProg.TotalCredits - decay);
-                        int actualDecay = oldCredits - meleeProg.TotalCredits;
-                        if (actualDecay > 0)
+                        int coDecayTotal = 0;
+                        foreach (var profKvp in coProg.Proficiencies)
                         {
-                            totalDecayApplied += actualDecay;
-                            pendingMeleeProgressSave = true;
-                            ServerApi.Logger.Debug($"[SeraphLeveling] Melee decay: {actualDecay} credits for {player.PlayerName}");
+                            if (profKvp.Value.TotalCredits > 0)
+                            {
+                                int old = profKvp.Value.TotalCredits;
+                                profKvp.Value.TotalCredits = Math.Max(0, profKvp.Value.TotalCredits - decay);
+                                coDecayTotal += old - profKvp.Value.TotalCredits;
+                            }
+                        }
+                        if (coProg.SteadyAimCredits > 0)
+                        {
+                            int old = coProg.SteadyAimCredits;
+                            coProg.SteadyAimCredits = Math.Max(0, coProg.SteadyAimCredits - decay);
+                            coDecayTotal += old - coProg.SteadyAimCredits;
+                        }
+                        if (coDecayTotal > 0)
+                        {
+                            totalDecayApplied += coDecayTotal;
+                            pendingCOProgressSave = true;
+                            sb.AppendLine($"  CO Proficiency: -{coDecayTotal}");
                         }
                     }
                 }
             }
 
-            // Ranged decay
-            if (!DecayExemptSkills.Contains("ranged"))
-            {
-                if (RangedProgress.TryGetValue(playerUid, out var rangedProg) && rangedProg.TotalCredits > 0)
-                {
-                    int decay = CalculateDecayPoints(rangedProg.LastActivityDay, currentDay);
-                    if (decay > 0)
-                    {
-                        int oldCredits = rangedProg.TotalCredits;
-                        rangedProg.TotalCredits = Math.Max(0, rangedProg.TotalCredits - decay);
-                        int actualDecay = oldCredits - rangedProg.TotalCredits;
-                        if (actualDecay > 0)
-                        {
-                            totalDecayApplied += actualDecay;
-                            pendingRangedProgressSave = true;
-                            ServerApi.Logger.Debug($"[SeraphLeveling] Ranged decay: {actualDecay} credits for {player.PlayerName}");
-                        }
-                    }
-                }
-            }
-
-            // Notify player if decay occurred
+            // If any decay occurred, re-apply all bonuses and notify
             if (totalDecayApplied > 0)
             {
+                // Re-apply bonuses with new credit values
+                ReapplyAllBonuses(player);
+
                 player.SendMessage(GlobalConstants.GeneralChatGroup,
-                    $"Some skills have decayed due to lack of use (-{totalDecayApplied} total credits). Use them to regain your progress!",
+                    $"Skills decayed due to inactivity (-{totalDecayApplied} total credits):\n{sb}Use them to regain your progress!",
                     EnumChatType.Notification);
+
+                ServerApi.Logger.Debug($"[SeraphLeveling] Daily decay applied to {player.PlayerName}: {totalDecayApplied} total credits lost");
             }
+        }
+
+        /// <summary>
+        /// Helper to decay a single skill's TotalCredits. Returns actual credits lost.
+        /// </summary>
+        private int DecaySkillCredits(string playerUid, string skillKey, double currentDay,
+            System.Func<object> getProgress, System.Func<object, int> getCredits, Action<object, int> setCredits,
+            System.Func<object, double> getLastActivity, ref bool pendingSave, StringBuilder sb)
+        {
+            if (DecayExemptSkills.Contains(skillKey) || DisabledSkills.Contains(skillKey)) return 0;
+
+            var prog = getProgress();
+            if (prog == null) return 0;
+
+            var (grace, basePoints, maxPoints) = GetDecayParams(skillKey);
+            double lastActivity = getLastActivity(prog);
+            int decay = CalculateDecayPoints(lastActivity, currentDay, grace, basePoints, maxPoints);
+            if (decay <= 0) return 0;
+
+            int oldCredits = getCredits(prog);
+            int newCredits = Math.Max(0, oldCredits - decay);
+            setCredits(prog, newCredits);
+            int actualDecay = oldCredits - newCredits;
+            if (actualDecay > 0)
+            {
+                pendingSave = true;
+                sb.AppendLine($"  {char.ToUpper(skillKey[0])}{skillKey.Substring(1)}: -{actualDecay}");
+            }
+            return actualDecay;
+        }
+
+        /// <summary>
+        /// Re-apply all bonuses for a player after decay has reduced credits.
+        /// </summary>
+        private void ReapplyAllBonuses(IServerPlayer player)
+        {
+            string playerUid = player.PlayerUID;
+
+            if (MiningProgress.TryGetValue(playerUid, out var miningProg))
+                ApplyMiningBonus(player, miningProg.TotalCredits);
+            if (MeleeProgress.TryGetValue(playerUid, out var meleeProg))
+                ApplyMeleeBonusStatic(player, meleeProg.TotalCredits);
+            if (RangedProgress.TryGetValue(playerUid, out var rangedProg))
+                ApplyRangedBonusStatic(player, rangedProg.TotalCredits);
+            if (WalkingProgress.TryGetValue(playerUid, out var walkingProg))
+                ApplyWalkingBonusStatic(player, walkingProg.TotalCredits);
+            if (HungerProgress.TryGetValue(playerUid, out var hungerProg))
+                ApplyHungerBonusStatic(player, hungerProg.TotalCredits);
+            if (ArmorProgress.TryGetValue(playerUid, out var armorProg))
+                ApplyArmorBonusesStatic(player, armorProg.TotalDurabilityCredits, armorProg.TotalWalkSpeedCredits);
+            if (MenderProgress.TryGetValue(playerUid, out var menderProg))
+                ApplyMenderBonusStatic(player, menderProg.TotalCredits);
+            if (PilfererProgress.TryGetValue(playerUid, out var pilfererProg))
+                ApplyPilfererBonusStatic(player, pilfererProg.TotalCredits);
+            if (ResourcefulProgress.TryGetValue(playerUid, out var resourcefulProg))
+                ApplyResourcefulBonusStatic(player, resourcefulProg.TotalCredits);
+            if (ForagerProgress.TryGetValue(playerUid, out var foragerProg))
+                ApplyForagerBonusStatic(player, foragerProg.TotalCredits);
+            if (FurtiveProgress.TryGetValue(playerUid, out var furtiveProg))
+                ApplyFurtiveBonusStatic(player, furtiveProg.TotalCredits);
+            if (PreciseProgress.TryGetValue(playerUid, out var preciseProg))
+                ApplyPreciseBonusStatic(player, preciseProg.TotalCredits);
+            if (IsCOCompatEnabled && COProgress.TryGetValue(playerUid, out var coProg))
+                ApplyAllCOBonuses(player);
         }
 
         /// <summary>
@@ -8515,22 +9194,278 @@ namespace SeraphLeveling
             {
                 case "mining":
                     if (MiningProgress.TryGetValue(playerUid, out var miningProg))
-                    {
                         miningProg.LastActivityDay = currentDay;
-                    }
                     break;
                 case "melee":
                     if (MeleeProgress.TryGetValue(playerUid, out var meleeProg))
-                    {
                         meleeProg.LastActivityDay = currentDay;
-                    }
                     break;
                 case "ranged":
                     if (RangedProgress.TryGetValue(playerUid, out var rangedProg))
-                    {
                         rangedProg.LastActivityDay = currentDay;
-                    }
                     break;
+                case "walking":
+                    if (WalkingProgress.TryGetValue(playerUid, out var walkingProg))
+                        walkingProg.LastActivityDay = currentDay;
+                    break;
+                case "hunger":
+                    if (HungerProgress.TryGetValue(playerUid, out var hungerProg))
+                        hungerProg.LastActivityDay = currentDay;
+                    break;
+                case "armor":
+                    if (ArmorProgress.TryGetValue(playerUid, out var armorProg))
+                        armorProg.LastActivityDay = currentDay;
+                    break;
+                case "mender":
+                    if (MenderProgress.TryGetValue(playerUid, out var menderProg))
+                        menderProg.LastActivityDay = currentDay;
+                    break;
+                case "pilferer":
+                    if (PilfererProgress.TryGetValue(playerUid, out var pilfererProg))
+                        pilfererProg.LastActivityDay = currentDay;
+                    break;
+                case "resourceful":
+                    if (ResourcefulProgress.TryGetValue(playerUid, out var resourcefulProg))
+                        resourcefulProg.LastActivityDay = currentDay;
+                    break;
+                case "forager":
+                    if (ForagerProgress.TryGetValue(playerUid, out var foragerProg))
+                        foragerProg.LastActivityDay = currentDay;
+                    break;
+                case "furtive":
+                    if (FurtiveProgress.TryGetValue(playerUid, out var furtiveProg))
+                        furtiveProg.LastActivityDay = currentDay;
+                    break;
+                case "precise":
+                    if (PreciseProgress.TryGetValue(playerUid, out var preciseProg))
+                        preciseProg.LastActivityDay = currentDay;
+                    break;
+                case "coproficiency":
+                    if (COProgress.TryGetValue(playerUid, out var coProg))
+                        coProg.LastActivityDay = currentDay;
+                    break;
+            }
+        }
+
+        // =========================================================================
+        // SLEEP BUFF SYSTEM
+        // =========================================================================
+
+        /// <summary>
+        /// Get the current XP multiplier for a player.
+        /// Returns the sleep buff multiplier if active, otherwise 1.0.
+        /// </summary>
+        public static float GetXPMultiplier(string playerUid)
+        {
+            if (!EnableSleepBuff) return 1.0f;
+            if (string.IsNullOrEmpty(playerUid)) return 1.0f;
+            if (ServerApi == null) return 1.0f;
+
+            // Check if player has an active sleep buff
+            if (!SleepBuffExpiration.TryGetValue(playerUid, out double expiration)) return 1.0f;
+            if (!SleepBuffMultiplier.TryGetValue(playerUid, out float multiplier)) return 1.0f;
+
+            double currentDay = ServerApi.World?.Calendar?.TotalDays ?? 0;
+
+            // Check if buff has expired
+            if (currentDay >= expiration)
+            {
+                // Remove expired buff
+                SleepBuffExpiration.TryRemove(playerUid, out _);
+                SleepBuffMultiplier.TryRemove(playerUid, out _);
+                return 1.0f;
+            }
+
+            return multiplier;
+        }
+
+        /// <summary>
+        /// Apply the XP multiplier to a value (for progress tracking).
+        /// </summary>
+        public static float ApplyXPMultiplier(string playerUid, float baseValue)
+        {
+            float multiplier = GetXPMultiplier(playerUid);
+            return baseValue * multiplier;
+        }
+
+        /// <summary>
+        /// Apply the XP multiplier to an integer value (for progress tracking).
+        /// </summary>
+        public static int ApplyXPMultiplier(string playerUid, int baseValue)
+        {
+            float multiplier = GetXPMultiplier(playerUid);
+            return (int)(baseValue * multiplier);
+        }
+
+        /// <summary>
+        /// Handler for /trait sleepbuff command. Shows sleep buff status.
+        /// </summary>
+        private TextCommandResult OnTraitSleepBuffCommand(TextCommandCallingArgs args)
+        {
+            IServerPlayer player = args.Caller.Player as IServerPlayer;
+            if (player?.Entity == null) return TextCommandResult.Error("Player not found.");
+
+            var sb = new StringBuilder();
+
+            if (!EnableSleepBuff)
+            {
+                sb.AppendLine("Sleep Buff: DISABLED (not enabled in config)");
+                return TextCommandResult.Success(sb.ToString());
+            }
+
+            sb.AppendLine("Sleep Buff: ENABLED");
+            sb.AppendLine($"  Linen/Old bed multiplier: {SleepBuffLinenBedMultiplier:F1}x");
+            sb.AppendLine($"  Hay bed multiplier: {SleepBuffHayBedMultiplier:F1}x");
+            sb.AppendLine($"  Duration: {SleepBuffDurationDays:F1} in-game days");
+            sb.AppendLine();
+
+            string playerUid = player.PlayerUID;
+            double currentDay = ServerApi?.World?.Calendar?.TotalDays ?? 0;
+
+            if (SleepBuffExpiration.TryGetValue(playerUid, out double expiration) &&
+                SleepBuffMultiplier.TryGetValue(playerUid, out float multiplier) &&
+                currentDay < expiration)
+            {
+                double remainingDays = expiration - currentDay;
+                double remainingHours = remainingDays * 24;
+                sb.AppendLine($"  Status: ACTIVE");
+                sb.AppendLine($"  Current multiplier: {multiplier:F1}x");
+                sb.AppendLine($"  Time remaining: {remainingDays:F2} days ({remainingHours:F1} in-game hours)");
+            }
+            else
+            {
+                sb.AppendLine($"  Status: INACTIVE");
+                sb.AppendLine($"  Sleep in a bed to activate the buff!");
+            }
+
+            return TextCommandResult.Success(sb.ToString());
+        }
+
+        /// <summary>
+        /// Handler for /trait decay command. Shows skill decay status.
+        /// </summary>
+        private TextCommandResult OnTraitDecayCommand(TextCommandCallingArgs args)
+        {
+            IServerPlayer player = args.Caller.Player as IServerPlayer;
+            if (player?.Entity == null) return TextCommandResult.Error("Player not found.");
+
+            var sb = new StringBuilder();
+
+            if (!EnableSkillDecay)
+            {
+                sb.AppendLine("Skill Decay: DISABLED (not enabled in config)");
+                return TextCommandResult.Success(sb.ToString());
+            }
+
+            sb.AppendLine("Skill Decay: ENABLED (online-only, checked once per in-game day)");
+            sb.AppendLine($"  Default grace period: {DecayGracePeriodDays:F1} days");
+            sb.AppendLine($"  Default base decay: {DecayBasePointsPerDay} points/day");
+            sb.AppendLine($"  Default max decay: {DecayMaxPointsPerDay} points/day");
+            if (DecayExemptSkills.Count > 0)
+            {
+                sb.AppendLine($"  Exempt skills: {string.Join(", ", DecayExemptSkills)}");
+            }
+            sb.AppendLine();
+
+            string playerUid = player.PlayerUID;
+            double currentDay = ServerApi?.World?.Calendar?.TotalDays ?? 0;
+
+            // Combat skills
+            sb.AppendLine("--- Combat Skills ---");
+            AppendDecayStatus(sb, "Mining", "mining", playerUid, currentDay,
+                () => MiningProgress.TryGetValue(playerUid, out var p) ? (p.LastActivityDay, p.TotalCredits) : (0, 0));
+            AppendDecayStatus(sb, "Melee", "melee", playerUid, currentDay,
+                () => MeleeProgress.TryGetValue(playerUid, out var p) ? (p.LastActivityDay, p.TotalCredits) : (0, 0));
+            AppendDecayStatus(sb, "Ranged", "ranged", playerUid, currentDay,
+                () => RangedProgress.TryGetValue(playerUid, out var p) ? (p.LastActivityDay, p.TotalCredits) : (0, 0));
+            AppendDecayStatus(sb, "Precise", "precise", playerUid, currentDay,
+                () => PreciseProgress.TryGetValue(playerUid, out var p) ? (p.LastActivityDay, p.TotalCredits) : (0, 0));
+
+            // Movement/Survival skills
+            sb.AppendLine("--- Movement/Survival ---");
+            AppendDecayStatus(sb, "Walking", "walking", playerUid, currentDay,
+                () => WalkingProgress.TryGetValue(playerUid, out var p) ? (p.LastActivityDay, p.TotalCredits) : (0, 0));
+            AppendDecayStatus(sb, "Hunger", "hunger", playerUid, currentDay,
+                () => HungerProgress.TryGetValue(playerUid, out var p) ? (p.LastActivityDay, p.TotalCredits) : (0, 0));
+            AppendDecayStatus(sb, "Armor", "armor", playerUid, currentDay,
+                () => ArmorProgress.TryGetValue(playerUid, out var p) ? (p.LastActivityDay, Math.Max(p.TotalDurabilityCredits, p.TotalWalkSpeedCredits)) : (0, 0));
+            AppendDecayStatus(sb, "Furtive", "furtive", playerUid, currentDay,
+                () => FurtiveProgress.TryGetValue(playerUid, out var p) ? (p.LastActivityDay, p.TotalCredits) : (0, 0));
+
+            // Utility skills
+            sb.AppendLine("--- Utility ---");
+            AppendDecayStatus(sb, "Mender", "mender", playerUid, currentDay,
+                () => MenderProgress.TryGetValue(playerUid, out var p) ? (p.LastActivityDay, p.TotalCredits) : (0, 0));
+            AppendDecayStatus(sb, "Pilferer", "pilferer", playerUid, currentDay,
+                () => PilfererProgress.TryGetValue(playerUid, out var p) ? (p.LastActivityDay, p.TotalCredits) : (0, 0));
+            AppendDecayStatus(sb, "Resourceful", "resourceful", playerUid, currentDay,
+                () => ResourcefulProgress.TryGetValue(playerUid, out var p) ? (p.LastActivityDay, p.TotalCredits) : (0, 0));
+            AppendDecayStatus(sb, "Forager", "forager", playerUid, currentDay,
+                () => ForagerProgress.TryGetValue(playerUid, out var p) ? (p.LastActivityDay, p.TotalCredits) : (0, 0));
+
+            // CO Proficiency
+            if (IsCOCompatEnabled)
+            {
+                sb.AppendLine("--- Combat Overhaul ---");
+                AppendDecayStatus(sb, "CO Proficiency", "coproficiency", playerUid, currentDay,
+                    () => COProgress.TryGetValue(playerUid, out var p) ? (p.LastActivityDay, p.SteadyAimCredits) : (0, 0));
+            }
+
+            return TextCommandResult.Success(sb.ToString());
+        }
+
+        /// <summary>
+        /// Helper to append decay status for a single skill with per-skill parameters.
+        /// </summary>
+        private void AppendDecayStatus(StringBuilder sb, string displayName, string skillKey, string playerUid, double currentDay, Func<(double lastActivity, int credits)> getProgress)
+        {
+            var (lastActivity, credits) = getProgress();
+            bool exempt = DecayExemptSkills.Contains(skillKey);
+
+            sb.Append($"  {displayName}: ");
+
+            if (exempt)
+            {
+                sb.AppendLine("EXEMPT");
+                return;
+            }
+
+            if (credits <= 0)
+            {
+                sb.AppendLine("No progress yet");
+                return;
+            }
+
+            if (lastActivity <= 0)
+            {
+                sb.AppendLine($"{credits} credits (no activity tracked)");
+                return;
+            }
+
+            var (grace, basePoints, maxPoints) = GetDecayParams(skillKey);
+            double daysSinceActivity = currentDay - lastActivity;
+            double daysUntilDecay = grace - daysSinceActivity;
+            int pendingDecay = CalculateDecayPoints(lastActivity, currentDay, grace, basePoints, maxPoints);
+
+            // Show per-skill params if they differ from global defaults
+            string paramInfo = "";
+            if (grace != DecayGracePeriodDays || basePoints != DecayBasePointsPerDay || maxPoints != DecayMaxPointsPerDay)
+            {
+                paramInfo = $" [grace:{grace:F1}d, base:{basePoints}, max:{maxPoints}]";
+            }
+
+            if (daysUntilDecay > 0)
+            {
+                sb.AppendLine($"{credits} credits - Safe ({daysUntilDecay:F1} days until decay){paramInfo}");
+            }
+            else if (pendingDecay > 0)
+            {
+                int effectiveDecay = Math.Min(pendingDecay, credits);
+                sb.AppendLine($"{credits} credits - DECAYING (-{effectiveDecay}/day, {daysSinceActivity:F1} days inactive){paramInfo}");
+            }
+            else
+            {
+                sb.AppendLine($"{credits} credits - Active{paramInfo}");
             }
         }
 
@@ -8842,8 +9777,9 @@ namespace SeraphLeveling
 
             int oldCredits = proficiencyProgress.TotalCredits;
 
-            // Add damage to this weapon's progress
-            weaponProgress.DamageInIncrement += damage;
+            // Add damage to this weapon's progress (apply sleep buff multiplier if active)
+            float modifiedDamage = ApplyXPMultiplier(attackerPlayer.PlayerUID, damage);
+            weaponProgress.DamageInIncrement += modifiedDamage;
 
             // Check if we've earned any new credits with this weapon
             while (weaponProgress.DamageInIncrement >= weaponProgress.CurrentIncrementSize && proficiencyProgress.TotalCredits < maxCredits)
@@ -8857,6 +9793,9 @@ namespace SeraphLeveling
             }
 
             pendingCOProgressSave = true;
+
+            // Update last activity day for skill decay
+            UpdateSkillActivityDay(playerUid, "coproficiency");
 
             // If credits increased, update the stat and notify player
             if (proficiencyProgress.TotalCredits > oldCredits)
@@ -8902,7 +9841,9 @@ namespace SeraphLeveling
 
             int oldCredits = playerProgress.SteadyAimCredits;
 
-            sharedProgress.DamageInIncrement += damage;
+            // Apply sleep buff multiplier if active
+            float modifiedDamage = ApplyXPMultiplier(player.PlayerUID, damage);
+            sharedProgress.DamageInIncrement += modifiedDamage;
 
             while (sharedProgress.DamageInIncrement >= sharedProgress.CurrentIncrementSize && playerProgress.SteadyAimCredits < maxSteadyAimCredits)
             {
@@ -10101,8 +11042,11 @@ namespace SeraphLeveling
 
                 int oldCredits = playerProgress.TotalCredits;
 
+                // Apply sleep buff multiplier to distance
+                float modifiedDistance = ApplyXPMultiplier(playerUid, distance);
+
                 // Add distance to progress
-                playerProgress.BlocksInIncrement += distance;
+                playerProgress.BlocksInIncrement += modifiedDistance;
 
                 // Check if we've earned any new credits
                 while (playerProgress.BlocksInIncrement >= playerProgress.CurrentIncrementSize && playerProgress.TotalCredits < MaxFurtivePercent)
@@ -10124,6 +11068,7 @@ namespace SeraphLeveling
                 // If credits increased, update the stat and notify player
                 if (playerProgress.TotalCredits > oldCredits)
                 {
+                    UpdateSkillActivityDay(playerUid, "furtive");
                     ApplyFurtiveBonusStatic(player, playerProgress.TotalCredits);
 
                     // Notify player of level up with raw improvement (shows progress even when capped)
@@ -10247,8 +11192,9 @@ namespace SeraphLeveling
             // Get or create weapon progress
             var weaponProgress = playerProgress.GetWeaponProgress(weaponType);
 
-            // Add damage to progress
-            weaponProgress.DamageInIncrement += damage;
+            // Add damage to progress (apply sleep buff multiplier if active)
+            float modifiedDamage = ApplyXPMultiplier(attackerPlayer.PlayerUID, damage);
+            weaponProgress.DamageInIncrement += modifiedDamage;
 
             // Check if we've earned any new credits
             while (weaponProgress.DamageInIncrement >= weaponProgress.CurrentIncrementSize && playerProgress.TotalCredits < effectiveMax)
@@ -10266,6 +11212,9 @@ namespace SeraphLeveling
             {
                 pendingPreciseProgressSave = true;
             }
+
+            // Update last activity day for skill decay
+            UpdateSkillActivityDay(playerUid, "precise");
 
             // If credits increased, update the stat and notify player
             if (playerProgress.TotalCredits > oldCredits)
@@ -10886,7 +11835,9 @@ namespace SeraphLeveling
             if (progress.TotalCredits >= MaxMenderPercent) return;
 
             int oldCredits = progress.TotalCredits;
-            progress.RepairsInIncrement++;
+            // Apply sleep buff multiplier if active
+            int modifiedRepairs = ApplyXPMultiplier(playerUid, 1);
+            progress.RepairsInIncrement += modifiedRepairs;
 
             // Check if we've earned a credit
             while (progress.RepairsInIncrement >= progress.CurrentIncrementSize && progress.TotalCredits < MaxMenderPercent)
@@ -10899,6 +11850,9 @@ namespace SeraphLeveling
             }
 
             pendingMenderProgressSave = true;
+
+            // Update last activity day for skill decay
+            UpdateSkillActivityDay(playerUid, "mender");
 
             if (progress.TotalCredits > oldCredits)
             {
@@ -11142,7 +12096,9 @@ namespace SeraphLeveling
             if (progress.TotalCredits >= maxCredits) return;
 
             int oldCredits = progress.TotalCredits;
-            progress.PointsInIncrement += PILFERER_VESSEL_POINTS;
+            // Apply sleep buff multiplier if active
+            int modifiedPoints = ApplyXPMultiplier(playerUid, PILFERER_VESSEL_POINTS);
+            progress.PointsInIncrement += modifiedPoints;
 
             while (progress.PointsInIncrement >= progress.CurrentIncrementSize && progress.TotalCredits < maxCredits)
             {
@@ -11154,6 +12110,9 @@ namespace SeraphLeveling
             }
 
             pendingPilfererProgressSave = true;
+
+            // Update last activity day for skill decay
+            UpdateSkillActivityDay(playerUid, "pilferer");
 
             if (progress.TotalCredits > oldCredits)
             {
@@ -11431,7 +12390,9 @@ namespace SeraphLeveling
             if (progress.TotalCredits >= maxCredits) return;
 
             int oldCredits = progress.TotalCredits;
-            progress.AnimalsInIncrement++;
+            // Apply sleep buff multiplier if active
+            int modifiedAnimals = ApplyXPMultiplier(playerUid, 1);
+            progress.AnimalsInIncrement += modifiedAnimals;
 
             while (progress.AnimalsInIncrement >= progress.CurrentIncrementSize && progress.TotalCredits < maxCredits)
             {
@@ -11443,6 +12404,9 @@ namespace SeraphLeveling
             }
 
             pendingResourcefulProgressSave = true;
+
+            // Update last activity day for skill decay
+            UpdateSkillActivityDay(playerUid, "resourceful");
 
             if (progress.TotalCredits > oldCredits)
             {
@@ -11754,7 +12718,9 @@ namespace SeraphLeveling
             if (progress.TotalCredits >= maxCredits) return;
 
             int oldCredits = progress.TotalCredits;
-            progress.CropsInIncrement++;
+            // Apply sleep buff multiplier if active
+            int modifiedCrops = ApplyXPMultiplier(playerUid, 1);
+            progress.CropsInIncrement += modifiedCrops;
 
             while (progress.CropsInIncrement >= progress.CurrentIncrementSize && progress.TotalCredits < maxCredits)
             {
@@ -11766,6 +12732,9 @@ namespace SeraphLeveling
             }
 
             pendingForagerProgressSave = true;
+
+            // Update last activity day for skill decay
+            UpdateSkillActivityDay(playerUid, "forager");
 
             if (progress.TotalCredits > oldCredits)
             {
@@ -12080,8 +13049,9 @@ namespace SeraphLeveling
             // Already unlocked - no more progress needed
             if (progress.IsUnlocked) return;
 
-            // Increment translocator repairs
-            progress.TranslocatorsRepaired++;
+            // Increment translocator repairs (apply sleep buff multiplier if active)
+            int modifiedRepairs = ApplyXPMultiplier(playerUid, 1);
+            progress.TranslocatorsRepaired += modifiedRepairs;
             pendingTechnicalProgressSave = true;
 
             ServerApi.Logger.Debug($"[SeraphLeveling] Player {player.PlayerName} repaired translocator ({progress.TranslocatorsRepaired} / {TechnicalRequiredTranslocatorRepairs})");
@@ -12848,6 +13818,31 @@ namespace SeraphLeveling
             HardyHealthArmorDurabilityThreshold = 10;
             HardyHealthBonus = 5;
 
+            // Skill decay defaults
+            EnableSkillDecay = false;
+            DecayGracePeriodDays = 1.0;
+            DecayBasePointsPerDay = 10;
+            DecayMaxPointsPerDay = 100;
+            DecayExemptSkills.Clear();
+            DecayGracePeriodOverrides = new Dictionary<string, double>
+            {
+                { "walking", 2.0 }, { "hunger", 2.0 }, { "furtive", 2.0 }, { "armor", 2.0 },
+                { "mender", 3.0 }, { "resourceful", 3.0 },
+                { "forager", 5.0 }, { "pilferer", 5.0 }, { "precise", 5.0 }
+            };
+            DecayBasePointsOverrides = new Dictionary<string, int>
+            {
+                { "walking", 5 }, { "hunger", 5 }, { "furtive", 5 }, { "armor", 5 },
+                { "mender", 3 }, { "resourceful", 3 },
+                { "forager", 2 }, { "pilferer", 2 }, { "precise", 2 }
+            };
+            DecayMaxPointsOverrides = new Dictionary<string, int>
+            {
+                { "walking", 50 }, { "hunger", 50 }, { "furtive", 50 }, { "armor", 50 },
+                { "mender", 30 }, { "resourceful", 30 },
+                { "forager", 20 }, { "pilferer", 20 }, { "precise", 20 }
+            };
+
             // Save config
             pendingConfigSave = true;
 
@@ -13517,7 +14512,7 @@ namespace SeraphLeveling
                             writer.Write((byte)0x4D); // 'M'
                             writer.Write((byte)0x4E); // 'N'
                             writer.Write((byte)0x44); // 'D'
-                            writer.Write((byte)1);    // Version 1
+                            writer.Write((byte)2);    // Version 2 - added LastActivityDay
 
                             writer.Write(snapshot.Length);
                             foreach (var playerKvp in snapshot)
@@ -13527,6 +14522,7 @@ namespace SeraphLeveling
                                 writer.Write(progress.TotalCredits);
                                 writer.Write(progress.RepairsInIncrement);
                                 writer.Write(progress.CurrentIncrementSize);
+                                writer.Write(progress.LastActivityDay);
                             }
                         }
                         data = ms.ToArray();
@@ -13574,13 +14570,28 @@ namespace SeraphLeveling
                         for (int i = 0; i < playerCount; i++)
                         {
                             string playerUid = reader.ReadString();
-                            var progress = new MenderProgressData
+                            if (version == 1)
                             {
-                                TotalCredits = reader.ReadInt32(),
-                                RepairsInIncrement = reader.ReadInt32(),
-                                CurrentIncrementSize = reader.ReadInt32()
-                            };
-                            MenderProgress[playerUid] = progress;
+                                var progress = new MenderProgressData
+                                {
+                                    TotalCredits = reader.ReadInt32(),
+                                    RepairsInIncrement = reader.ReadInt32(),
+                                    CurrentIncrementSize = reader.ReadInt32()
+                                };
+                                MenderProgress[playerUid] = progress;
+                                pendingMenderProgressSave = true;
+                            }
+                            else if (version == 2)
+                            {
+                                var progress = new MenderProgressData
+                                {
+                                    TotalCredits = reader.ReadInt32(),
+                                    RepairsInIncrement = reader.ReadInt32(),
+                                    CurrentIncrementSize = reader.ReadInt32(),
+                                    LastActivityDay = reader.ReadDouble()
+                                };
+                                MenderProgress[playerUid] = progress;
+                            }
                         }
                     }
                 }
@@ -13620,7 +14631,7 @@ namespace SeraphLeveling
                             writer.Write((byte)0x50); // 'P'
                             writer.Write((byte)0x4C); // 'L'
                             writer.Write((byte)0x46); // 'F'
-                            writer.Write((byte)2);    // Version 2 - removed chest positions
+                            writer.Write((byte)3);    // Version 3 - added LastActivityDay
 
                             writer.Write(snapshot.Length);
                             foreach (var playerKvp in snapshot)
@@ -13630,6 +14641,7 @@ namespace SeraphLeveling
                                 writer.Write(progress.TotalCredits);
                                 writer.Write(progress.PointsInIncrement);
                                 writer.Write(progress.CurrentIncrementSize);
+                                writer.Write(progress.LastActivityDay);
                             }
                         }
                         data = ms.ToArray();
@@ -13677,22 +14689,45 @@ namespace SeraphLeveling
                         for (int i = 0; i < playerCount; i++)
                         {
                             string playerUid = reader.ReadString();
-                            var progress = new PilfererProgressData
-                            {
-                                TotalCredits = reader.ReadInt32(),
-                                PointsInIncrement = reader.ReadInt32(),
-                                CurrentIncrementSize = reader.ReadInt32()
-                            };
-                            // Version 1 had chest positions - skip them if loading old data
                             if (version == 1)
                             {
+                                var progress = new PilfererProgressData
+                                {
+                                    TotalCredits = reader.ReadInt32(),
+                                    PointsInIncrement = reader.ReadInt32(),
+                                    CurrentIncrementSize = reader.ReadInt32()
+                                };
+                                // Version 1 had chest positions - skip them
                                 int chestCount = reader.ReadInt32();
                                 for (int j = 0; j < chestCount; j++)
                                 {
                                     reader.ReadString(); // Skip old chest position data
                                 }
+                                PilfererProgress[playerUid] = progress;
+                                pendingPilfererProgressSave = true;
                             }
-                            PilfererProgress[playerUid] = progress;
+                            else if (version == 2)
+                            {
+                                var progress = new PilfererProgressData
+                                {
+                                    TotalCredits = reader.ReadInt32(),
+                                    PointsInIncrement = reader.ReadInt32(),
+                                    CurrentIncrementSize = reader.ReadInt32()
+                                };
+                                PilfererProgress[playerUid] = progress;
+                                pendingPilfererProgressSave = true;
+                            }
+                            else if (version == 3)
+                            {
+                                var progress = new PilfererProgressData
+                                {
+                                    TotalCredits = reader.ReadInt32(),
+                                    PointsInIncrement = reader.ReadInt32(),
+                                    CurrentIncrementSize = reader.ReadInt32(),
+                                    LastActivityDay = reader.ReadDouble()
+                                };
+                                PilfererProgress[playerUid] = progress;
+                            }
                         }
                     }
                 }
@@ -13732,7 +14767,7 @@ namespace SeraphLeveling
                             writer.Write((byte)0x52); // 'R'
                             writer.Write((byte)0x53); // 'S'
                             writer.Write((byte)0x46); // 'F'
-                            writer.Write((byte)1);    // Version 1
+                            writer.Write((byte)2);    // Version 2 - added LastActivityDay
 
                             writer.Write(snapshot.Length);
                             foreach (var playerKvp in snapshot)
@@ -13742,6 +14777,7 @@ namespace SeraphLeveling
                                 writer.Write(progress.TotalCredits);
                                 writer.Write(progress.AnimalsInIncrement);
                                 writer.Write(progress.CurrentIncrementSize);
+                                writer.Write(progress.LastActivityDay);
                             }
                         }
                         data = ms.ToArray();
@@ -13789,13 +14825,28 @@ namespace SeraphLeveling
                         for (int i = 0; i < playerCount; i++)
                         {
                             string playerUid = reader.ReadString();
-                            var progress = new ResourcefulProgressData
+                            if (version == 1)
                             {
-                                TotalCredits = reader.ReadInt32(),
-                                AnimalsInIncrement = reader.ReadInt32(),
-                                CurrentIncrementSize = reader.ReadInt32()
-                            };
-                            ResourcefulProgress[playerUid] = progress;
+                                var progress = new ResourcefulProgressData
+                                {
+                                    TotalCredits = reader.ReadInt32(),
+                                    AnimalsInIncrement = reader.ReadInt32(),
+                                    CurrentIncrementSize = reader.ReadInt32()
+                                };
+                                ResourcefulProgress[playerUid] = progress;
+                                pendingResourcefulProgressSave = true;
+                            }
+                            else if (version == 2)
+                            {
+                                var progress = new ResourcefulProgressData
+                                {
+                                    TotalCredits = reader.ReadInt32(),
+                                    AnimalsInIncrement = reader.ReadInt32(),
+                                    CurrentIncrementSize = reader.ReadInt32(),
+                                    LastActivityDay = reader.ReadDouble()
+                                };
+                                ResourcefulProgress[playerUid] = progress;
+                            }
                         }
                     }
                 }
@@ -13835,7 +14886,7 @@ namespace SeraphLeveling
                             writer.Write((byte)0x46); // 'F'
                             writer.Write((byte)0x52); // 'R'
                             writer.Write((byte)0x47); // 'G'
-                            writer.Write((byte)1);    // Version 1
+                            writer.Write((byte)2);    // Version 2 - added LastActivityDay
 
                             writer.Write(snapshot.Length);
                             foreach (var playerKvp in snapshot)
@@ -13845,6 +14896,7 @@ namespace SeraphLeveling
                                 writer.Write(progress.TotalCredits);
                                 writer.Write(progress.CropsInIncrement);
                                 writer.Write(progress.CurrentIncrementSize);
+                                writer.Write(progress.LastActivityDay);
                             }
                         }
                         data = ms.ToArray();
@@ -13892,13 +14944,28 @@ namespace SeraphLeveling
                         for (int i = 0; i < playerCount; i++)
                         {
                             string playerUid = reader.ReadString();
-                            var progress = new ForagerProgressData
+                            if (version == 1)
                             {
-                                TotalCredits = reader.ReadInt32(),
-                                CropsInIncrement = reader.ReadInt32(),
-                                CurrentIncrementSize = reader.ReadInt32()
-                            };
-                            ForagerProgress[playerUid] = progress;
+                                var progress = new ForagerProgressData
+                                {
+                                    TotalCredits = reader.ReadInt32(),
+                                    CropsInIncrement = reader.ReadInt32(),
+                                    CurrentIncrementSize = reader.ReadInt32()
+                                };
+                                ForagerProgress[playerUid] = progress;
+                                pendingForagerProgressSave = true;
+                            }
+                            else if (version == 2)
+                            {
+                                var progress = new ForagerProgressData
+                                {
+                                    TotalCredits = reader.ReadInt32(),
+                                    CropsInIncrement = reader.ReadInt32(),
+                                    CurrentIncrementSize = reader.ReadInt32(),
+                                    LastActivityDay = reader.ReadDouble()
+                                };
+                                ForagerProgress[playerUid] = progress;
+                            }
                         }
                     }
                 }
@@ -13942,7 +15009,7 @@ namespace SeraphLeveling
                             writer.Write((byte)0x46); // 'F'
                             writer.Write((byte)0x55); // 'U'
                             writer.Write((byte)0x52); // 'R'
-                            writer.Write((byte)1);    // Version 1
+                            writer.Write((byte)2);    // Version 2
 
                             writer.Write(snapshot.Length);
                             foreach (var playerKvp in snapshot)
@@ -13952,6 +15019,7 @@ namespace SeraphLeveling
                                 writer.Write(progress.TotalCredits);
                                 writer.Write(progress.BlocksInIncrement);
                                 writer.Write(progress.CurrentIncrementSize);
+                                writer.Write(progress.LastActivityDay);
                             }
                         }
                         data = ms.ToArray();
@@ -13996,16 +15064,41 @@ namespace SeraphLeveling
                         }
 
                         int playerCount = reader.ReadInt32();
-                        for (int i = 0; i < playerCount; i++)
+                        if (version == 1)
                         {
-                            string playerUid = reader.ReadString();
-                            var progress = new FurtiveProgressData
+                            for (int i = 0; i < playerCount; i++)
                             {
-                                TotalCredits = reader.ReadInt32(),
-                                BlocksInIncrement = reader.ReadSingle(),
-                                CurrentIncrementSize = reader.ReadInt32()
-                            };
-                            FurtiveProgress[playerUid] = progress;
+                                string playerUid = reader.ReadString();
+                                var progress = new FurtiveProgressData
+                                {
+                                    TotalCredits = reader.ReadInt32(),
+                                    BlocksInIncrement = reader.ReadSingle(),
+                                    CurrentIncrementSize = reader.ReadInt32()
+                                };
+                                FurtiveProgress[playerUid] = progress;
+                            }
+                            pendingFurtiveProgressSave = true;
+                        }
+                        else if (version == 2)
+                        {
+                            // Current format: per-player progress + LastActivityDay
+                            for (int i = 0; i < playerCount; i++)
+                            {
+                                string playerUid = reader.ReadString();
+                                var progress = new FurtiveProgressData
+                                {
+                                    TotalCredits = reader.ReadInt32(),
+                                    BlocksInIncrement = reader.ReadSingle(),
+                                    CurrentIncrementSize = reader.ReadInt32(),
+                                    LastActivityDay = reader.ReadDouble()
+                                };
+                                FurtiveProgress[playerUid] = progress;
+                            }
+                        }
+                        else
+                        {
+                            ServerApi.Logger.Warning($"[SeraphLeveling] Unknown furtive save format version {version}");
+                            return;
                         }
                     }
                 }
@@ -14049,7 +15142,7 @@ namespace SeraphLeveling
                             writer.Write((byte)0x50); // 'P'
                             writer.Write((byte)0x52); // 'R'
                             writer.Write((byte)0x43); // 'C'
-                            writer.Write((byte)1);    // Version 1
+                            writer.Write((byte)2);    // Version 2
 
                             writer.Write(snapshot.Length);
                             foreach (var playerKvp in snapshot)
@@ -14057,6 +15150,7 @@ namespace SeraphLeveling
                                 writer.Write(playerKvp.Key);
                                 var progress = playerKvp.Value;
                                 writer.Write(progress.TotalCredits);
+                                writer.Write(progress.LastActivityDay);
 
                                 // Write weapon progress
                                 writer.Write(progress.WeaponProgress.Count);
@@ -14110,27 +15204,63 @@ namespace SeraphLeveling
                         }
 
                         int playerCount = reader.ReadInt32();
-                        for (int i = 0; i < playerCount; i++)
+                        if (version == 1)
                         {
-                            string playerUid = reader.ReadString();
-                            var progress = new PreciseProgressData
+                            for (int i = 0; i < playerCount; i++)
                             {
-                                TotalCredits = reader.ReadInt32()
-                            };
-
-                            int weaponCount = reader.ReadInt32();
-                            for (int j = 0; j < weaponCount; j++)
-                            {
-                                string weaponKey = reader.ReadString();
-                                var weaponProgress = new PreciseWeaponProgressData
+                                string playerUid = reader.ReadString();
+                                var progress = new PreciseProgressData
                                 {
-                                    DamageInIncrement = reader.ReadSingle(),
-                                    CurrentIncrementSize = reader.ReadInt32()
+                                    TotalCredits = reader.ReadInt32()
                                 };
-                                progress.WeaponProgress[weaponKey] = weaponProgress;
-                            }
 
-                            PreciseProgress[playerUid] = progress;
+                                int weaponCount = reader.ReadInt32();
+                                for (int j = 0; j < weaponCount; j++)
+                                {
+                                    string weaponKey = reader.ReadString();
+                                    var weaponProgress = new PreciseWeaponProgressData
+                                    {
+                                        DamageInIncrement = reader.ReadSingle(),
+                                        CurrentIncrementSize = reader.ReadInt32()
+                                    };
+                                    progress.WeaponProgress[weaponKey] = weaponProgress;
+                                }
+
+                                PreciseProgress[playerUid] = progress;
+                            }
+                            pendingPreciseProgressSave = true;
+                        }
+                        else if (version == 2)
+                        {
+                            // Current format: per-weapon progress + LastActivityDay
+                            for (int i = 0; i < playerCount; i++)
+                            {
+                                string playerUid = reader.ReadString();
+                                var progress = new PreciseProgressData
+                                {
+                                    TotalCredits = reader.ReadInt32(),
+                                    LastActivityDay = reader.ReadDouble()
+                                };
+
+                                int weaponCount = reader.ReadInt32();
+                                for (int j = 0; j < weaponCount; j++)
+                                {
+                                    string weaponKey = reader.ReadString();
+                                    var weaponProgress = new PreciseWeaponProgressData
+                                    {
+                                        DamageInIncrement = reader.ReadSingle(),
+                                        CurrentIncrementSize = reader.ReadInt32()
+                                    };
+                                    progress.WeaponProgress[weaponKey] = weaponProgress;
+                                }
+
+                                PreciseProgress[playerUid] = progress;
+                            }
+                        }
+                        else
+                        {
+                            ServerApi.Logger.Warning($"[SeraphLeveling] Unknown precise save format version {version}");
+                            return;
                         }
                     }
                 }
@@ -14851,7 +15981,7 @@ namespace SeraphLeveling
                             writer.Write((byte)0x43); // 'C'
                             writer.Write((byte)0x4F); // 'O'
                             writer.Write((byte)0x42); // 'B'
-                            writer.Write((byte)1);    // Version 1
+                            writer.Write((byte)2);    // Version 2
 
                             writer.Write(snapshot.Length);
                             foreach (var playerKvp in snapshot)
@@ -14861,6 +15991,7 @@ namespace SeraphLeveling
 
                                 // Write Steady Aim credits
                                 writer.Write(playerProgress.SteadyAimCredits);
+                                writer.Write(playerProgress.LastActivityDay);
 
                                 // Write proficiency count and each proficiency
                                 writer.Write(playerProgress.Proficiencies.Count);
@@ -14924,39 +16055,87 @@ namespace SeraphLeveling
                         }
 
                         int playerCount = reader.ReadInt32();
-                        for (int i = 0; i < playerCount; i++)
+                        if (version == 1)
                         {
-                            string playerUid = reader.ReadString();
-                            var playerProgress = new COPlayerProgressData();
-
-                            // Read Steady Aim credits
-                            playerProgress.SteadyAimCredits = reader.ReadInt32();
-
-                            // Read proficiencies
-                            int proficiencyCount = reader.ReadInt32();
-                            for (int j = 0; j < proficiencyCount; j++)
+                            for (int i = 0; i < playerCount; i++)
                             {
-                                string proficiencyStat = reader.ReadString();
-                                var profProgress = new COProficiencyProgressData();
-                                profProgress.TotalCredits = reader.ReadInt32();
+                                string playerUid = reader.ReadString();
+                                var playerProgress = new COPlayerProgressData();
 
-                                // Read weapon progress
-                                int weaponCount = reader.ReadInt32();
-                                for (int k = 0; k < weaponCount; k++)
+                                // Read Steady Aim credits
+                                playerProgress.SteadyAimCredits = reader.ReadInt32();
+
+                                // Read proficiencies
+                                int proficiencyCount = reader.ReadInt32();
+                                for (int j = 0; j < proficiencyCount; j++)
                                 {
-                                    string weaponCode = reader.ReadString();
-                                    var weaponProgress = new COWeaponProgressData
+                                    string proficiencyStat = reader.ReadString();
+                                    var profProgress = new COProficiencyProgressData();
+                                    profProgress.TotalCredits = reader.ReadInt32();
+
+                                    // Read weapon progress
+                                    int weaponCount = reader.ReadInt32();
+                                    for (int k = 0; k < weaponCount; k++)
                                     {
-                                        DamageInIncrement = reader.ReadSingle(),
-                                        CurrentIncrementSize = reader.ReadInt32()
-                                    };
-                                    profProgress.WeaponProgress[weaponCode] = weaponProgress;
+                                        string weaponCode = reader.ReadString();
+                                        var weaponProgress = new COWeaponProgressData
+                                        {
+                                            DamageInIncrement = reader.ReadSingle(),
+                                            CurrentIncrementSize = reader.ReadInt32()
+                                        };
+                                        profProgress.WeaponProgress[weaponCode] = weaponProgress;
+                                    }
+
+                                    playerProgress.Proficiencies[proficiencyStat] = profProgress;
                                 }
 
-                                playerProgress.Proficiencies[proficiencyStat] = profProgress;
+                                COProgress[playerUid] = playerProgress;
                             }
+                            pendingCOProgressSave = true;
+                        }
+                        else if (version == 2)
+                        {
+                            // Current format: per-proficiency progress + LastActivityDay
+                            for (int i = 0; i < playerCount; i++)
+                            {
+                                string playerUid = reader.ReadString();
+                                var playerProgress = new COPlayerProgressData();
 
-                            COProgress[playerUid] = playerProgress;
+                                // Read Steady Aim credits
+                                playerProgress.SteadyAimCredits = reader.ReadInt32();
+                                playerProgress.LastActivityDay = reader.ReadDouble();
+
+                                // Read proficiencies
+                                int proficiencyCount = reader.ReadInt32();
+                                for (int j = 0; j < proficiencyCount; j++)
+                                {
+                                    string proficiencyStat = reader.ReadString();
+                                    var profProgress = new COProficiencyProgressData();
+                                    profProgress.TotalCredits = reader.ReadInt32();
+
+                                    // Read weapon progress
+                                    int weaponCount = reader.ReadInt32();
+                                    for (int k = 0; k < weaponCount; k++)
+                                    {
+                                        string weaponCode = reader.ReadString();
+                                        var weaponProgress = new COWeaponProgressData
+                                        {
+                                            DamageInIncrement = reader.ReadSingle(),
+                                            CurrentIncrementSize = reader.ReadInt32()
+                                        };
+                                        profProgress.WeaponProgress[weaponCode] = weaponProgress;
+                                    }
+
+                                    playerProgress.Proficiencies[proficiencyStat] = profProgress;
+                                }
+
+                                COProgress[playerUid] = playerProgress;
+                            }
+                        }
+                        else
+                        {
+                            ServerApi.Logger.Warning($"[SeraphLeveling] Unknown CO save format version {version}");
+                            return;
                         }
                     }
                 }
@@ -17159,6 +18338,114 @@ namespace SeraphLeveling
             catch (Exception ex)
             {
                 System.Diagnostics.Debug.WriteLine($"[SeraphLeveling] Error in DoRepair_Postfix: {ex.Message}");
+            }
+        }
+    }
+
+    /// <summary>
+    /// Server-side Harmony patches for bed sleeping (sleep buff).
+    /// </summary>
+    public static class BedSleepPatches
+    {
+        /// <summary>
+        /// Postfix for BEBehaviorBed.DidSleep - applies sleep buff when player wakes up.
+        /// The DidSleep method is called after a player finishes sleeping in a bed.
+        /// </summary>
+        public static void DidSleep_Postfix(object __instance, IPlayer player)
+        {
+            try
+            {
+                if (!SeraphLevelingModSystem.EnableSleepBuff) return;
+                if (player == null) return;
+
+                var serverPlayer = player as IServerPlayer;
+                if (serverPlayer == null) return;
+
+                string playerUid = serverPlayer.PlayerUID;
+                if (string.IsNullOrEmpty(playerUid)) return;
+
+                // Determine bed type from the block entity behavior's parent block
+                float multiplier = SeraphLevelingModSystem.SleepBuffLinenBedMultiplier; // Default to linen bed multiplier
+
+                try
+                {
+                    // Get the Blockentity from the behavior instance
+                    var behaviorType = __instance.GetType();
+                    var blockentityProp = behaviorType.GetProperty("Blockentity",
+                        System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance);
+
+                    if (blockentityProp != null)
+                    {
+                        var blockEntity = blockentityProp.GetValue(__instance);
+                        if (blockEntity != null)
+                        {
+                            // Get the Block from BlockEntity
+                            var blockEntityType = blockEntity.GetType();
+                            var blockProp = blockEntityType.GetProperty("Block",
+                                System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance);
+
+                            if (blockProp != null)
+                            {
+                                var block = blockProp.GetValue(blockEntity);
+                                if (block != null)
+                                {
+                                    // Get the block code
+                                    var blockType = block.GetType();
+                                    var codeProp = blockType.GetProperty("Code",
+                                        System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance);
+
+                                    if (codeProp != null)
+                                    {
+                                        var code = codeProp.GetValue(block);
+                                        if (code != null)
+                                        {
+                                            string blockCode = code.ToString().ToLowerInvariant();
+
+                                            // Check if it's a hay bed
+                                            if (blockCode.Contains("hay"))
+                                            {
+                                                multiplier = SeraphLevelingModSystem.SleepBuffHayBedMultiplier;
+                                            }
+                                            // Linen and old beds use the default linen multiplier
+
+                                            if (SeraphLevelingModSystem.DebugLoggingEnabled)
+                                            {
+                                                SeraphLevelingModSystem.ServerApi?.Logger.Debug(
+                                                    $"[SeraphLeveling] Sleep buff: {serverPlayer.PlayerName} slept in {blockCode}, multiplier: {multiplier}x");
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    // If we can't determine bed type, use default linen multiplier
+                    System.Diagnostics.Debug.WriteLine($"[SeraphLeveling] Could not determine bed type: {ex.Message}");
+                }
+
+                // Calculate expiration time
+                double currentDay = SeraphLevelingModSystem.ServerApi?.World?.Calendar?.TotalDays ?? 0;
+                double expirationDay = currentDay + SeraphLevelingModSystem.SleepBuffDurationDays;
+
+                // Apply the buff
+                SeraphLevelingModSystem.SleepBuffExpiration[playerUid] = expirationDay;
+                SeraphLevelingModSystem.SleepBuffMultiplier[playerUid] = multiplier;
+
+                // Notify the player
+                string bedType = multiplier >= SeraphLevelingModSystem.SleepBuffLinenBedMultiplier ? "comfortable bed" : "hay bed";
+                serverPlayer.SendMessage(GlobalConstants.GeneralChatGroup,
+                    $"Well rested! Skill XP x{multiplier} for the next {SeraphLevelingModSystem.SleepBuffDurationDays} day(s) from sleeping in a {bedType}.",
+                    EnumChatType.Notification);
+
+                SeraphLevelingModSystem.ServerApi?.Logger.Debug(
+                    $"[SeraphLeveling] Applied sleep buff to {serverPlayer.PlayerName}: {multiplier}x until day {expirationDay:F2}");
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[SeraphLeveling] Error in DidSleep_Postfix: {ex.Message}");
             }
         }
     }

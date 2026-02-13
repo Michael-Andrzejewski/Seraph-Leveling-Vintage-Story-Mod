@@ -346,6 +346,12 @@ namespace SeraphLeveling
         /// Only enable for testing/debugging purposes.
         /// </summary>
         public bool EnableDebugLogging { get; set; } = false;
+
+        /// <summary>
+        /// Enable verbose decay logging. When enabled, players receive detailed messages
+        /// showing per-tool drain amounts during daily decay and death penalty.
+        /// </summary>
+        public bool VerboseDecayLogging { get; set; } = false;
     }
 
     /// <summary>
@@ -2158,6 +2164,7 @@ namespace SeraphLeveling
         public static Dictionary<string, double> DecayGracePeriodOverrides = new Dictionary<string, double>();
         public static Dictionary<string, int> DecayBasePointsOverrides = new Dictionary<string, int>();
         public static Dictionary<string, int> DecayMaxPointsOverrides = new Dictionary<string, int>();
+        public static bool VerboseDecayLogging = false;
 
         // Per-player tracking for daily decay tick (maps player UID to last checked in-game day)
         public static ConcurrentDictionary<string, double> LastDecayCheckDay = new ConcurrentDictionary<string, double>();
@@ -2171,6 +2178,8 @@ namespace SeraphLeveling
         // Sleep buff tracking - maps player UID to their buff expiration time (in game days)
         public static ConcurrentDictionary<string, double> SleepBuffExpiration = new ConcurrentDictionary<string, double>();
         public static ConcurrentDictionary<string, float> SleepBuffMultiplier = new ConcurrentDictionary<string, float>();
+        private const string SLEEP_BUFF_SAVE_KEY = "sitSleepBuff";
+        internal static volatile bool pendingSleepBuffSave = false;
 
         // Death penalty settings
         public static bool EnableDeathPenalty = false;
@@ -2976,6 +2985,7 @@ namespace SeraphLeveling
             api.Event.SaveGameLoaded += LoadMercilessProgress;
             api.Event.SaveGameLoaded += LoadClaustrophobicRemovalProgress;
             api.Event.SaveGameLoaded += LoadCOProgress;
+            api.Event.SaveGameLoaded += LoadSleepBuffData;
 
             // Register game tick listener for walking distance tracking (every 500ms)
             api.Event.RegisterGameTickListener(OnWalkingTick, 500);
@@ -3205,6 +3215,8 @@ namespace SeraphLeveling
             // Check for trait unlocks that depend on mining level
             CheckHardyHealthUnlock(player);
             CheckClaustrophobicRemoval(player);
+
+            UpdateSkillActivityDay(playerUid, "mining");
 
             return TextCommandResult.Success($"Mining credits set to {newCredits.Value} (+{bonusPercent}% mining speed). Per-pickaxe progress reset.");
         }
@@ -3457,6 +3469,8 @@ namespace SeraphLeveling
             // Check for trait unlocks that depend on melee level
             CheckMercilessUnlock(player);
 
+            UpdateSkillActivityDay(playerUid, "melee");
+
             return TextCommandResult.Success($"Melee credits set to {newCredits.Value} (+{bonusPercent}% melee damage). Per-weapon progress reset.");
         }
 
@@ -3640,6 +3654,8 @@ namespace SeraphLeveling
 
             // Apply the bonus
             var (newDamageBonus, newAccuracyBonus, newDistanceBonus) = ApplyRangedBonusStatic(player, newCredits.Value);
+
+            UpdateSkillActivityDay(playerUid, "ranged");
 
             return TextCommandResult.Success($"Ranged credits set to {newCredits.Value} (+{newDamageBonus}% damage, +{newAccuracyBonus}% accuracy, +{newDistanceBonus}% distance). Per-weapon progress reset.");
         }
@@ -3882,6 +3898,8 @@ namespace SeraphLeveling
             // Apply the bonus
             int bonusPercent = ApplyWalkingBonusStatic(player, newCredits.Value);
 
+            UpdateSkillActivityDay(playerUid, "walking");
+
             return TextCommandResult.Success($"Walking credits set to {newCredits.Value} (+{bonusPercent}% walk speed).");
         }
 
@@ -4079,6 +4097,8 @@ namespace SeraphLeveling
             bool hasRavenous = PlayerHasVanillaRavenousStatic(player.Entity);
             int effectiveRate = hasRavenous ? (130 - bonusPercent) : (100 - bonusPercent);
 
+            UpdateSkillActivityDay(playerUid, "hunger");
+
             return TextCommandResult.Success($"Hunger credits set to {newCredits.Value}/{playerMaxCredits} (-{bonusPercent}% hunger rate, effective rate: {effectiveRate}%).");
         }
 
@@ -4214,6 +4234,8 @@ namespace SeraphLeveling
             CheckHardyHealthUnlock(player);
             CheckMercilessUnlock(player);
 
+            UpdateSkillActivityDay(playerUid, "armor");
+
             return TextCommandResult.Success($"Armor durability credits set to {newCredits.Value} (+{bonusPercent}% durability).");
         }
 
@@ -4257,6 +4279,8 @@ namespace SeraphLeveling
             ApplyArmorBonusesStatic(player, progress.TotalDurabilityCredits, progress.TotalWalkSpeedCredits);
 
             int bonusPercent = CalculateArmorWalkSpeedBonusPercent(newCredits.Value, player.Entity);
+
+            UpdateSkillActivityDay(playerUid, "armor");
 
             return TextCommandResult.Success($"Armor walk speed penalty reduction credits set to {newCredits.Value} (-{bonusPercent}% penalty).");
         }
@@ -6364,7 +6388,7 @@ namespace SeraphLeveling
         }
 
         /// <summary>
-        /// Patch BEBehaviorBed.DidSleep to apply sleep buff when players wake up.
+        /// Patch BlockEntityBed.DidUnmount to apply sleep buff when players wake up.
         /// </summary>
         private void PatchBedSleeping(ICoreServerAPI api)
         {
@@ -6372,36 +6396,36 @@ namespace SeraphLeveling
 
             try
             {
-                // Find BEBehaviorBed type in VSSurvivalMod
-                var bedBehaviorType = AccessTools.TypeByName("Vintagestory.GameContent.BEBehaviorBed");
+                // BlockEntityBed is in Vintagestory.GameContent (already imported)
+                var bedBehaviorType = typeof(BlockEntityBed);
                 if (bedBehaviorType == null)
                 {
-                    api.Logger.Debug("[SeraphLeveling] Could not find BEBehaviorBed type for sleep buff");
+                    api.Logger.Debug("[SeraphLeveling] Could not find BlockEntityBed type for sleep buff");
                     return;
                 }
 
-                // Find the DidSleep method
-                var didSleepMethod = AccessTools.Method(bedBehaviorType, "DidSleep");
-                if (didSleepMethod == null)
+                // Find the DidUnmount method (called when player gets out of bed)
+                var didUnmountMethod = AccessTools.Method(bedBehaviorType, "DidUnmount");
+                if (didUnmountMethod == null)
                 {
-                    api.Logger.Debug("[SeraphLeveling] Could not find BEBehaviorBed.DidSleep method for sleep buff");
+                    api.Logger.Debug("[SeraphLeveling] Could not find BlockEntityBed.DidUnmount method for sleep buff");
                     return;
                 }
 
                 // Get our postfix method
-                var postfixMethod = AccessTools.Method(typeof(BedSleepPatches), nameof(BedSleepPatches.DidSleep_Postfix));
+                var postfixMethod = AccessTools.Method(typeof(BedSleepPatches), nameof(BedSleepPatches.DidUnmount_Postfix));
                 if (postfixMethod == null)
                 {
-                    api.Logger.Error("[SeraphLeveling] Could not find DidSleep_Postfix method!");
+                    api.Logger.Error("[SeraphLeveling] Could not find DidUnmount_Postfix method!");
                     return;
                 }
 
-                serverHarmony.Patch(didSleepMethod, postfix: new HarmonyMethod(postfixMethod));
-                api.Logger.Notification("[SeraphLeveling] Successfully patched BEBehaviorBed.DidSleep for sleep buff");
+                serverHarmony.Patch(didUnmountMethod, postfix: new HarmonyMethod(postfixMethod));
+                api.Logger.Notification("[SeraphLeveling] Successfully patched BlockEntityBed.DidUnmount for sleep buff");
             }
             catch (Exception ex)
             {
-                api.Logger.Warning($"[SeraphLeveling] Failed to patch BEBehaviorBed.DidSleep: {ex.Message}");
+                api.Logger.Warning($"[SeraphLeveling] Failed to patch BlockEntityBed.DidUnmount: {ex.Message}");
             }
         }
 
@@ -7525,6 +7549,9 @@ namespace SeraphLeveling
             lastSneakingPositions.Clear();
             VanillaTraitsCache.Clear();
             LastDecayCheckDay.Clear();
+            SleepBuffExpiration.Clear();
+            SleepBuffMultiplier.Clear();
+            pendingSleepBuffSave = false;
             pendingMiningProgressSave = false;
             pendingMeleeProgressSave = false;
             pendingRangedProgressSave = false;
@@ -7678,6 +7705,12 @@ namespace SeraphLeveling
             {
                 PersistCOProgress();
                 pendingCOProgressSave = false;
+            }
+
+            if (pendingSleepBuffSave || !SleepBuffExpiration.IsEmpty)
+            {
+                PersistSleepBuffData();
+                pendingSleepBuffSave = false;
             }
 
             if (pendingConfigSave)
@@ -8925,6 +8958,7 @@ namespace SeraphLeveling
 
                 // Debug settings
                 DebugLoggingEnabled = config.EnableDebugLogging;
+                VerboseDecayLogging = config.VerboseDecayLogging;
                 if (DebugLoggingEnabled)
                 {
                     api.Logger.Warning("[SeraphLeveling] Debug logging is ENABLED - this can spam server logs!");
@@ -9036,48 +9070,259 @@ namespace SeraphLeveling
             string playerUid = player.PlayerUID;
             var sb = new StringBuilder();
             int totalDecayApplied = 0;
+            StringBuilder verboseSb = VerboseDecayLogging ? new StringBuilder() : null;
+
+            // --- Per-tool dictionary skills ---
 
             // Mining
-            totalDecayApplied += DecaySkillCredits(playerUid, "mining", currentDay,
-                () => MiningProgress.TryGetValue(playerUid, out var p) && p.TotalCredits > 0 ? p : null,
-                p => ((MiningProgressData)p).TotalCredits,
-                (p, v) => ((MiningProgressData)p).TotalCredits = v,
-                p => ((MiningProgressData)p).LastActivityDay,
-                ref pendingMiningProgressSave, sb);
+            if (!DecayExemptSkills.Contains("mining") && !DisabledSkills.Contains("mining"))
+            {
+                if (MiningProgress.TryGetValue(playerUid, out var mProg) && (mProg.TotalCredits > 0 || mProg.PickaxeProgress.Count > 0))
+                {
+                    var (grace, basePoints, maxPoints) = GetDecayParams("mining");
+                    int decayCredits = CalculateDecayPoints(mProg.LastActivityDay, currentDay, grace, basePoints, maxPoints);
+                    if (decayCredits > 0)
+                    {
+                        int oldCredits = mProg.TotalCredits;
+                        var toolEntries = mProg.PickaxeProgress.Select(kvp =>
+                            (kvp.Key, (double)kvp.Value.BlocksInIncrement, kvp.Value.CurrentIncrementSize)).ToList();
+
+                        if (toolEntries.Count > 0)
+                        {
+                            double rawPenalty = (double)decayCredits;
+
+                            var (newCr, lost) = ApplyAbsolutePositionDecay(toolEntries, rawPenalty,
+                                BaseBlocksPerIncrement, IncrementStep, oldCredits,
+                                (k, a, s) => { if (mProg.PickaxeProgress.TryGetValue(k, out var p)) {
+                                    p.BlocksInIncrement = (int)Math.Floor(a); p.CurrentIncrementSize = s; } },
+                                k => mProg.PickaxeProgress.Remove(k), verboseSb, "Mining");
+                            mProg.TotalCredits = newCr;
+                            if (lost > 0) totalDecayApplied += lost;
+                            sb.AppendLine($"  Mining: {oldCredits} \u2192 {newCr} (-{lost} credits, {rawPenalty:F0} pts)");
+                            foreach (var entry in toolEntries)
+                            {
+                                int oldToolCr = IncrementStep > 0 ? (entry.Item3 - BaseBlocksPerIncrement) / IncrementStep : 0;
+                                if (mProg.PickaxeProgress.TryGetValue(entry.Item1, out var after))
+                                {
+                                    int newToolCr = IncrementStep > 0 ? (after.CurrentIncrementSize - BaseBlocksPerIncrement) / IncrementStep : 0;
+                                    int toolLost = oldToolCr - newToolCr;
+                                    sb.AppendLine($"    {entry.Item1}: {(int)entry.Item2}/{entry.Item3} \u2192 {after.BlocksInIncrement}/{after.CurrentIncrementSize}{(toolLost > 0 ? $" (-{toolLost} cr)" : "")}");
+                                }
+                                else
+                                    sb.AppendLine($"    {entry.Item1}: {(int)entry.Item2}/{entry.Item3} \u2192 removed (-{oldToolCr} cr)");
+                            }
+                            pendingMiningProgressSave = true;
+                        }
+                        else
+                        {
+                            int lost = Math.Min(decayCredits, oldCredits);
+                            mProg.TotalCredits -= lost;
+                            if (lost > 0) { totalDecayApplied += lost; sb.AppendLine($"  Mining: {oldCredits} \u2192 {mProg.TotalCredits} (-{lost} credits)"); }
+                            pendingMiningProgressSave = true;
+                        }
+                    }
+                }
+            }
 
             // Melee
-            totalDecayApplied += DecaySkillCredits(playerUid, "melee", currentDay,
-                () => MeleeProgress.TryGetValue(playerUid, out var p) && p.TotalCredits > 0 ? p : null,
-                p => ((MeleeProgressData)p).TotalCredits,
-                (p, v) => ((MeleeProgressData)p).TotalCredits = v,
-                p => ((MeleeProgressData)p).LastActivityDay,
-                ref pendingMeleeProgressSave, sb);
+            if (!DecayExemptSkills.Contains("melee") && !DisabledSkills.Contains("melee"))
+            {
+                if (MeleeProgress.TryGetValue(playerUid, out var mProg) && (mProg.TotalCredits > 0 || mProg.WeaponProgress.Count > 0))
+                {
+                    var (grace, basePoints, maxPoints) = GetDecayParams("melee");
+                    int decayCredits = CalculateDecayPoints(mProg.LastActivityDay, currentDay, grace, basePoints, maxPoints);
+                    if (decayCredits > 0)
+                    {
+                        int oldCredits = mProg.TotalCredits;
+                        var toolEntries = mProg.WeaponProgress.Select(kvp =>
+                            (kvp.Key, (double)kvp.Value.DamageInIncrement, kvp.Value.CurrentIncrementSize)).ToList();
+
+                        if (toolEntries.Count > 0)
+                        {
+                            double rawPenalty = (double)decayCredits;
+
+                            var (newCr, lost) = ApplyAbsolutePositionDecay(toolEntries, rawPenalty,
+                                BaseDamagePerIncrement, MeleeIncrementStep, oldCredits,
+                                (k, a, s) => { if (mProg.WeaponProgress.TryGetValue(k, out var p)) {
+                                    p.DamageInIncrement = (float)a; p.CurrentIncrementSize = s; } },
+                                k => mProg.WeaponProgress.Remove(k), verboseSb, "Melee");
+                            mProg.TotalCredits = newCr;
+                            if (lost > 0) totalDecayApplied += lost;
+                            sb.AppendLine($"  Melee: {oldCredits} \u2192 {newCr} (-{lost} credits, {rawPenalty:F0} pts)");
+                            foreach (var entry in toolEntries)
+                            {
+                                int oldToolCr = MeleeIncrementStep > 0 ? (entry.Item3 - BaseDamagePerIncrement) / MeleeIncrementStep : 0;
+                                if (mProg.WeaponProgress.TryGetValue(entry.Item1, out var after))
+                                {
+                                    int newToolCr = MeleeIncrementStep > 0 ? (after.CurrentIncrementSize - BaseDamagePerIncrement) / MeleeIncrementStep : 0;
+                                    int toolLost = oldToolCr - newToolCr;
+                                    sb.AppendLine($"    {entry.Item1}: {entry.Item2:F0}/{entry.Item3} \u2192 {after.DamageInIncrement:F0}/{after.CurrentIncrementSize}{(toolLost > 0 ? $" (-{toolLost} cr)" : "")}");
+                                }
+                                else
+                                    sb.AppendLine($"    {entry.Item1}: {entry.Item2:F0}/{entry.Item3} \u2192 removed (-{oldToolCr} cr)");
+                            }
+                            pendingMeleeProgressSave = true;
+                        }
+                        else
+                        {
+                            int lost = Math.Min(decayCredits, oldCredits);
+                            mProg.TotalCredits -= lost;
+                            if (lost > 0) { totalDecayApplied += lost; sb.AppendLine($"  Melee: {oldCredits} \u2192 {mProg.TotalCredits} (-{lost} credits)"); }
+                            pendingMeleeProgressSave = true;
+                        }
+                    }
+                }
+            }
 
             // Ranged
-            totalDecayApplied += DecaySkillCredits(playerUid, "ranged", currentDay,
-                () => RangedProgress.TryGetValue(playerUid, out var p) && p.TotalCredits > 0 ? p : null,
-                p => ((RangedProgressData)p).TotalCredits,
-                (p, v) => ((RangedProgressData)p).TotalCredits = v,
-                p => ((RangedProgressData)p).LastActivityDay,
-                ref pendingRangedProgressSave, sb);
+            if (!DecayExemptSkills.Contains("ranged") && !DisabledSkills.Contains("ranged"))
+            {
+                if (RangedProgress.TryGetValue(playerUid, out var rProg) && (rProg.TotalCredits > 0 || rProg.WeaponProgress.Count > 0))
+                {
+                    var (grace, basePoints, maxPoints) = GetDecayParams("ranged");
+                    int decayCredits = CalculateDecayPoints(rProg.LastActivityDay, currentDay, grace, basePoints, maxPoints);
+                    if (decayCredits > 0)
+                    {
+                        int oldCredits = rProg.TotalCredits;
+                        var toolEntries = rProg.WeaponProgress.Select(kvp =>
+                            (kvp.Key, (double)kvp.Value.DamageInIncrement, kvp.Value.CurrentIncrementSize)).ToList();
+
+                        if (toolEntries.Count > 0)
+                        {
+                            double rawPenalty = (double)decayCredits;
+
+                            var (newCr, lost) = ApplyAbsolutePositionDecay(toolEntries, rawPenalty,
+                                BaseRangedDamagePerIncrement, RangedIncrementStep, oldCredits,
+                                (k, a, s) => { if (rProg.WeaponProgress.TryGetValue(k, out var p)) {
+                                    p.DamageInIncrement = (float)a; p.CurrentIncrementSize = s; } },
+                                k => rProg.WeaponProgress.Remove(k), verboseSb, "Ranged");
+                            rProg.TotalCredits = newCr;
+                            if (lost > 0) totalDecayApplied += lost;
+                            sb.AppendLine($"  Ranged: {oldCredits} \u2192 {newCr} (-{lost} credits, {rawPenalty:F0} pts)");
+                            foreach (var entry in toolEntries)
+                            {
+                                int oldToolCr = RangedIncrementStep > 0 ? (entry.Item3 - BaseRangedDamagePerIncrement) / RangedIncrementStep : 0;
+                                if (rProg.WeaponProgress.TryGetValue(entry.Item1, out var after))
+                                {
+                                    int newToolCr = RangedIncrementStep > 0 ? (after.CurrentIncrementSize - BaseRangedDamagePerIncrement) / RangedIncrementStep : 0;
+                                    int toolLost = oldToolCr - newToolCr;
+                                    sb.AppendLine($"    {entry.Item1}: {entry.Item2:F0}/{entry.Item3} \u2192 {after.DamageInIncrement:F0}/{after.CurrentIncrementSize}{(toolLost > 0 ? $" (-{toolLost} cr)" : "")}");
+                                }
+                                else
+                                    sb.AppendLine($"    {entry.Item1}: {entry.Item2:F0}/{entry.Item3} \u2192 removed (-{oldToolCr} cr)");
+                            }
+                            pendingRangedProgressSave = true;
+                        }
+                        else
+                        {
+                            int lost = Math.Min(decayCredits, oldCredits);
+                            rProg.TotalCredits -= lost;
+                            if (lost > 0) { totalDecayApplied += lost; sb.AppendLine($"  Ranged: {oldCredits} \u2192 {rProg.TotalCredits} (-{lost} credits)"); }
+                            pendingRangedProgressSave = true;
+                        }
+                    }
+                }
+            }
+
+            // Precise
+            if (!DecayExemptSkills.Contains("precise") && !DisabledSkills.Contains("precise"))
+            {
+                if (PreciseProgress.TryGetValue(playerUid, out var pProg) && (pProg.TotalCredits > 0 || pProg.WeaponProgress.Count > 0))
+                {
+                    var (grace, basePoints, maxPoints) = GetDecayParams("precise");
+                    int decayCredits = CalculateDecayPoints(pProg.LastActivityDay, currentDay, grace, basePoints, maxPoints);
+                    if (decayCredits > 0)
+                    {
+                        int oldCredits = pProg.TotalCredits;
+                        var toolEntries = pProg.WeaponProgress.Select(kvp =>
+                            (kvp.Key, (double)kvp.Value.DamageInIncrement, kvp.Value.CurrentIncrementSize)).ToList();
+
+                        if (toolEntries.Count > 0)
+                        {
+                            double rawPenalty = (double)decayCredits;
+
+                            var (newCr, lost) = ApplyAbsolutePositionDecay(toolEntries, rawPenalty,
+                                BasePreciseDamagePerIncrement, PreciseIncrementStep, oldCredits,
+                                (k, a, s) => { if (pProg.WeaponProgress.TryGetValue(k, out var p)) {
+                                    p.DamageInIncrement = (float)a; p.CurrentIncrementSize = s; } },
+                                k => pProg.WeaponProgress.Remove(k), verboseSb, "Precise");
+                            pProg.TotalCredits = newCr;
+                            if (lost > 0) totalDecayApplied += lost;
+                            sb.AppendLine($"  Precise: {oldCredits} \u2192 {newCr} (-{lost} credits, {rawPenalty:F0} pts)");
+                            foreach (var entry in toolEntries)
+                            {
+                                int oldToolCr = PreciseIncrementStep > 0 ? (entry.Item3 - BasePreciseDamagePerIncrement) / PreciseIncrementStep : 0;
+                                if (pProg.WeaponProgress.TryGetValue(entry.Item1, out var after))
+                                {
+                                    int newToolCr = PreciseIncrementStep > 0 ? (after.CurrentIncrementSize - BasePreciseDamagePerIncrement) / PreciseIncrementStep : 0;
+                                    int toolLost = oldToolCr - newToolCr;
+                                    sb.AppendLine($"    {entry.Item1}: {entry.Item2:F0}/{entry.Item3} \u2192 {after.DamageInIncrement:F0}/{after.CurrentIncrementSize}{(toolLost > 0 ? $" (-{toolLost} cr)" : "")}");
+                                }
+                                else
+                                    sb.AppendLine($"    {entry.Item1}: {entry.Item2:F0}/{entry.Item3} \u2192 removed (-{oldToolCr} cr)");
+                            }
+                            pendingPreciseProgressSave = true;
+                        }
+                        else
+                        {
+                            int lost = Math.Min(decayCredits, oldCredits);
+                            pProg.TotalCredits -= lost;
+                            if (lost > 0) { totalDecayApplied += lost; sb.AppendLine($"  Precise: {oldCredits} \u2192 {pProg.TotalCredits} (-{lost} credits)"); }
+                            pendingPreciseProgressSave = true;
+                        }
+                    }
+                }
+            }
+
+            // --- Single-accumulator skills ---
 
             // Walking
-            totalDecayApplied += DecaySkillCredits(playerUid, "walking", currentDay,
-                () => WalkingProgress.TryGetValue(playerUid, out var p) && p.TotalCredits > 0 ? p : null,
-                p => ((WalkingProgressData)p).TotalCredits,
-                (p, v) => ((WalkingProgressData)p).TotalCredits = v,
-                p => ((WalkingProgressData)p).LastActivityDay,
-                ref pendingWalkingProgressSave, sb);
+            if (!DecayExemptSkills.Contains("walking") && !DisabledSkills.Contains("walking"))
+            {
+                if (WalkingProgress.TryGetValue(playerUid, out var wProg) && (wProg.TotalCredits > 0 || wProg.BlocksInIncrement > 0))
+                {
+                    var (grace, basePoints, maxPoints) = GetDecayParams("walking");
+                    int decayCredits = CalculateDecayPoints(wProg.LastActivityDay, currentDay, grace, basePoints, maxPoints);
+                    if (decayCredits > 0)
+                    {
+                        int oldCredits = wProg.TotalCredits;
+                        float oldAcc = wProg.BlocksInIncrement; int oldInc = wProg.CurrentIncrementSize;
+                        double rawPenalty = (double)decayCredits;
+                        var (newCr, newAcc, newInc, lost) = ApplySingleAccumulatorDecay(
+                            oldAcc, oldInc, oldCredits,
+                            rawPenalty, BaseBlocksWalkedPerIncrement, WalkingIncrementStep, verboseSb, "Walking");
+                        wProg.TotalCredits = newCr; wProg.BlocksInIncrement = (float)newAcc; wProg.CurrentIncrementSize = newInc;
+                        if (lost > 0) totalDecayApplied += lost;
+                        sb.AppendLine($"  Walking: {oldCredits} \u2192 {newCr} (-{lost} credits, {rawPenalty:F0} pts), {oldAcc:F0}/{oldInc} \u2192 {(int)newAcc}/{newInc}");
+                        pendingWalkingProgressSave = true;
+                    }
+                }
+            }
 
             // Hunger
-            totalDecayApplied += DecaySkillCredits(playerUid, "hunger", currentDay,
-                () => HungerProgress.TryGetValue(playerUid, out var p) && p.TotalCredits > 0 ? p : null,
-                p => ((HungerProgressData)p).TotalCredits,
-                (p, v) => ((HungerProgressData)p).TotalCredits = v,
-                p => ((HungerProgressData)p).LastActivityDay,
-                ref pendingHungerProgressSave, sb);
+            if (!DecayExemptSkills.Contains("hunger") && !DisabledSkills.Contains("hunger"))
+            {
+                if (HungerProgress.TryGetValue(playerUid, out var hProg) && (hProg.TotalCredits > 0 || hProg.SecondsInIncrement > 0))
+                {
+                    var (grace, basePoints, maxPoints) = GetDecayParams("hunger");
+                    int decayCredits = CalculateDecayPoints(hProg.LastActivityDay, currentDay, grace, basePoints, maxPoints);
+                    if (decayCredits > 0)
+                    {
+                        int oldCredits = hProg.TotalCredits;
+                        float oldAcc = hProg.SecondsInIncrement; int oldInc = hProg.CurrentIncrementSize;
+                        double rawPenalty = (double)decayCredits;
+                        var (newCr, newAcc, newInc, lost) = ApplySingleAccumulatorDecay(
+                            oldAcc, oldInc, oldCredits,
+                            rawPenalty, BaseSecondsPerIncrement, HungerIncrementStep, verboseSb, "Hunger");
+                        hProg.TotalCredits = newCr; hProg.SecondsInIncrement = (float)newAcc; hProg.CurrentIncrementSize = newInc;
+                        if (lost > 0) totalDecayApplied += lost;
+                        sb.AppendLine($"  Hunger: {oldCredits} \u2192 {newCr} (-{lost} credits, {rawPenalty:F0} pts), {oldAcc:F0}/{oldInc} \u2192 {(int)newAcc}/{newInc}");
+                        pendingHungerProgressSave = true;
+                    }
+                }
+            }
 
-            // Armor (decay TotalDurabilityCredits and TotalWalkSpeedCredits equally)
+            // Armor (keep as-is: direct credit reduction + ArmorProgress.Clear())
             if (!DecayExemptSkills.Contains("armor") && !DisabledSkills.Contains("armor"))
             {
                 if (ArmorProgress.TryGetValue(playerUid, out var armorProg) &&
@@ -9087,75 +9332,155 @@ namespace SeraphLeveling
                     int decay = CalculateDecayPoints(armorProg.LastActivityDay, currentDay, grace, basePoints, maxPoints);
                     if (decay > 0)
                     {
-                        int durDecay = Math.Min(decay, armorProg.TotalDurabilityCredits);
-                        int wsDecay = Math.Min(decay, armorProg.TotalWalkSpeedCredits);
+                        var armorSb = new StringBuilder();
+                        int oldDur = armorProg.TotalDurabilityCredits;
+                        int durDecay = Math.Min(decay, oldDur);
                         armorProg.TotalDurabilityCredits -= durDecay;
+                        if (durDecay > 0) armorSb.Append($"dur:{oldDur}\u2192{armorProg.TotalDurabilityCredits} ");
+
+                        int oldWs = armorProg.TotalWalkSpeedCredits;
+                        int wsDecay = Math.Min(decay, oldWs);
                         armorProg.TotalWalkSpeedCredits -= wsDecay;
-                        // Also decay optional features proportionally
-                        if (armorProg.TotalHungerReductionCredits > 0)
-                            armorProg.TotalHungerReductionCredits = Math.Max(0, armorProg.TotalHungerReductionCredits - decay);
-                        if (armorProg.TotalHealingCredits > 0)
-                            armorProg.TotalHealingCredits = Math.Max(0, armorProg.TotalHealingCredits - decay);
-                        int actualDecay = Math.Max(durDecay, wsDecay);
+                        if (wsDecay > 0) armorSb.Append($"ws:{oldWs}\u2192{armorProg.TotalWalkSpeedCredits} ");
+
+                        int oldHunger = armorProg.TotalHungerReductionCredits;
+                        int hungerDecay = Math.Min(decay, oldHunger);
+                        armorProg.TotalHungerReductionCredits -= hungerDecay;
+                        if (hungerDecay > 0) armorSb.Append($"hunger:{oldHunger}\u2192{armorProg.TotalHungerReductionCredits} ");
+
+                        int oldHeal = armorProg.TotalHealingCredits;
+                        int healDecay = Math.Min(decay, oldHeal);
+                        armorProg.TotalHealingCredits -= healDecay;
+                        if (healDecay > 0) armorSb.Append($"heal:{oldHeal}\u2192{armorProg.TotalHealingCredits} ");
+
+                        int actualDecay = durDecay + wsDecay + hungerDecay + healDecay;
                         if (actualDecay > 0)
                         {
+                            armorProg.ArmorProgress.Clear();
                             totalDecayApplied += actualDecay;
                             pendingArmorProgressSave = true;
-                            sb.AppendLine($"  Armor: -{actualDecay}");
+                            sb.AppendLine($"  Armor: -{actualDecay} credits ({armorSb.ToString().Trim()})");
                         }
                     }
                 }
             }
 
             // Mender
-            totalDecayApplied += DecaySkillCredits(playerUid, "mender", currentDay,
-                () => MenderProgress.TryGetValue(playerUid, out var p) && p.TotalCredits > 0 ? p : null,
-                p => ((MenderProgressData)p).TotalCredits,
-                (p, v) => ((MenderProgressData)p).TotalCredits = v,
-                p => ((MenderProgressData)p).LastActivityDay,
-                ref pendingMenderProgressSave, sb);
+            if (!DecayExemptSkills.Contains("mender") && !DisabledSkills.Contains("mender"))
+            {
+                if (MenderProgress.TryGetValue(playerUid, out var meProg) && (meProg.TotalCredits > 0 || meProg.RepairsInIncrement > 0))
+                {
+                    var (grace, basePoints, maxPoints) = GetDecayParams("mender");
+                    int decayCredits = CalculateDecayPoints(meProg.LastActivityDay, currentDay, grace, basePoints, maxPoints);
+                    if (decayCredits > 0)
+                    {
+                        int oldCredits = meProg.TotalCredits;
+                        int oldAcc = meProg.RepairsInIncrement; int oldInc = meProg.CurrentIncrementSize;
+                        double rawPenalty = (double)decayCredits;
+                        var (newCr, newAcc, newInc, lost) = ApplySingleAccumulatorDecay(
+                            oldAcc, oldInc, oldCredits,
+                            rawPenalty, BaseMenderRepairsPerIncrement, MenderIncrementStep, verboseSb, "Mender");
+                        meProg.TotalCredits = newCr; meProg.RepairsInIncrement = (int)Math.Floor(newAcc); meProg.CurrentIncrementSize = newInc;
+                        if (lost > 0) totalDecayApplied += lost;
+                        sb.AppendLine($"  Mender: {oldCredits} \u2192 {newCr} (-{lost} credits, {rawPenalty:F0} pts), {oldAcc}/{oldInc} \u2192 {(int)Math.Floor(newAcc)}/{newInc}");
+                        pendingMenderProgressSave = true;
+                    }
+                }
+            }
 
             // Pilferer
-            totalDecayApplied += DecaySkillCredits(playerUid, "pilferer", currentDay,
-                () => PilfererProgress.TryGetValue(playerUid, out var p) && p.TotalCredits > 0 ? p : null,
-                p => ((PilfererProgressData)p).TotalCredits,
-                (p, v) => ((PilfererProgressData)p).TotalCredits = v,
-                p => ((PilfererProgressData)p).LastActivityDay,
-                ref pendingPilfererProgressSave, sb);
+            if (!DecayExemptSkills.Contains("pilferer") && !DisabledSkills.Contains("pilferer"))
+            {
+                if (PilfererProgress.TryGetValue(playerUid, out var piProg) && (piProg.TotalCredits > 0 || piProg.PointsInIncrement > 0))
+                {
+                    var (grace, basePoints, maxPoints) = GetDecayParams("pilferer");
+                    int decayCredits = CalculateDecayPoints(piProg.LastActivityDay, currentDay, grace, basePoints, maxPoints);
+                    if (decayCredits > 0)
+                    {
+                        int oldCredits = piProg.TotalCredits;
+                        int oldAcc = piProg.PointsInIncrement; int oldInc = piProg.CurrentIncrementSize;
+                        double rawPenalty = (double)decayCredits;
+                        var (newCr, newAcc, newInc, lost) = ApplySingleAccumulatorDecay(
+                            oldAcc, oldInc, oldCredits,
+                            rawPenalty, BasePilfererPointsPerIncrement, PilfererIncrementStep, verboseSb, "Pilferer");
+                        piProg.TotalCredits = newCr; piProg.PointsInIncrement = (int)Math.Floor(newAcc); piProg.CurrentIncrementSize = newInc;
+                        if (lost > 0) totalDecayApplied += lost;
+                        sb.AppendLine($"  Pilferer: {oldCredits} \u2192 {newCr} (-{lost} credits, {rawPenalty:F0} pts), {oldAcc}/{oldInc} \u2192 {(int)Math.Floor(newAcc)}/{newInc}");
+                        pendingPilfererProgressSave = true;
+                    }
+                }
+            }
 
             // Resourceful
-            totalDecayApplied += DecaySkillCredits(playerUid, "resourceful", currentDay,
-                () => ResourcefulProgress.TryGetValue(playerUid, out var p) && p.TotalCredits > 0 ? p : null,
-                p => ((ResourcefulProgressData)p).TotalCredits,
-                (p, v) => ((ResourcefulProgressData)p).TotalCredits = v,
-                p => ((ResourcefulProgressData)p).LastActivityDay,
-                ref pendingResourcefulProgressSave, sb);
+            if (!DecayExemptSkills.Contains("resourceful") && !DisabledSkills.Contains("resourceful"))
+            {
+                if (ResourcefulProgress.TryGetValue(playerUid, out var reProg) && (reProg.TotalCredits > 0 || reProg.AnimalsInIncrement > 0))
+                {
+                    var (grace, basePoints, maxPoints) = GetDecayParams("resourceful");
+                    int decayCredits = CalculateDecayPoints(reProg.LastActivityDay, currentDay, grace, basePoints, maxPoints);
+                    if (decayCredits > 0)
+                    {
+                        int oldCredits = reProg.TotalCredits;
+                        int oldAcc = reProg.AnimalsInIncrement; int oldInc = reProg.CurrentIncrementSize;
+                        double rawPenalty = (double)decayCredits;
+                        var (newCr, newAcc, newInc, lost) = ApplySingleAccumulatorDecay(
+                            oldAcc, oldInc, oldCredits,
+                            rawPenalty, BaseResourcefulAnimalsPerIncrement, ResourcefulIncrementStep, verboseSb, "Resourceful");
+                        reProg.TotalCredits = newCr; reProg.AnimalsInIncrement = (int)Math.Floor(newAcc); reProg.CurrentIncrementSize = newInc;
+                        if (lost > 0) totalDecayApplied += lost;
+                        sb.AppendLine($"  Resourceful: {oldCredits} \u2192 {newCr} (-{lost} credits, {rawPenalty:F0} pts), {oldAcc}/{oldInc} \u2192 {(int)Math.Floor(newAcc)}/{newInc}");
+                        pendingResourcefulProgressSave = true;
+                    }
+                }
+            }
 
             // Forager
-            totalDecayApplied += DecaySkillCredits(playerUid, "forager", currentDay,
-                () => ForagerProgress.TryGetValue(playerUid, out var p) && p.TotalCredits > 0 ? p : null,
-                p => ((ForagerProgressData)p).TotalCredits,
-                (p, v) => ((ForagerProgressData)p).TotalCredits = v,
-                p => ((ForagerProgressData)p).LastActivityDay,
-                ref pendingForagerProgressSave, sb);
+            if (!DecayExemptSkills.Contains("forager") && !DisabledSkills.Contains("forager"))
+            {
+                if (ForagerProgress.TryGetValue(playerUid, out var fProg) && (fProg.TotalCredits > 0 || fProg.CropsInIncrement > 0))
+                {
+                    var (grace, basePoints, maxPoints) = GetDecayParams("forager");
+                    int decayCredits = CalculateDecayPoints(fProg.LastActivityDay, currentDay, grace, basePoints, maxPoints);
+                    if (decayCredits > 0)
+                    {
+                        int oldCredits = fProg.TotalCredits;
+                        int oldAcc = fProg.CropsInIncrement; int oldInc = fProg.CurrentIncrementSize;
+                        double rawPenalty = (double)decayCredits;
+                        var (newCr, newAcc, newInc, lost) = ApplySingleAccumulatorDecay(
+                            oldAcc, oldInc, oldCredits,
+                            rawPenalty, BaseForagerCropsPerIncrement, ForagerIncrementStep, verboseSb, "Forager");
+                        fProg.TotalCredits = newCr; fProg.CropsInIncrement = (int)Math.Floor(newAcc); fProg.CurrentIncrementSize = newInc;
+                        if (lost > 0) totalDecayApplied += lost;
+                        sb.AppendLine($"  Forager: {oldCredits} \u2192 {newCr} (-{lost} credits, {rawPenalty:F0} pts), {oldAcc}/{oldInc} \u2192 {(int)Math.Floor(newAcc)}/{newInc}");
+                        pendingForagerProgressSave = true;
+                    }
+                }
+            }
 
             // Furtive
-            totalDecayApplied += DecaySkillCredits(playerUid, "furtive", currentDay,
-                () => FurtiveProgress.TryGetValue(playerUid, out var p) && p.TotalCredits > 0 ? p : null,
-                p => ((FurtiveProgressData)p).TotalCredits,
-                (p, v) => ((FurtiveProgressData)p).TotalCredits = v,
-                p => ((FurtiveProgressData)p).LastActivityDay,
-                ref pendingFurtiveProgressSave, sb);
+            if (!DecayExemptSkills.Contains("furtive") && !DisabledSkills.Contains("furtive"))
+            {
+                if (FurtiveProgress.TryGetValue(playerUid, out var fuProg) && (fuProg.TotalCredits > 0 || fuProg.BlocksInIncrement > 0))
+                {
+                    var (grace, basePoints, maxPoints) = GetDecayParams("furtive");
+                    int decayCredits = CalculateDecayPoints(fuProg.LastActivityDay, currentDay, grace, basePoints, maxPoints);
+                    if (decayCredits > 0)
+                    {
+                        int oldCredits = fuProg.TotalCredits;
+                        float oldAcc = fuProg.BlocksInIncrement; int oldInc = fuProg.CurrentIncrementSize;
+                        double rawPenalty = (double)decayCredits;
+                        var (newCr, newAcc, newInc, lost) = ApplySingleAccumulatorDecay(
+                            oldAcc, oldInc, oldCredits,
+                            rawPenalty, BaseFurtiveSneakBlocksPerIncrement, FurtiveIncrementStep, verboseSb, "Furtive");
+                        fuProg.TotalCredits = newCr; fuProg.BlocksInIncrement = (float)newAcc; fuProg.CurrentIncrementSize = newInc;
+                        if (lost > 0) totalDecayApplied += lost;
+                        sb.AppendLine($"  Furtive: {oldCredits} \u2192 {newCr} (-{lost} credits, {rawPenalty:F0} pts), {oldAcc:F0}/{oldInc} \u2192 {(int)newAcc}/{newInc}");
+                        pendingFurtiveProgressSave = true;
+                    }
+                }
+            }
 
-            // Precise
-            totalDecayApplied += DecaySkillCredits(playerUid, "precise", currentDay,
-                () => PreciseProgress.TryGetValue(playerUid, out var p) && p.TotalCredits > 0 ? p : null,
-                p => ((PreciseProgressData)p).TotalCredits,
-                (p, v) => ((PreciseProgressData)p).TotalCredits = v,
-                p => ((PreciseProgressData)p).LastActivityDay,
-                ref pendingPreciseProgressSave, sb);
-
-            // CO Proficiency (decay each proficiency's TotalCredits and SteadyAimCredits)
+            // CO Proficiency (per-proficiency absolute-position drain + SteadyAim direct)
             if (!DecayExemptSkills.Contains("coproficiency") && !DisabledSkills.Contains("coproficiency") && IsCOCompatEnabled)
             {
                 if (COProgress.TryGetValue(playerUid, out var coProg))
@@ -9165,72 +9490,70 @@ namespace SeraphLeveling
                     if (decay > 0)
                     {
                         int coDecayTotal = 0;
+                        var coSb = new StringBuilder();
                         foreach (var profKvp in coProg.Proficiencies)
                         {
-                            if (profKvp.Value.TotalCredits > 0)
+                            if (profKvp.Value.TotalCredits > 0 || profKvp.Value.WeaponProgress.Count > 0)
                             {
-                                int old = profKvp.Value.TotalCredits;
-                                profKvp.Value.TotalCredits = Math.Max(0, profKvp.Value.TotalCredits - decay);
-                                coDecayTotal += old - profKvp.Value.TotalCredits;
+                                int oldProfCredits = profKvp.Value.TotalCredits;
+                                var toolEntries = profKvp.Value.WeaponProgress.Select(kvp =>
+                                    (kvp.Key, (double)kvp.Value.DamageInIncrement, kvp.Value.CurrentIncrementSize)).ToList();
+
+                                if (toolEntries.Count > 0)
+                                {
+                                    double rawPenalty = (double)decay;
+
+                                    var (newCr, lost) = ApplyAbsolutePositionDecay(toolEntries, rawPenalty,
+                                        COBaseDamagePerIncrement, COIncrementStep, oldProfCredits,
+                                        (k, a, s) => { if (profKvp.Value.WeaponProgress.TryGetValue(k, out var p)) {
+                                            p.DamageInIncrement = (float)a; p.CurrentIncrementSize = s; } },
+                                        k => profKvp.Value.WeaponProgress.Remove(k), verboseSb, $"CO:{profKvp.Key}");
+                                    profKvp.Value.TotalCredits = newCr;
+                                    coSb.AppendLine($"    {profKvp.Key}: {oldProfCredits} \u2192 {newCr} (-{lost} credits, {rawPenalty:F0} pts)");
+                                    coDecayTotal += lost;
+                                }
+                                else
+                                {
+                                    int lost = Math.Min(decay, oldProfCredits);
+                                    profKvp.Value.TotalCredits -= lost;
+                                    if (lost > 0) coSb.AppendLine($"    {profKvp.Key}: {oldProfCredits} \u2192 {profKvp.Value.TotalCredits} (-{lost} credits)");
+                                    coDecayTotal += lost;
+                                }
                             }
                         }
                         if (coProg.SteadyAimCredits > 0)
                         {
                             int old = coProg.SteadyAimCredits;
                             coProg.SteadyAimCredits = Math.Max(0, coProg.SteadyAimCredits - decay);
-                            coDecayTotal += old - coProg.SteadyAimCredits;
+                            int steadyLost = old - coProg.SteadyAimCredits;
+                            if (steadyLost > 0) coSb.AppendLine($"    SteadyAim: {old} \u2192 {coProg.SteadyAimCredits} (-{steadyLost} credits)");
+                            coDecayTotal += steadyLost;
                         }
-                        if (coDecayTotal > 0)
+                        if (coDecayTotal > 0) totalDecayApplied += coDecayTotal;
+                        if (coSb.Length > 0)
                         {
-                            totalDecayApplied += coDecayTotal;
                             pendingCOProgressSave = true;
-                            sb.AppendLine($"  CO Proficiency: -{coDecayTotal}");
+                            sb.AppendLine($"  CO Proficiency: -{coDecayTotal} credits");
+                            sb.Append(coSb);
                         }
                     }
                 }
             }
 
             // If any decay occurred, re-apply all bonuses and notify
-            if (totalDecayApplied > 0)
+            if (totalDecayApplied > 0 || sb.Length > 0)
             {
-                // Re-apply bonuses with new credit values
-                ReapplyAllBonuses(player);
+                if (totalDecayApplied > 0) ReapplyAllBonuses(player);
 
                 player.SendMessage(GlobalConstants.GeneralChatGroup,
-                    $"Skills decayed due to inactivity (-{totalDecayApplied} total credits):\n{sb}Use them to regain your progress!",
+                    $"Skills decayed due to inactivity{(totalDecayApplied > 0 ? $" (-{totalDecayApplied} total credits)" : "")}:\n{sb}Use them to regain your progress!",
                     EnumChatType.Notification);
 
                 ServerApi.Logger.Debug($"[SeraphLeveling] Daily decay applied to {player.PlayerName}: {totalDecayApplied} total credits lost");
             }
-        }
 
-        /// <summary>
-        /// Helper to decay a single skill's TotalCredits. Returns actual credits lost.
-        /// </summary>
-        private int DecaySkillCredits(string playerUid, string skillKey, double currentDay,
-            System.Func<object> getProgress, System.Func<object, int> getCredits, Action<object, int> setCredits,
-            System.Func<object, double> getLastActivity, ref bool pendingSave, StringBuilder sb)
-        {
-            if (DecayExemptSkills.Contains(skillKey) || DisabledSkills.Contains(skillKey)) return 0;
-
-            var prog = getProgress();
-            if (prog == null) return 0;
-
-            var (grace, basePoints, maxPoints) = GetDecayParams(skillKey);
-            double lastActivity = getLastActivity(prog);
-            int decay = CalculateDecayPoints(lastActivity, currentDay, grace, basePoints, maxPoints);
-            if (decay <= 0) return 0;
-
-            int oldCredits = getCredits(prog);
-            int newCredits = Math.Max(0, oldCredits - decay);
-            setCredits(prog, newCredits);
-            int actualDecay = oldCredits - newCredits;
-            if (actualDecay > 0)
-            {
-                pendingSave = true;
-                sb.AppendLine($"  {char.ToUpper(skillKey[0])}{skillKey.Substring(1)}: -{actualDecay}");
-            }
-            return actualDecay;
+            if (VerboseDecayLogging && verboseSb != null && verboseSb.Length > 0)
+                player.SendMessage(GlobalConstants.GeneralChatGroup, $"[Decay Detail]\n{verboseSb}", EnumChatType.Notification);
         }
 
         /// <summary>
@@ -9361,6 +9684,7 @@ namespace SeraphLeveling
                 // Remove expired buff
                 SleepBuffExpiration.TryRemove(playerUid, out _);
                 SleepBuffMultiplier.TryRemove(playerUid, out _);
+                pendingSleepBuffSave = true;
                 return 1.0f;
             }
 
@@ -9461,8 +9785,204 @@ namespace SeraphLeveling
         }
 
         /// <summary>
+        /// Compute the absolute position (total raw points ever earned) for a single tool,
+        /// given its current accumulator value and increment size.
+        /// The cost for the Nth credit from this tool is: baseIncrement + (N-1)*incrementStep.
+        /// So if currentIncrementSize = baseIncrement + N*incrementStep, then N credits were earned.
+        /// Absolute position = sum of costs for those N credits + current accumulator.
+        /// </summary>
+        private static double ToolToAbsolutePosition(double accumulator, int currentIncrementSize,
+            int baseIncrement, int incrementStep)
+        {
+            // N = number of credits this tool has earned
+            int N = incrementStep > 0 ? (currentIncrementSize - baseIncrement) / incrementStep : 0;
+            if (N < 0) N = 0;
+            // Sum of costs: N*base + step*N*(N-1)/2
+            double sumOfCosts = (double)N * baseIncrement + (double)incrementStep * N * (N - 1) / 2.0;
+            return sumOfCosts + Math.Max(0, accumulator);
+        }
+
+        /// <summary>
+        /// Convert an absolute position back into (credits, accumulator, nextIncrementSize).
+        /// Subtracts escalating costs until the remainder is less than the next cost.
+        /// </summary>
+        private static (int credits, double accumulator, int incrementSize) AbsolutePositionToToolState(
+            double absolutePosition, int baseIncrement, int incrementStep)
+        {
+            if (absolutePosition <= 0)
+                return (0, 0, baseIncrement);
+
+            int credits = 0;
+            double remaining = absolutePosition;
+            while (true)
+            {
+                int nextCost = baseIncrement + credits * incrementStep;
+                if (remaining < nextCost)
+                    break;
+                remaining -= nextCost;
+                credits++;
+            }
+            int incrementSize = baseIncrement + credits * incrementStep;
+            // Guard against floating-point edge case where remaining ≈ incrementSize
+            if (remaining >= incrementSize - 0.01)
+                remaining = incrementSize - 1;
+            return (credits, remaining, incrementSize);
+        }
+
+        /// <summary>
+        /// Apply absolute-position decay to a set of per-tool accumulators.
+        /// 1) Convert each tool to absolute position
+        /// 2) Water-level drain absolute positions via DrainAccumulatorsLeveling
+        /// 3) Convert back to (credits, accumulator, incrementSize) per tool
+        /// 4) Write back via delegates; remove entries at zero
+        /// Returns (newTotalCredits, creditsLost).
+        /// </summary>
+        private static (int newTotalCredits, int creditsLost) ApplyAbsolutePositionDecay(
+            List<(string key, double accumulator, int incrementSize)> toolEntries,
+            double rawPenalty, int baseIncrement, int incrementStep, int oldTotalCredits,
+            Action<string, double, int> writeBack,
+            Action<string> removeEntry,
+            StringBuilder verboseLog, string skillName)
+        {
+            // Step 1: Convert to absolute positions
+            var absPositions = new List<(string key, double value)>();
+            foreach (var entry in toolEntries)
+            {
+                double absPos = ToolToAbsolutePosition(entry.accumulator, entry.incrementSize, baseIncrement, incrementStep);
+                absPositions.Add((entry.key, absPos));
+            }
+
+            // Step 2: Water-level drain
+            double remaining = DrainAccumulatorsLeveling(absPositions, rawPenalty);
+
+            // Step 3: Convert back and write
+            int newTotalCredits = 0;
+            var toRemove = new List<string>();
+            foreach (var absEntry in absPositions)
+            {
+                var (credits, accum, incSize) = AbsolutePositionToToolState(absEntry.value, baseIncrement, incrementStep);
+                if (credits == 0 && accum < 0.001)
+                {
+                    toRemove.Add(absEntry.key);
+                }
+                else
+                {
+                    writeBack(absEntry.key, accum, incSize);
+                    newTotalCredits += credits;
+                }
+
+                if (verboseLog != null)
+                    verboseLog.AppendLine($"  [{skillName}] {absEntry.key}: absPos={absEntry.value:F1} -> cr={credits}, acc={accum:F1}, inc={incSize}");
+            }
+
+            foreach (var key in toRemove)
+                removeEntry(key);
+
+            // If there's remaining penalty after all tools drained to zero, subtract from credits directly
+            if (remaining > 0.001 && newTotalCredits > 0)
+            {
+                // This shouldn't normally happen since absolute positions encompass credits,
+                // but handle edge case of oldTotalCredits > sum of per-tool credits
+                int extraLoss = (int)Math.Floor(remaining / baseIncrement);
+                newTotalCredits = Math.Max(0, newTotalCredits - extraLoss);
+            }
+
+            int creditsLost = Math.Max(0, oldTotalCredits - newTotalCredits);
+            return (newTotalCredits, creditsLost);
+        }
+
+        /// <summary>
+        /// Apply absolute-position decay to a single-accumulator skill.
+        /// Computes absolute position from oldTotalCredits (more robust than from incrementSize),
+        /// subtracts rawPenalty, converts back.
+        /// </summary>
+        private static (int newCredits, double newAccumulator, int newIncrementSize, int creditsLost)
+            ApplySingleAccumulatorDecay(
+            double currentAccumulator, int currentIncrementSize, int oldTotalCredits,
+            double rawPenalty, int baseIncrement, int incrementStep,
+            StringBuilder verboseLog, string skillName)
+        {
+            // Compute absolute position from oldTotalCredits rather than incrementSize for robustness
+            // Sum of costs for N credits: N*base + step*N*(N-1)/2
+            double sumOfCosts = (double)oldTotalCredits * baseIncrement +
+                (double)incrementStep * oldTotalCredits * (oldTotalCredits - 1) / 2.0;
+            double absolutePosition = sumOfCosts + Math.Max(0, currentAccumulator);
+
+            double newAbsPosition = Math.Max(0, absolutePosition - rawPenalty);
+            var (newCredits, newAccumulator, newIncSize) = AbsolutePositionToToolState(newAbsPosition, baseIncrement, incrementStep);
+
+            int creditsLost = Math.Max(0, oldTotalCredits - newCredits);
+
+            if (verboseLog != null)
+                verboseLog.AppendLine($"  [{skillName}] absPos={absolutePosition:F1} - penalty={rawPenalty:F1} -> newAbsPos={newAbsPosition:F1}, cr={newCredits}, acc={newAccumulator:F1}, inc={newIncSize}");
+
+            return (newCredits, newAccumulator, newIncSize, creditsLost);
+        }
+
+        /// <summary>
+        /// Binary-search for the minimum rawPenalty that, when water-leveled across per-tool
+        /// absolute positions, reduces the total per-tool credits by at least targetLoss.
+        /// Returns 0 if no drain is needed.
+        /// </summary>
+        private static double ComputeDeathPenaltyRawPenalty(
+            List<(string key, double value)> absPositions,
+            int targetLoss, int baseIncrement, int incrementStep)
+        {
+            if (absPositions.Count == 0 || targetLoss <= 0) return 0;
+
+            double totalAbsPos = 0;
+            int currentCredits = 0;
+            foreach (var e in absPositions)
+            {
+                totalAbsPos += e.value;
+                currentCredits += AbsolutePositionToToolState(e.value, baseIncrement, incrementStep).credits;
+            }
+
+            int targetCredits = Math.Max(0, currentCredits - targetLoss);
+            if (currentCredits <= targetCredits) return 0;
+
+            double lo = 0, hi = totalAbsPos + 1;
+            for (int iter = 0; iter < 50; iter++)
+            {
+                double mid = (lo + hi) / 2;
+                var test = absPositions.Select(e => (e.key, e.value)).ToList();
+                DrainAccumulatorsLeveling(test, mid);
+                int credits = 0;
+                foreach (var e in test)
+                    credits += AbsolutePositionToToolState(e.value, baseIncrement, incrementStep).credits;
+
+                if (credits <= targetCredits)
+                    hi = mid;
+                else
+                    lo = mid;
+            }
+
+            return hi;
+        }
+
+        /// <summary>
+        /// Analytically compute the minimum rawPenalty needed to guarantee losing at least
+        /// intendedLoss credits from a single-accumulator skill.
+        /// </summary>
+        private static double ComputeMinSingleAccumulatorPenalty(
+            double currentAccumulator, int oldTotalCredits, int intendedLoss,
+            int baseIncrement, int incrementStep)
+        {
+            if (intendedLoss <= 0 || oldTotalCredits <= 0) return 0;
+            int targetCredits = Math.Max(0, oldTotalCredits - intendedLoss);
+            double currentAbsPos = (double)oldTotalCredits * baseIncrement +
+                (double)incrementStep * oldTotalCredits * (oldTotalCredits - 1) / 2.0 + Math.Max(0, currentAccumulator);
+            // Max absolute position that still results in targetCredits (just below next credit boundary)
+            double targetSum = (double)targetCredits * baseIncrement +
+                (double)incrementStep * targetCredits * (targetCredits - 1) / 2.0;
+            double nextCost = baseIncrement + targetCredits * incrementStep;
+            double maxAllowed = targetSum + nextCost - 0.01;
+            return Math.Max(0, currentAbsPos - maxAllowed);
+        }
+
+        /// <summary>
         /// Apply death penalty to all skills for a player.
-        /// Penalty formula: rawPenalty = BaseIncrement * DeathPenaltyFraction * sqrt(TotalCredits)
+        /// Uses binary-search to guarantee credit loss for per-tool dictionary skills.
         /// </summary>
         public static void ApplyDeathPenalty(IServerPlayer player)
         {
@@ -9473,136 +9993,237 @@ namespace SeraphLeveling
             var sb = new StringBuilder();
             int totalCreditsLost = 0;
 
-            // --- Per-tool dictionary skills ---
+            // --- Per-tool dictionary skills (binary-search guaranteed credit loss) ---
 
             // Mining
             if (!DeathPenaltyExemptSkills.Contains("mining") && !DisabledSkills.Contains("mining"))
             {
-                if (MiningProgress.TryGetValue(playerUid, out var miningProg) && miningProg.TotalCredits > 0)
+                if (MiningProgress.TryGetValue(playerUid, out var miningProg) && (miningProg.TotalCredits > 0 || miningProg.PickaxeProgress.Count > 0))
                 {
-                    double rawPenalty = BaseBlocksPerIncrement * DeathPenaltyFraction * Math.Sqrt(miningProg.TotalCredits);
-                    if (rawPenalty > 0)
+                    int oldCredits = miningProg.TotalCredits;
+                    double originalPenalty = BaseBlocksPerIncrement * DeathPenaltyFraction * Math.Sqrt(Math.Max(1, oldCredits));
+
+                    var toolEntries = miningProg.PickaxeProgress.Select(kvp =>
+                        (kvp.Key, (double)kvp.Value.BlocksInIncrement, kvp.Value.CurrentIncrementSize)).ToList();
+
+                    if (toolEntries.Count > 0)
                     {
-                        // Collect per-tool accumulators
-                        var accums = new List<(string key, double value)>();
-                        foreach (var kvp in miningProg.PickaxeProgress)
-                            accums.Add((kvp.Key, kvp.Value.BlocksInIncrement));
-
-                        double remainingPenalty = DrainAccumulatorsLeveling(accums, rawPenalty);
-
-                        // Write back drained values
-                        foreach (var entry in accums)
+                        double rawPenalty = originalPenalty;
+                        if (oldCredits > 0)
                         {
-                            if (miningProg.PickaxeProgress.TryGetValue(entry.key, out var pickProg))
-                                pickProg.BlocksInIncrement = (int)Math.Floor(entry.value);
+                            int intendedLoss = Math.Max(1, (int)Math.Ceiling(DeathPenaltyFraction * Math.Sqrt(oldCredits)));
+                            intendedLoss = Math.Min(intendedLoss, oldCredits);
+                            var absPositions = toolEntries.Select(e =>
+                                (e.Item1, ToolToAbsolutePosition(e.Item2, e.Item3, BaseBlocksPerIncrement, IncrementStep))).ToList();
+                            double minPenalty = ComputeDeathPenaltyRawPenalty(absPositions, intendedLoss, BaseBlocksPerIncrement, IncrementStep);
+                            rawPenalty = Math.Max(originalPenalty, minPenalty);
                         }
-
-                        // Convert remaining to credit loss
-                        int creditsLost = (int)Math.Floor(remainingPenalty / BaseBlocksPerIncrement);
-                        if (creditsLost > 0)
+                        var (newCr, _) = ApplyAbsolutePositionDecay(toolEntries, rawPenalty,
+                            BaseBlocksPerIncrement, IncrementStep, oldCredits,
+                            (k, a, s) => { if (miningProg.PickaxeProgress.TryGetValue(k, out var p)) {
+                                p.BlocksInIncrement = (int)Math.Floor(a); p.CurrentIncrementSize = s; } },
+                            k => miningProg.PickaxeProgress.Remove(k), null, "Mining");
+                        miningProg.TotalCredits = newCr;
+                        int actualLost = oldCredits - newCr;
+                        if (actualLost > 0) totalCreditsLost += actualLost;
+                        sb.AppendLine($"  Mining: {oldCredits} \u2192 {newCr} (-{actualLost} credits, {rawPenalty:F0} pts)");
+                        foreach (var entry in toolEntries)
                         {
-                            miningProg.TotalCredits = Math.Max(0, miningProg.TotalCredits - creditsLost);
-                            totalCreditsLost += creditsLost;
+                            int oldToolCr = IncrementStep > 0 ? (entry.Item3 - BaseBlocksPerIncrement) / IncrementStep : 0;
+                            if (miningProg.PickaxeProgress.TryGetValue(entry.Item1, out var after))
+                            {
+                                int newToolCr = IncrementStep > 0 ? (after.CurrentIncrementSize - BaseBlocksPerIncrement) / IncrementStep : 0;
+                                int toolLost = oldToolCr - newToolCr;
+                                sb.AppendLine($"    {entry.Item1}: {(int)entry.Item2}/{entry.Item3} \u2192 {after.BlocksInIncrement}/{after.CurrentIncrementSize}{(toolLost > 0 ? $" (-{toolLost} cr)" : "")}");
+                            }
+                            else
+                                sb.AppendLine($"    {entry.Item1}: {(int)entry.Item2}/{entry.Item3} \u2192 removed (-{oldToolCr} cr)");
                         }
-                        pendingMiningProgressSave = true;
-                        sb.AppendLine($"  Mining: -{(int)rawPenalty} raw pts" + (creditsLost > 0 ? $", -{creditsLost} credits" : ""));
                     }
+                    else if (oldCredits > 0)
+                    {
+                        int intendedLoss = Math.Max(1, (int)Math.Ceiling(DeathPenaltyFraction * Math.Sqrt(oldCredits)));
+                        intendedLoss = Math.Min(intendedLoss, oldCredits);
+                        miningProg.TotalCredits = Math.Max(0, oldCredits - intendedLoss);
+                        int actualLost = oldCredits - miningProg.TotalCredits;
+                        totalCreditsLost += actualLost;
+                        sb.AppendLine($"  Mining: {oldCredits} \u2192 {miningProg.TotalCredits} (-{actualLost} credits)");
+                    }
+                    pendingMiningProgressSave = true;
                 }
             }
 
             // Melee
             if (!DeathPenaltyExemptSkills.Contains("melee") && !DisabledSkills.Contains("melee"))
             {
-                if (MeleeProgress.TryGetValue(playerUid, out var meleeProg) && meleeProg.TotalCredits > 0)
+                if (MeleeProgress.TryGetValue(playerUid, out var meleeProg) && (meleeProg.TotalCredits > 0 || meleeProg.WeaponProgress.Count > 0))
                 {
-                    double rawPenalty = BaseDamagePerIncrement * DeathPenaltyFraction * Math.Sqrt(meleeProg.TotalCredits);
-                    if (rawPenalty > 0)
+                    int oldCredits = meleeProg.TotalCredits;
+                    double originalPenalty = BaseDamagePerIncrement * DeathPenaltyFraction * Math.Sqrt(Math.Max(1, oldCredits));
+
+                    var toolEntries = meleeProg.WeaponProgress.Select(kvp =>
+                        (kvp.Key, (double)kvp.Value.DamageInIncrement, kvp.Value.CurrentIncrementSize)).ToList();
+
+                    if (toolEntries.Count > 0)
                     {
-                        var accums = new List<(string key, double value)>();
-                        foreach (var kvp in meleeProg.WeaponProgress)
-                            accums.Add((kvp.Key, kvp.Value.DamageInIncrement));
-
-                        double remainingPenalty = DrainAccumulatorsLeveling(accums, rawPenalty);
-
-                        foreach (var entry in accums)
+                        double rawPenalty = originalPenalty;
+                        if (oldCredits > 0)
                         {
-                            if (meleeProg.WeaponProgress.TryGetValue(entry.key, out var wpnProg))
-                                wpnProg.DamageInIncrement = (float)entry.value;
+                            int intendedLoss = Math.Max(1, (int)Math.Ceiling(DeathPenaltyFraction * Math.Sqrt(oldCredits)));
+                            intendedLoss = Math.Min(intendedLoss, oldCredits);
+                            var absPositions = toolEntries.Select(e =>
+                                (e.Item1, ToolToAbsolutePosition(e.Item2, e.Item3, BaseDamagePerIncrement, MeleeIncrementStep))).ToList();
+                            double minPenalty = ComputeDeathPenaltyRawPenalty(absPositions, intendedLoss, BaseDamagePerIncrement, MeleeIncrementStep);
+                            rawPenalty = Math.Max(originalPenalty, minPenalty);
                         }
-
-                        int creditsLost = (int)Math.Floor(remainingPenalty / BaseDamagePerIncrement);
-                        if (creditsLost > 0)
+                        var (newCr, _) = ApplyAbsolutePositionDecay(toolEntries, rawPenalty,
+                            BaseDamagePerIncrement, MeleeIncrementStep, oldCredits,
+                            (k, a, s) => { if (meleeProg.WeaponProgress.TryGetValue(k, out var p)) {
+                                p.DamageInIncrement = (float)a; p.CurrentIncrementSize = s; } },
+                            k => meleeProg.WeaponProgress.Remove(k), null, "Melee");
+                        meleeProg.TotalCredits = newCr;
+                        int actualLost = oldCredits - newCr;
+                        if (actualLost > 0) totalCreditsLost += actualLost;
+                        sb.AppendLine($"  Melee: {oldCredits} \u2192 {newCr} (-{actualLost} credits, {rawPenalty:F0} pts)");
+                        foreach (var entry in toolEntries)
                         {
-                            meleeProg.TotalCredits = Math.Max(0, meleeProg.TotalCredits - creditsLost);
-                            totalCreditsLost += creditsLost;
+                            int oldToolCr = MeleeIncrementStep > 0 ? (entry.Item3 - BaseDamagePerIncrement) / MeleeIncrementStep : 0;
+                            if (meleeProg.WeaponProgress.TryGetValue(entry.Item1, out var after))
+                            {
+                                int newToolCr = MeleeIncrementStep > 0 ? (after.CurrentIncrementSize - BaseDamagePerIncrement) / MeleeIncrementStep : 0;
+                                int toolLost = oldToolCr - newToolCr;
+                                sb.AppendLine($"    {entry.Item1}: {entry.Item2:F0}/{entry.Item3} \u2192 {after.DamageInIncrement:F0}/{after.CurrentIncrementSize}{(toolLost > 0 ? $" (-{toolLost} cr)" : "")}");
+                            }
+                            else
+                                sb.AppendLine($"    {entry.Item1}: {entry.Item2:F0}/{entry.Item3} \u2192 removed (-{oldToolCr} cr)");
                         }
-                        pendingMeleeProgressSave = true;
-                        sb.AppendLine($"  Melee: -{(int)rawPenalty} raw pts" + (creditsLost > 0 ? $", -{creditsLost} credits" : ""));
                     }
+                    else if (oldCredits > 0)
+                    {
+                        int intendedLoss = Math.Max(1, (int)Math.Ceiling(DeathPenaltyFraction * Math.Sqrt(oldCredits)));
+                        intendedLoss = Math.Min(intendedLoss, oldCredits);
+                        meleeProg.TotalCredits = Math.Max(0, oldCredits - intendedLoss);
+                        int actualLost = oldCredits - meleeProg.TotalCredits;
+                        totalCreditsLost += actualLost;
+                        sb.AppendLine($"  Melee: {oldCredits} \u2192 {meleeProg.TotalCredits} (-{actualLost} credits)");
+                    }
+                    pendingMeleeProgressSave = true;
                 }
             }
 
             // Ranged
             if (!DeathPenaltyExemptSkills.Contains("ranged") && !DisabledSkills.Contains("ranged"))
             {
-                if (RangedProgress.TryGetValue(playerUid, out var rangedProg) && rangedProg.TotalCredits > 0)
+                if (RangedProgress.TryGetValue(playerUid, out var rangedProg) && (rangedProg.TotalCredits > 0 || rangedProg.WeaponProgress.Count > 0))
                 {
-                    double rawPenalty = BaseRangedDamagePerIncrement * DeathPenaltyFraction * Math.Sqrt(rangedProg.TotalCredits);
-                    if (rawPenalty > 0)
+                    int oldCredits = rangedProg.TotalCredits;
+                    double originalPenalty = BaseRangedDamagePerIncrement * DeathPenaltyFraction * Math.Sqrt(Math.Max(1, oldCredits));
+
+                    var toolEntries = rangedProg.WeaponProgress.Select(kvp =>
+                        (kvp.Key, (double)kvp.Value.DamageInIncrement, kvp.Value.CurrentIncrementSize)).ToList();
+
+                    if (toolEntries.Count > 0)
                     {
-                        var accums = new List<(string key, double value)>();
-                        foreach (var kvp in rangedProg.WeaponProgress)
-                            accums.Add((kvp.Key, kvp.Value.DamageInIncrement));
-
-                        double remainingPenalty = DrainAccumulatorsLeveling(accums, rawPenalty);
-
-                        foreach (var entry in accums)
+                        double rawPenalty = originalPenalty;
+                        if (oldCredits > 0)
                         {
-                            if (rangedProg.WeaponProgress.TryGetValue(entry.key, out var wpnProg))
-                                wpnProg.DamageInIncrement = (float)entry.value;
+                            int intendedLoss = Math.Max(1, (int)Math.Ceiling(DeathPenaltyFraction * Math.Sqrt(oldCredits)));
+                            intendedLoss = Math.Min(intendedLoss, oldCredits);
+                            var absPositions = toolEntries.Select(e =>
+                                (e.Item1, ToolToAbsolutePosition(e.Item2, e.Item3, BaseRangedDamagePerIncrement, RangedIncrementStep))).ToList();
+                            double minPenalty = ComputeDeathPenaltyRawPenalty(absPositions, intendedLoss, BaseRangedDamagePerIncrement, RangedIncrementStep);
+                            rawPenalty = Math.Max(originalPenalty, minPenalty);
                         }
-
-                        int creditsLost = (int)Math.Floor(remainingPenalty / BaseRangedDamagePerIncrement);
-                        if (creditsLost > 0)
+                        var (newCr, _) = ApplyAbsolutePositionDecay(toolEntries, rawPenalty,
+                            BaseRangedDamagePerIncrement, RangedIncrementStep, oldCredits,
+                            (k, a, s) => { if (rangedProg.WeaponProgress.TryGetValue(k, out var p)) {
+                                p.DamageInIncrement = (float)a; p.CurrentIncrementSize = s; } },
+                            k => rangedProg.WeaponProgress.Remove(k), null, "Ranged");
+                        rangedProg.TotalCredits = newCr;
+                        int actualLost = oldCredits - newCr;
+                        if (actualLost > 0) totalCreditsLost += actualLost;
+                        sb.AppendLine($"  Ranged: {oldCredits} \u2192 {newCr} (-{actualLost} credits, {rawPenalty:F0} pts)");
+                        foreach (var entry in toolEntries)
                         {
-                            rangedProg.TotalCredits = Math.Max(0, rangedProg.TotalCredits - creditsLost);
-                            totalCreditsLost += creditsLost;
+                            int oldToolCr = RangedIncrementStep > 0 ? (entry.Item3 - BaseRangedDamagePerIncrement) / RangedIncrementStep : 0;
+                            if (rangedProg.WeaponProgress.TryGetValue(entry.Item1, out var after))
+                            {
+                                int newToolCr = RangedIncrementStep > 0 ? (after.CurrentIncrementSize - BaseRangedDamagePerIncrement) / RangedIncrementStep : 0;
+                                int toolLost = oldToolCr - newToolCr;
+                                sb.AppendLine($"    {entry.Item1}: {entry.Item2:F0}/{entry.Item3} \u2192 {after.DamageInIncrement:F0}/{after.CurrentIncrementSize}{(toolLost > 0 ? $" (-{toolLost} cr)" : "")}");
+                            }
+                            else
+                                sb.AppendLine($"    {entry.Item1}: {entry.Item2:F0}/{entry.Item3} \u2192 removed (-{oldToolCr} cr)");
                         }
-                        pendingRangedProgressSave = true;
-                        sb.AppendLine($"  Ranged: -{(int)rawPenalty} raw pts" + (creditsLost > 0 ? $", -{creditsLost} credits" : ""));
                     }
+                    else if (oldCredits > 0)
+                    {
+                        int intendedLoss = Math.Max(1, (int)Math.Ceiling(DeathPenaltyFraction * Math.Sqrt(oldCredits)));
+                        intendedLoss = Math.Min(intendedLoss, oldCredits);
+                        rangedProg.TotalCredits = Math.Max(0, oldCredits - intendedLoss);
+                        int actualLost = oldCredits - rangedProg.TotalCredits;
+                        totalCreditsLost += actualLost;
+                        sb.AppendLine($"  Ranged: {oldCredits} \u2192 {rangedProg.TotalCredits} (-{actualLost} credits)");
+                    }
+                    pendingRangedProgressSave = true;
                 }
             }
 
             // Precise
             if (!DeathPenaltyExemptSkills.Contains("precise") && !DisabledSkills.Contains("precise"))
             {
-                if (PreciseProgress.TryGetValue(playerUid, out var preciseProg) && preciseProg.TotalCredits > 0)
+                if (PreciseProgress.TryGetValue(playerUid, out var preciseProg) && (preciseProg.TotalCredits > 0 || preciseProg.WeaponProgress.Count > 0))
                 {
-                    double rawPenalty = BasePreciseDamagePerIncrement * DeathPenaltyFraction * Math.Sqrt(preciseProg.TotalCredits);
-                    if (rawPenalty > 0)
+                    int oldCredits = preciseProg.TotalCredits;
+                    double originalPenalty = BasePreciseDamagePerIncrement * DeathPenaltyFraction * Math.Sqrt(Math.Max(1, oldCredits));
+
+                    var toolEntries = preciseProg.WeaponProgress.Select(kvp =>
+                        (kvp.Key, (double)kvp.Value.DamageInIncrement, kvp.Value.CurrentIncrementSize)).ToList();
+
+                    if (toolEntries.Count > 0)
                     {
-                        var accums = new List<(string key, double value)>();
-                        foreach (var kvp in preciseProg.WeaponProgress)
-                            accums.Add((kvp.Key, kvp.Value.DamageInIncrement));
-
-                        double remainingPenalty = DrainAccumulatorsLeveling(accums, rawPenalty);
-
-                        foreach (var entry in accums)
+                        double rawPenalty = originalPenalty;
+                        if (oldCredits > 0)
                         {
-                            if (preciseProg.WeaponProgress.TryGetValue(entry.key, out var wpnProg))
-                                wpnProg.DamageInIncrement = (float)entry.value;
+                            int intendedLoss = Math.Max(1, (int)Math.Ceiling(DeathPenaltyFraction * Math.Sqrt(oldCredits)));
+                            intendedLoss = Math.Min(intendedLoss, oldCredits);
+                            var absPositions = toolEntries.Select(e =>
+                                (e.Item1, ToolToAbsolutePosition(e.Item2, e.Item3, BasePreciseDamagePerIncrement, PreciseIncrementStep))).ToList();
+                            double minPenalty = ComputeDeathPenaltyRawPenalty(absPositions, intendedLoss, BasePreciseDamagePerIncrement, PreciseIncrementStep);
+                            rawPenalty = Math.Max(originalPenalty, minPenalty);
                         }
-
-                        int creditsLost = (int)Math.Floor(remainingPenalty / BasePreciseDamagePerIncrement);
-                        if (creditsLost > 0)
+                        var (newCr, _) = ApplyAbsolutePositionDecay(toolEntries, rawPenalty,
+                            BasePreciseDamagePerIncrement, PreciseIncrementStep, oldCredits,
+                            (k, a, s) => { if (preciseProg.WeaponProgress.TryGetValue(k, out var p)) {
+                                p.DamageInIncrement = (float)a; p.CurrentIncrementSize = s; } },
+                            k => preciseProg.WeaponProgress.Remove(k), null, "Precise");
+                        preciseProg.TotalCredits = newCr;
+                        int actualLost = oldCredits - newCr;
+                        if (actualLost > 0) totalCreditsLost += actualLost;
+                        sb.AppendLine($"  Precise: {oldCredits} \u2192 {newCr} (-{actualLost} credits, {rawPenalty:F0} pts)");
+                        foreach (var entry in toolEntries)
                         {
-                            preciseProg.TotalCredits = Math.Max(0, preciseProg.TotalCredits - creditsLost);
-                            totalCreditsLost += creditsLost;
+                            int oldToolCr = PreciseIncrementStep > 0 ? (entry.Item3 - BasePreciseDamagePerIncrement) / PreciseIncrementStep : 0;
+                            if (preciseProg.WeaponProgress.TryGetValue(entry.Item1, out var after))
+                            {
+                                int newToolCr = PreciseIncrementStep > 0 ? (after.CurrentIncrementSize - BasePreciseDamagePerIncrement) / PreciseIncrementStep : 0;
+                                int toolLost = oldToolCr - newToolCr;
+                                sb.AppendLine($"    {entry.Item1}: {entry.Item2:F0}/{entry.Item3} \u2192 {after.DamageInIncrement:F0}/{after.CurrentIncrementSize}{(toolLost > 0 ? $" (-{toolLost} cr)" : "")}");
+                            }
+                            else
+                                sb.AppendLine($"    {entry.Item1}: {entry.Item2:F0}/{entry.Item3} \u2192 removed (-{oldToolCr} cr)");
                         }
-                        pendingPreciseProgressSave = true;
-                        sb.AppendLine($"  Precise: -{(int)rawPenalty} raw pts" + (creditsLost > 0 ? $", -{creditsLost} credits" : ""));
                     }
+                    else if (oldCredits > 0)
+                    {
+                        int intendedLoss = Math.Max(1, (int)Math.Ceiling(DeathPenaltyFraction * Math.Sqrt(oldCredits)));
+                        intendedLoss = Math.Min(intendedLoss, oldCredits);
+                        preciseProg.TotalCredits = Math.Max(0, oldCredits - intendedLoss);
+                        int actualLost = oldCredits - preciseProg.TotalCredits;
+                        totalCreditsLost += actualLost;
+                        sb.AppendLine($"  Precise: {oldCredits} \u2192 {preciseProg.TotalCredits} (-{actualLost} credits)");
+                    }
+                    pendingPreciseProgressSave = true;
                 }
             }
 
@@ -9611,140 +10232,175 @@ namespace SeraphLeveling
             // Walking
             if (!DeathPenaltyExemptSkills.Contains("walking") && !DisabledSkills.Contains("walking"))
             {
-                if (WalkingProgress.TryGetValue(playerUid, out var walkingProg) && walkingProg.TotalCredits > 0)
+                if (WalkingProgress.TryGetValue(playerUid, out var walkingProg) && (walkingProg.TotalCredits > 0 || walkingProg.BlocksInIncrement > 0))
                 {
-                    double rawPenalty = BaseBlocksWalkedPerIncrement * DeathPenaltyFraction * Math.Sqrt(walkingProg.TotalCredits);
-                    double drained = Math.Min(rawPenalty, walkingProg.BlocksInIncrement);
-                    walkingProg.BlocksInIncrement = (float)Math.Max(0, walkingProg.BlocksInIncrement - drained);
-                    double remaining = rawPenalty - drained;
-                    int creditsLost = (int)Math.Floor(remaining / BaseBlocksWalkedPerIncrement);
-                    if (creditsLost > 0)
+                    int oldCredits = walkingProg.TotalCredits;
+                    float oldAcc = walkingProg.BlocksInIncrement; int oldInc = walkingProg.CurrentIncrementSize;
+                    double originalPenalty = BaseBlocksWalkedPerIncrement * DeathPenaltyFraction * Math.Sqrt(Math.Max(1, oldCredits));
+                    double rawPenalty = originalPenalty;
+                    if (oldCredits > 0)
                     {
-                        walkingProg.TotalCredits = Math.Max(0, walkingProg.TotalCredits - creditsLost);
-                        totalCreditsLost += creditsLost;
+                        int intendedLoss = Math.Max(1, (int)Math.Ceiling(DeathPenaltyFraction * Math.Sqrt(oldCredits)));
+                        intendedLoss = Math.Min(intendedLoss, oldCredits);
+                        double minPenalty = ComputeMinSingleAccumulatorPenalty(oldAcc, oldCredits, intendedLoss, BaseBlocksWalkedPerIncrement, WalkingIncrementStep);
+                        rawPenalty = Math.Max(originalPenalty, minPenalty);
                     }
+                    var (newCr, newAcc, newInc, lost) = ApplySingleAccumulatorDecay(
+                        oldAcc, oldInc, oldCredits, rawPenalty, BaseBlocksWalkedPerIncrement, WalkingIncrementStep, null, "Walking");
+                    walkingProg.TotalCredits = newCr; walkingProg.BlocksInIncrement = (float)newAcc; walkingProg.CurrentIncrementSize = newInc;
+                    if (lost > 0) totalCreditsLost += lost;
                     pendingWalkingProgressSave = true;
-                    sb.AppendLine($"  Walking: -{(int)rawPenalty} raw pts" + (creditsLost > 0 ? $", -{creditsLost} credits" : ""));
+                    sb.AppendLine($"  Walking: {oldCredits} \u2192 {newCr} (-{lost} credits, {rawPenalty:F0} pts), {oldAcc:F0}/{oldInc} \u2192 {(int)newAcc}/{newInc}");
                 }
             }
 
             // Hunger
             if (!DeathPenaltyExemptSkills.Contains("hunger") && !DisabledSkills.Contains("hunger"))
             {
-                if (HungerProgress.TryGetValue(playerUid, out var hungerProg) && hungerProg.TotalCredits > 0)
+                if (HungerProgress.TryGetValue(playerUid, out var hungerProg) && (hungerProg.TotalCredits > 0 || hungerProg.SecondsInIncrement > 0))
                 {
-                    double rawPenalty = BaseSecondsPerIncrement * DeathPenaltyFraction * Math.Sqrt(hungerProg.TotalCredits);
-                    double drained = Math.Min(rawPenalty, hungerProg.SecondsInIncrement);
-                    hungerProg.SecondsInIncrement = (float)Math.Max(0, hungerProg.SecondsInIncrement - drained);
-                    double remaining = rawPenalty - drained;
-                    int creditsLost = (int)Math.Floor(remaining / BaseSecondsPerIncrement);
-                    if (creditsLost > 0)
+                    int oldCredits = hungerProg.TotalCredits;
+                    float oldAcc = hungerProg.SecondsInIncrement; int oldInc = hungerProg.CurrentIncrementSize;
+                    double originalPenalty = BaseSecondsPerIncrement * DeathPenaltyFraction * Math.Sqrt(Math.Max(1, oldCredits));
+                    double rawPenalty = originalPenalty;
+                    if (oldCredits > 0)
                     {
-                        hungerProg.TotalCredits = Math.Max(0, hungerProg.TotalCredits - creditsLost);
-                        totalCreditsLost += creditsLost;
+                        int intendedLoss = Math.Max(1, (int)Math.Ceiling(DeathPenaltyFraction * Math.Sqrt(oldCredits)));
+                        intendedLoss = Math.Min(intendedLoss, oldCredits);
+                        double minPenalty = ComputeMinSingleAccumulatorPenalty(oldAcc, oldCredits, intendedLoss, BaseSecondsPerIncrement, HungerIncrementStep);
+                        rawPenalty = Math.Max(originalPenalty, minPenalty);
                     }
+                    var (newCr, newAcc, newInc, lost) = ApplySingleAccumulatorDecay(
+                        oldAcc, oldInc, oldCredits, rawPenalty, BaseSecondsPerIncrement, HungerIncrementStep, null, "Hunger");
+                    hungerProg.TotalCredits = newCr; hungerProg.SecondsInIncrement = (float)newAcc; hungerProg.CurrentIncrementSize = newInc;
+                    if (lost > 0) totalCreditsLost += lost;
                     pendingHungerProgressSave = true;
-                    sb.AppendLine($"  Hunger: -{(int)rawPenalty} raw pts" + (creditsLost > 0 ? $", -{creditsLost} credits" : ""));
+                    sb.AppendLine($"  Hunger: {oldCredits} \u2192 {newCr} (-{lost} credits, {rawPenalty:F0} pts), {oldAcc:F0}/{oldInc} \u2192 {(int)newAcc}/{newInc}");
                 }
             }
 
             // Mender
             if (!DeathPenaltyExemptSkills.Contains("mender") && !DisabledSkills.Contains("mender"))
             {
-                if (MenderProgress.TryGetValue(playerUid, out var menderProg) && menderProg.TotalCredits > 0)
+                if (MenderProgress.TryGetValue(playerUid, out var menderProg) && (menderProg.TotalCredits > 0 || menderProg.RepairsInIncrement > 0))
                 {
-                    double rawPenalty = BaseMenderRepairsPerIncrement * DeathPenaltyFraction * Math.Sqrt(menderProg.TotalCredits);
-                    double drained = Math.Min(rawPenalty, menderProg.RepairsInIncrement);
-                    menderProg.RepairsInIncrement = (int)Math.Max(0, menderProg.RepairsInIncrement - (int)Math.Ceiling(drained));
-                    double remaining = rawPenalty - drained;
-                    int creditsLost = (int)Math.Floor(remaining / BaseMenderRepairsPerIncrement);
-                    if (creditsLost > 0)
+                    int oldCredits = menderProg.TotalCredits;
+                    int oldAcc = menderProg.RepairsInIncrement; int oldInc = menderProg.CurrentIncrementSize;
+                    double originalPenalty = BaseMenderRepairsPerIncrement * DeathPenaltyFraction * Math.Sqrt(Math.Max(1, oldCredits));
+                    double rawPenalty = originalPenalty;
+                    if (oldCredits > 0)
                     {
-                        menderProg.TotalCredits = Math.Max(0, menderProg.TotalCredits - creditsLost);
-                        totalCreditsLost += creditsLost;
+                        int intendedLoss = Math.Max(1, (int)Math.Ceiling(DeathPenaltyFraction * Math.Sqrt(oldCredits)));
+                        intendedLoss = Math.Min(intendedLoss, oldCredits);
+                        double minPenalty = ComputeMinSingleAccumulatorPenalty(oldAcc, oldCredits, intendedLoss, BaseMenderRepairsPerIncrement, MenderIncrementStep);
+                        rawPenalty = Math.Max(originalPenalty, minPenalty);
                     }
+                    var (newCr, newAcc, newInc, lost) = ApplySingleAccumulatorDecay(
+                        oldAcc, oldInc, oldCredits, rawPenalty, BaseMenderRepairsPerIncrement, MenderIncrementStep, null, "Mender");
+                    menderProg.TotalCredits = newCr; menderProg.RepairsInIncrement = (int)Math.Floor(newAcc); menderProg.CurrentIncrementSize = newInc;
+                    if (lost > 0) totalCreditsLost += lost;
                     pendingMenderProgressSave = true;
-                    sb.AppendLine($"  Mender: -{rawPenalty:F1} raw pts" + (creditsLost > 0 ? $", -{creditsLost} credits" : ""));
+                    sb.AppendLine($"  Mender: {oldCredits} \u2192 {newCr} (-{lost} credits, {rawPenalty:F0} pts), {oldAcc}/{oldInc} \u2192 {(int)Math.Floor(newAcc)}/{newInc}");
                 }
             }
 
             // Pilferer
             if (!DeathPenaltyExemptSkills.Contains("pilferer") && !DisabledSkills.Contains("pilferer"))
             {
-                if (PilfererProgress.TryGetValue(playerUid, out var pilfererProg) && pilfererProg.TotalCredits > 0)
+                if (PilfererProgress.TryGetValue(playerUid, out var pilfererProg) && (pilfererProg.TotalCredits > 0 || pilfererProg.PointsInIncrement > 0))
                 {
-                    double rawPenalty = BasePilfererPointsPerIncrement * DeathPenaltyFraction * Math.Sqrt(pilfererProg.TotalCredits);
-                    double drained = Math.Min(rawPenalty, pilfererProg.PointsInIncrement);
-                    pilfererProg.PointsInIncrement = (int)Math.Max(0, pilfererProg.PointsInIncrement - (int)Math.Ceiling(drained));
-                    double remaining = rawPenalty - drained;
-                    int creditsLost = (int)Math.Floor(remaining / BasePilfererPointsPerIncrement);
-                    if (creditsLost > 0)
+                    int oldCredits = pilfererProg.TotalCredits;
+                    int oldAcc = pilfererProg.PointsInIncrement; int oldInc = pilfererProg.CurrentIncrementSize;
+                    double originalPenalty = BasePilfererPointsPerIncrement * DeathPenaltyFraction * Math.Sqrt(Math.Max(1, oldCredits));
+                    double rawPenalty = originalPenalty;
+                    if (oldCredits > 0)
                     {
-                        pilfererProg.TotalCredits = Math.Max(0, pilfererProg.TotalCredits - creditsLost);
-                        totalCreditsLost += creditsLost;
+                        int intendedLoss = Math.Max(1, (int)Math.Ceiling(DeathPenaltyFraction * Math.Sqrt(oldCredits)));
+                        intendedLoss = Math.Min(intendedLoss, oldCredits);
+                        double minPenalty = ComputeMinSingleAccumulatorPenalty(oldAcc, oldCredits, intendedLoss, BasePilfererPointsPerIncrement, PilfererIncrementStep);
+                        rawPenalty = Math.Max(originalPenalty, minPenalty);
                     }
+                    var (newCr, newAcc, newInc, lost) = ApplySingleAccumulatorDecay(
+                        oldAcc, oldInc, oldCredits, rawPenalty, BasePilfererPointsPerIncrement, PilfererIncrementStep, null, "Pilferer");
+                    pilfererProg.TotalCredits = newCr; pilfererProg.PointsInIncrement = (int)Math.Floor(newAcc); pilfererProg.CurrentIncrementSize = newInc;
+                    if (lost > 0) totalCreditsLost += lost;
                     pendingPilfererProgressSave = true;
-                    sb.AppendLine($"  Pilferer: -{rawPenalty:F1} raw pts" + (creditsLost > 0 ? $", -{creditsLost} credits" : ""));
+                    sb.AppendLine($"  Pilferer: {oldCredits} \u2192 {newCr} (-{lost} credits, {rawPenalty:F0} pts), {oldAcc}/{oldInc} \u2192 {(int)Math.Floor(newAcc)}/{newInc}");
                 }
             }
 
             // Resourceful
             if (!DeathPenaltyExemptSkills.Contains("resourceful") && !DisabledSkills.Contains("resourceful"))
             {
-                if (ResourcefulProgress.TryGetValue(playerUid, out var resourcefulProg) && resourcefulProg.TotalCredits > 0)
+                if (ResourcefulProgress.TryGetValue(playerUid, out var resourcefulProg) && (resourcefulProg.TotalCredits > 0 || resourcefulProg.AnimalsInIncrement > 0))
                 {
-                    double rawPenalty = BaseResourcefulAnimalsPerIncrement * DeathPenaltyFraction * Math.Sqrt(resourcefulProg.TotalCredits);
-                    double drained = Math.Min(rawPenalty, resourcefulProg.AnimalsInIncrement);
-                    resourcefulProg.AnimalsInIncrement = (int)Math.Max(0, resourcefulProg.AnimalsInIncrement - (int)Math.Ceiling(drained));
-                    double remaining = rawPenalty - drained;
-                    int creditsLost = (int)Math.Floor(remaining / BaseResourcefulAnimalsPerIncrement);
-                    if (creditsLost > 0)
+                    int oldCredits = resourcefulProg.TotalCredits;
+                    int oldAcc = resourcefulProg.AnimalsInIncrement; int oldInc = resourcefulProg.CurrentIncrementSize;
+                    double originalPenalty = BaseResourcefulAnimalsPerIncrement * DeathPenaltyFraction * Math.Sqrt(Math.Max(1, oldCredits));
+                    double rawPenalty = originalPenalty;
+                    if (oldCredits > 0)
                     {
-                        resourcefulProg.TotalCredits = Math.Max(0, resourcefulProg.TotalCredits - creditsLost);
-                        totalCreditsLost += creditsLost;
+                        int intendedLoss = Math.Max(1, (int)Math.Ceiling(DeathPenaltyFraction * Math.Sqrt(oldCredits)));
+                        intendedLoss = Math.Min(intendedLoss, oldCredits);
+                        double minPenalty = ComputeMinSingleAccumulatorPenalty(oldAcc, oldCredits, intendedLoss, BaseResourcefulAnimalsPerIncrement, ResourcefulIncrementStep);
+                        rawPenalty = Math.Max(originalPenalty, minPenalty);
                     }
+                    var (newCr, newAcc, newInc, lost) = ApplySingleAccumulatorDecay(
+                        oldAcc, oldInc, oldCredits, rawPenalty, BaseResourcefulAnimalsPerIncrement, ResourcefulIncrementStep, null, "Resourceful");
+                    resourcefulProg.TotalCredits = newCr; resourcefulProg.AnimalsInIncrement = (int)Math.Floor(newAcc); resourcefulProg.CurrentIncrementSize = newInc;
+                    if (lost > 0) totalCreditsLost += lost;
                     pendingResourcefulProgressSave = true;
-                    sb.AppendLine($"  Resourceful: -{rawPenalty:F1} raw pts" + (creditsLost > 0 ? $", -{creditsLost} credits" : ""));
+                    sb.AppendLine($"  Resourceful: {oldCredits} \u2192 {newCr} (-{lost} credits, {rawPenalty:F0} pts), {oldAcc}/{oldInc} \u2192 {(int)Math.Floor(newAcc)}/{newInc}");
                 }
             }
 
             // Forager
             if (!DeathPenaltyExemptSkills.Contains("forager") && !DisabledSkills.Contains("forager"))
             {
-                if (ForagerProgress.TryGetValue(playerUid, out var foragerProg) && foragerProg.TotalCredits > 0)
+                if (ForagerProgress.TryGetValue(playerUid, out var foragerProg) && (foragerProg.TotalCredits > 0 || foragerProg.CropsInIncrement > 0))
                 {
-                    double rawPenalty = BaseForagerCropsPerIncrement * DeathPenaltyFraction * Math.Sqrt(foragerProg.TotalCredits);
-                    double drained = Math.Min(rawPenalty, foragerProg.CropsInIncrement);
-                    foragerProg.CropsInIncrement = (int)Math.Max(0, foragerProg.CropsInIncrement - (int)Math.Ceiling(drained));
-                    double remaining = rawPenalty - drained;
-                    int creditsLost = (int)Math.Floor(remaining / BaseForagerCropsPerIncrement);
-                    if (creditsLost > 0)
+                    int oldCredits = foragerProg.TotalCredits;
+                    int oldAcc = foragerProg.CropsInIncrement; int oldInc = foragerProg.CurrentIncrementSize;
+                    double originalPenalty = BaseForagerCropsPerIncrement * DeathPenaltyFraction * Math.Sqrt(Math.Max(1, oldCredits));
+                    double rawPenalty = originalPenalty;
+                    if (oldCredits > 0)
                     {
-                        foragerProg.TotalCredits = Math.Max(0, foragerProg.TotalCredits - creditsLost);
-                        totalCreditsLost += creditsLost;
+                        int intendedLoss = Math.Max(1, (int)Math.Ceiling(DeathPenaltyFraction * Math.Sqrt(oldCredits)));
+                        intendedLoss = Math.Min(intendedLoss, oldCredits);
+                        double minPenalty = ComputeMinSingleAccumulatorPenalty(oldAcc, oldCredits, intendedLoss, BaseForagerCropsPerIncrement, ForagerIncrementStep);
+                        rawPenalty = Math.Max(originalPenalty, minPenalty);
                     }
+                    var (newCr, newAcc, newInc, lost) = ApplySingleAccumulatorDecay(
+                        oldAcc, oldInc, oldCredits, rawPenalty, BaseForagerCropsPerIncrement, ForagerIncrementStep, null, "Forager");
+                    foragerProg.TotalCredits = newCr; foragerProg.CropsInIncrement = (int)Math.Floor(newAcc); foragerProg.CurrentIncrementSize = newInc;
+                    if (lost > 0) totalCreditsLost += lost;
                     pendingForagerProgressSave = true;
-                    sb.AppendLine($"  Forager: -{rawPenalty:F1} raw pts" + (creditsLost > 0 ? $", -{creditsLost} credits" : ""));
+                    sb.AppendLine($"  Forager: {oldCredits} \u2192 {newCr} (-{lost} credits, {rawPenalty:F0} pts), {oldAcc}/{oldInc} \u2192 {(int)Math.Floor(newAcc)}/{newInc}");
                 }
             }
 
             // Furtive
             if (!DeathPenaltyExemptSkills.Contains("furtive") && !DisabledSkills.Contains("furtive"))
             {
-                if (FurtiveProgress.TryGetValue(playerUid, out var furtiveProg) && furtiveProg.TotalCredits > 0)
+                if (FurtiveProgress.TryGetValue(playerUid, out var furtiveProg) && (furtiveProg.TotalCredits > 0 || furtiveProg.BlocksInIncrement > 0))
                 {
-                    double rawPenalty = BaseFurtiveSneakBlocksPerIncrement * DeathPenaltyFraction * Math.Sqrt(furtiveProg.TotalCredits);
-                    double drained = Math.Min(rawPenalty, furtiveProg.BlocksInIncrement);
-                    furtiveProg.BlocksInIncrement = (float)Math.Max(0, furtiveProg.BlocksInIncrement - drained);
-                    double remaining = rawPenalty - drained;
-                    int creditsLost = (int)Math.Floor(remaining / BaseFurtiveSneakBlocksPerIncrement);
-                    if (creditsLost > 0)
+                    int oldCredits = furtiveProg.TotalCredits;
+                    float oldAcc = furtiveProg.BlocksInIncrement; int oldInc = furtiveProg.CurrentIncrementSize;
+                    double originalPenalty = BaseFurtiveSneakBlocksPerIncrement * DeathPenaltyFraction * Math.Sqrt(Math.Max(1, oldCredits));
+                    double rawPenalty = originalPenalty;
+                    if (oldCredits > 0)
                     {
-                        furtiveProg.TotalCredits = Math.Max(0, furtiveProg.TotalCredits - creditsLost);
-                        totalCreditsLost += creditsLost;
+                        int intendedLoss = Math.Max(1, (int)Math.Ceiling(DeathPenaltyFraction * Math.Sqrt(oldCredits)));
+                        intendedLoss = Math.Min(intendedLoss, oldCredits);
+                        double minPenalty = ComputeMinSingleAccumulatorPenalty(oldAcc, oldCredits, intendedLoss, BaseFurtiveSneakBlocksPerIncrement, FurtiveIncrementStep);
+                        rawPenalty = Math.Max(originalPenalty, minPenalty);
                     }
+                    var (newCr, newAcc, newInc, lost) = ApplySingleAccumulatorDecay(
+                        oldAcc, oldInc, oldCredits, rawPenalty, BaseFurtiveSneakBlocksPerIncrement, FurtiveIncrementStep, null, "Furtive");
+                    furtiveProg.TotalCredits = newCr; furtiveProg.BlocksInIncrement = (float)newAcc; furtiveProg.CurrentIncrementSize = newInc;
+                    if (lost > 0) totalCreditsLost += lost;
                     pendingFurtiveProgressSave = true;
-                    sb.AppendLine($"  Furtive: -{(int)rawPenalty} raw pts" + (creditsLost > 0 ? $", -{creditsLost} credits" : ""));
+                    sb.AppendLine($"  Furtive: {oldCredits} \u2192 {newCr} (-{lost} credits, {rawPenalty:F0} pts), {oldAcc:F0}/{oldInc} \u2192 {(int)newAcc}/{newInc}");
                 }
             }
 
@@ -9754,42 +10410,46 @@ namespace SeraphLeveling
                 if (ArmorProgress.TryGetValue(playerUid, out var armorProg))
                 {
                     int armorCreditsLost = 0;
+                    var armorSb = new StringBuilder();
 
-                    // Durability credits
                     if (armorProg.TotalDurabilityCredits > 0)
                     {
-                        int loss = (int)Math.Ceiling(DeathPenaltyFraction * Math.Sqrt(armorProg.TotalDurabilityCredits));
-                        armorProg.TotalDurabilityCredits = Math.Max(0, armorProg.TotalDurabilityCredits - loss);
-                        armorCreditsLost += loss;
+                        int old = armorProg.TotalDurabilityCredits;
+                        int loss = (int)Math.Ceiling(DeathPenaltyFraction * Math.Sqrt(old));
+                        armorProg.TotalDurabilityCredits = Math.Max(0, old - loss);
+                        armorCreditsLost += old - armorProg.TotalDurabilityCredits;
+                        armorSb.Append($"dur:{old}\u2192{armorProg.TotalDurabilityCredits} ");
                     }
 
-                    // Walk speed credits
                     if (armorProg.TotalWalkSpeedCredits > 0)
                     {
-                        int loss = (int)Math.Ceiling(DeathPenaltyFraction * Math.Sqrt(armorProg.TotalWalkSpeedCredits));
-                        armorProg.TotalWalkSpeedCredits = Math.Max(0, armorProg.TotalWalkSpeedCredits - loss);
-                        armorCreditsLost += loss;
+                        int old = armorProg.TotalWalkSpeedCredits;
+                        int loss = (int)Math.Ceiling(DeathPenaltyFraction * Math.Sqrt(old));
+                        armorProg.TotalWalkSpeedCredits = Math.Max(0, old - loss);
+                        armorCreditsLost += old - armorProg.TotalWalkSpeedCredits;
+                        armorSb.Append($"ws:{old}\u2192{armorProg.TotalWalkSpeedCredits} ");
                     }
 
-                    // Hunger reduction credits
                     if (armorProg.TotalHungerReductionCredits > 0)
                     {
-                        int loss = (int)Math.Ceiling(DeathPenaltyFraction * Math.Sqrt(armorProg.TotalHungerReductionCredits));
-                        armorProg.TotalHungerReductionCredits = Math.Max(0, armorProg.TotalHungerReductionCredits - loss);
-                        armorCreditsLost += loss;
+                        int old = armorProg.TotalHungerReductionCredits;
+                        int loss = (int)Math.Ceiling(DeathPenaltyFraction * Math.Sqrt(old));
+                        armorProg.TotalHungerReductionCredits = Math.Max(0, old - loss);
+                        armorCreditsLost += old - armorProg.TotalHungerReductionCredits;
+                        armorSb.Append($"hunger:{old}\u2192{armorProg.TotalHungerReductionCredits} ");
                     }
 
-                    // Healing credits
                     if (armorProg.TotalHealingCredits > 0)
                     {
-                        int loss = (int)Math.Ceiling(DeathPenaltyFraction * Math.Sqrt(armorProg.TotalHealingCredits));
-                        armorProg.TotalHealingCredits = Math.Max(0, armorProg.TotalHealingCredits - loss);
-                        armorCreditsLost += loss;
+                        int old = armorProg.TotalHealingCredits;
+                        int loss = (int)Math.Ceiling(DeathPenaltyFraction * Math.Sqrt(old));
+                        armorProg.TotalHealingCredits = Math.Max(0, old - loss);
+                        armorCreditsLost += old - armorProg.TotalHealingCredits;
+                        armorSb.Append($"heal:{old}\u2192{armorProg.TotalHealingCredits} ");
                     }
 
                     if (armorCreditsLost > 0)
                     {
-                        // Wipe per-piece accumulators
                         foreach (var kvp in armorProg.ArmorProgress)
                         {
                             kvp.Value.SecondsWornInIncrement = 0;
@@ -9798,39 +10458,77 @@ namespace SeraphLeveling
                         }
                         totalCreditsLost += armorCreditsLost;
                         pendingArmorProgressSave = true;
-                        sb.AppendLine($"  Armor: -{armorCreditsLost} credits");
+                        sb.AppendLine($"  Armor: -{armorCreditsLost} credits ({armorSb.ToString().Trim()})");
                     }
                 }
             }
 
-            // --- CO Proficiency (if enabled) ---
+            // --- CO Proficiency (per-proficiency binary-search drain) ---
             if (!DeathPenaltyExemptSkills.Contains("coproficiency") && !DisabledSkills.Contains("coproficiency") && IsCOCompatEnabled)
             {
                 if (COProgress.TryGetValue(playerUid, out var coProg))
                 {
                     int coCreditsLost = 0;
+                    var coSb = new StringBuilder();
                     foreach (var profKvp in coProg.Proficiencies)
                     {
-                        if (profKvp.Value.TotalCredits > 0)
+                        if (profKvp.Value.TotalCredits > 0 || profKvp.Value.WeaponProgress.Count > 0)
                         {
-                            int loss = (int)Math.Ceiling(DeathPenaltyFraction * Math.Sqrt(profKvp.Value.TotalCredits));
-                            int old = profKvp.Value.TotalCredits;
-                            profKvp.Value.TotalCredits = Math.Max(0, profKvp.Value.TotalCredits - loss);
-                            coCreditsLost += old - profKvp.Value.TotalCredits;
+                            int oldProfCredits = profKvp.Value.TotalCredits;
+                            double originalPenalty = COBaseDamagePerIncrement * DeathPenaltyFraction * Math.Sqrt(Math.Max(1, oldProfCredits));
+
+                            var toolEntries = profKvp.Value.WeaponProgress.Select(kvp =>
+                                (kvp.Key, (double)kvp.Value.DamageInIncrement, kvp.Value.CurrentIncrementSize)).ToList();
+
+                            if (toolEntries.Count > 0)
+                            {
+                                double rawPenalty = originalPenalty;
+                                if (oldProfCredits > 0)
+                                {
+                                    int intendedLoss = Math.Max(1, (int)Math.Ceiling(DeathPenaltyFraction * Math.Sqrt(oldProfCredits)));
+                                    intendedLoss = Math.Min(intendedLoss, oldProfCredits);
+                                    var absPositions = toolEntries.Select(e =>
+                                        (e.Item1, ToolToAbsolutePosition(e.Item2, e.Item3, COBaseDamagePerIncrement, COIncrementStep))).ToList();
+                                    double minPenalty = ComputeDeathPenaltyRawPenalty(absPositions, intendedLoss, COBaseDamagePerIncrement, COIncrementStep);
+                                    rawPenalty = Math.Max(originalPenalty, minPenalty);
+                                }
+                                var (newCr, _) = ApplyAbsolutePositionDecay(toolEntries, rawPenalty,
+                                    COBaseDamagePerIncrement, COIncrementStep, oldProfCredits,
+                                    (k, a, s) => { if (profKvp.Value.WeaponProgress.TryGetValue(k, out var p)) {
+                                        p.DamageInIncrement = (float)a; p.CurrentIncrementSize = s; } },
+                                    k => profKvp.Value.WeaponProgress.Remove(k), null, $"CO:{profKvp.Key}");
+                                profKvp.Value.TotalCredits = newCr;
+                                int actualLost = oldProfCredits - newCr;
+                                coCreditsLost += actualLost;
+                                coSb.AppendLine($"    {profKvp.Key}: {oldProfCredits} \u2192 {newCr} (-{actualLost} credits, {rawPenalty:F0} pts)");
+                            }
+                            else if (oldProfCredits > 0)
+                            {
+                                int intendedLoss = Math.Max(1, (int)Math.Ceiling(DeathPenaltyFraction * Math.Sqrt(oldProfCredits)));
+                                intendedLoss = Math.Min(intendedLoss, oldProfCredits);
+                                profKvp.Value.TotalCredits = Math.Max(0, oldProfCredits - intendedLoss);
+                                int actualLost = oldProfCredits - profKvp.Value.TotalCredits;
+                                coCreditsLost += actualLost;
+                                coSb.AppendLine($"    {profKvp.Key}: {oldProfCredits} \u2192 {profKvp.Value.TotalCredits} (-{actualLost} credits)");
+                            }
                         }
                     }
                     if (coProg.SteadyAimCredits > 0)
                     {
-                        int loss = (int)Math.Ceiling(DeathPenaltyFraction * Math.Sqrt(coProg.SteadyAimCredits));
                         int old = coProg.SteadyAimCredits;
-                        coProg.SteadyAimCredits = Math.Max(0, coProg.SteadyAimCredits - loss);
-                        coCreditsLost += old - coProg.SteadyAimCredits;
+                        int loss = (int)Math.Ceiling(DeathPenaltyFraction * Math.Sqrt(old));
+                        coProg.SteadyAimCredits = Math.Max(0, old - loss);
+                        int actualLoss = old - coProg.SteadyAimCredits;
+                        coCreditsLost += actualLoss;
+                        if (actualLoss > 0)
+                            coSb.AppendLine($"    SteadyAim: {old} \u2192 {coProg.SteadyAimCredits} (-{actualLoss} credits)");
                     }
                     if (coCreditsLost > 0)
                     {
                         totalCreditsLost += coCreditsLost;
                         pendingCOProgressSave = true;
                         sb.AppendLine($"  CO Proficiency: -{coCreditsLost} credits");
+                        sb.Append(coSb);
                     }
                 }
             }
@@ -9838,11 +10536,10 @@ namespace SeraphLeveling
             // Re-apply bonuses and notify player
             if (totalCreditsLost > 0 || sb.Length > 0)
             {
-                // ReapplyAllBonuses is an instance method, so we need to call it via the instance
                 Instance?.ReapplyAllBonuses(player);
 
                 player.SendMessage(GlobalConstants.GeneralChatGroup,
-                    $"Death penalty applied (-{totalCreditsLost} total credits lost):\n{sb}Fight on to regain your skills!",
+                    $"Death penalty applied (-{totalCreditsLost} total credits):\n{sb}Fight on to regain your skills!",
                     EnumChatType.Notification);
 
                 ServerApi?.Logger.Debug($"[SeraphLeveling] Death penalty applied to {player.PlayerName}: {totalCreditsLost} total credits lost");
@@ -9982,7 +10679,7 @@ namespace SeraphLeveling
                 return;
             }
 
-            if (credits <= 0)
+            if (credits <= 0 && lastActivity <= 0)
             {
                 sb.AppendLine("No progress yet");
                 return;
@@ -10012,8 +10709,7 @@ namespace SeraphLeveling
             }
             else if (pendingDecay > 0)
             {
-                int effectiveDecay = Math.Min(pendingDecay, credits);
-                sb.AppendLine($"{credits} credits - DECAYING (-{effectiveDecay}/day, {daysSinceActivity:F1} days inactive){paramInfo}");
+                sb.AppendLine($"{credits} credits - DECAYING (-{pendingDecay} pts/day, {daysSinceActivity:F1} days inactive){paramInfo}");
             }
             else
             {
@@ -12293,6 +12989,9 @@ namespace SeraphLeveling
             pendingMenderProgressSave = true;
 
             int bonusPercent = ApplyMenderBonusStatic(player, progress.TotalCredits);
+
+            UpdateSkillActivityDay(player.PlayerUID, "mender");
+
             return TextCommandResult.Success($"Mender level set to {newLevel.Value} (+{bonusPercent}% durability).");
         }
 
@@ -12509,6 +13208,9 @@ namespace SeraphLeveling
             pendingPilfererProgressSave = true;
 
             int bonusPercent = ApplyPilfererBonusStatic(player, progress.TotalCredits);
+
+            UpdateSkillActivityDay(player.PlayerUID, "pilferer");
+
             return TextCommandResult.Success($"Pilferer level set to {newLevel.Value} (+{bonusPercent}% bonuses).");
         }
 
@@ -12772,6 +13474,9 @@ namespace SeraphLeveling
 
             ApplyResourcefulBonusStatic(player, progress.TotalCredits);
             int newLootBonus = CalculateResourcefulLootBonusPercent(progress.TotalCredits, player.Entity);
+
+            UpdateSkillActivityDay(player.PlayerUID, "resourceful");
+
             return TextCommandResult.Success($"Resourceful level set to {newLevel.Value} (+{newLootBonus}% loot).");
         }
 
@@ -13088,6 +13793,9 @@ namespace SeraphLeveling
             // Use net bonuses from WatchedAttributes which accounts for Civil/Heavyhanded penalties
             int newNetLootBonus = player.Entity.WatchedAttributes.GetInt(WATCHED_FORAGER_LOOT_BONUS, 0);
             int newNetWildCropBonus = player.Entity.WatchedAttributes.GetInt(WATCHED_FORAGER_WILD_CROP_BONUS, 0);
+
+            UpdateSkillActivityDay(player.PlayerUID, "forager");
+
             return TextCommandResult.Success($"Forager level set to {newLevel.Value} (+{newNetLootBonus}% loot, +{newNetWildCropBonus}% wild crop).");
         }
 
@@ -13456,6 +14164,8 @@ namespace SeraphLeveling
             pendingFurtiveProgressSave = true;
             int bonusPercent = ApplyFurtiveBonusStatic(player, newLevel.Value);
 
+            UpdateSkillActivityDay(player.PlayerUID, "furtive");
+
             return TextCommandResult.Success($"Furtive level set to {newLevel.Value} (-{bonusPercent}% detection).");
         }
 
@@ -13531,6 +14241,8 @@ namespace SeraphLeveling
 
             // Check for trait unlocks that depend on precise level
             CheckTinkererUnlock(player);
+
+            UpdateSkillActivityDay(player.PlayerUID, "precise");
 
             return TextCommandResult.Success($"Precise level set to {newLevel.Value} (+{bonusPercent}% mechanical damage).");
         }
@@ -14074,6 +14786,11 @@ namespace SeraphLeveling
             }
             ApplyClaustrophobicRemovalStatic(player, false);
 
+            // Clear sleep buff
+            SleepBuffExpiration.TryRemove(playerUid, out _);
+            SleepBuffMultiplier.TryRemove(playerUid, out _);
+            pendingSleepBuffSave = true;
+
             return TextCommandResult.Success("All trait progression has been reset to 0.");
         }
 
@@ -14399,6 +15116,7 @@ namespace SeraphLeveling
             EnableDeathPenalty = false;
             DeathPenaltyFraction = 0.5;
             DeathPenaltyExemptSkills.Clear();
+            VerboseDecayLogging = false;
 
             // Save config
             pendingConfigSave = true;
@@ -14580,6 +15298,8 @@ namespace SeraphLeveling
             }
 
             pendingCOProgressSave = true;
+
+            UpdateSkillActivityDay(playerUid, "coproficiency");
 
             float bonus = CalculateCOProficiencyBonus(credits, GetCOProficiencyMax(proficiencyStat));
             return TextCommandResult.Success($"Set {GetCOProficiencyDisplayName(proficiencyStat)} to {credits} credits (+{bonus * 100:F0}%).");
@@ -16703,6 +17423,138 @@ namespace SeraphLeveling
             {
                 COProgress.Clear();
                 ServerApi.Logger.Error($"[SeraphLeveling] Failed to load CO progress: {ex.Message}");
+            }
+        }
+
+        // =========================================================================
+        // SLEEP BUFF PERSISTENCE
+        // =========================================================================
+
+        /// <summary>
+        /// Persist sleep buff data to world save data.
+        /// </summary>
+        public static void PersistSleepBuffData()
+        {
+            if (ServerApi == null) return;
+
+            lock (persistLock)
+            {
+                if (SleepBuffExpiration.IsEmpty)
+                {
+                    ServerApi.WorldManager.SaveGame.StoreData(SLEEP_BUFF_SAVE_KEY, null);
+                    return;
+                }
+
+                try
+                {
+                    var snapshot = SleepBuffExpiration.ToArray();
+
+                    byte[] data;
+                    using (var ms = new MemoryStream())
+                    {
+                        using (var writer = new BinaryWriter(ms))
+                        {
+                            // Magic bytes: "SLB" (Sleep Buff)
+                            writer.Write((byte)0x53); // 'S'
+                            writer.Write((byte)0x4C); // 'L'
+                            writer.Write((byte)0x42); // 'B'
+                            writer.Write((byte)1);    // Version 1
+
+                            writer.Write(snapshot.Length);
+                            foreach (var entry in snapshot)
+                            {
+                                writer.Write(entry.Key); // Player UID
+                                writer.Write(entry.Value); // Expiration day
+                                // Get multiplier (default to 1.0 if somehow missing)
+                                float mult = SleepBuffMultiplier.TryGetValue(entry.Key, out float m) ? m : 1.0f;
+                                writer.Write(mult);
+                            }
+                        }
+                        data = ms.ToArray();
+                    }
+
+                    ServerApi.WorldManager.SaveGame.StoreData(SLEEP_BUFF_SAVE_KEY, data);
+                    ServerApi.Logger.Debug($"[SeraphLeveling] Persisted sleep buff data for {snapshot.Length} players");
+                }
+                catch (Exception ex)
+                {
+                    ServerApi.Logger.Error($"[SeraphLeveling] Failed to persist sleep buff data: {ex.Message}");
+                }
+            }
+        }
+
+        /// <summary>
+        /// Load sleep buff data from world save data.
+        /// Expired buffs are discarded on load.
+        /// </summary>
+        private void LoadSleepBuffData()
+        {
+            if (ServerApi == null) return;
+
+            SleepBuffExpiration.Clear();
+            SleepBuffMultiplier.Clear();
+
+            try
+            {
+                byte[] data = ServerApi.WorldManager.SaveGame.GetData(SLEEP_BUFF_SAVE_KEY);
+                if (data == null || data.Length == 0)
+                {
+                    ServerApi.Logger.Debug("[SeraphLeveling] No sleep buff data found in world save");
+                    return;
+                }
+
+                using (var ms = new MemoryStream(data))
+                {
+                    using (var reader = new BinaryReader(ms))
+                    {
+                        byte b1 = reader.ReadByte();
+                        byte b2 = reader.ReadByte();
+                        byte b3 = reader.ReadByte();
+
+                        if (b1 != 0x53 || b2 != 0x4C || b3 != 0x42) // "SLB"
+                        {
+                            ServerApi.Logger.Warning("[SeraphLeveling] Invalid sleep buff data format");
+                            return;
+                        }
+
+                        byte version = reader.ReadByte();
+                        int count = reader.ReadInt32();
+
+                        if (version == 1)
+                        {
+                            double currentDay = ServerApi.World?.Calendar?.TotalDays ?? 0;
+                            int loaded = 0;
+
+                            for (int i = 0; i < count; i++)
+                            {
+                                string playerUid = reader.ReadString();
+                                double expiration = reader.ReadDouble();
+                                float multiplier = reader.ReadSingle();
+
+                                // Only restore buffs that haven't expired
+                                if (currentDay < expiration)
+                                {
+                                    SleepBuffExpiration[playerUid] = expiration;
+                                    SleepBuffMultiplier[playerUid] = multiplier;
+                                    loaded++;
+                                }
+                            }
+
+                            ServerApi.Logger.Notification($"[SeraphLeveling] Loaded sleep buff data: {loaded} active buffs ({count - loaded} expired)");
+                        }
+                        else
+                        {
+                            ServerApi.Logger.Warning($"[SeraphLeveling] Unknown sleep buff save format version {version}");
+                            return;
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                SleepBuffExpiration.Clear();
+                SleepBuffMultiplier.Clear();
+                ServerApi.Logger.Error($"[SeraphLeveling] Failed to load sleep buff data: {ex.Message}");
             }
         }
 
@@ -18909,8 +19761,31 @@ namespace SeraphLeveling
             if (!SeraphLevelingModSystem.EnableDeathPenalty) return;
             var playerEntity = __instance as EntityPlayer;
             if (playerEntity == null) return;
-            var player = playerEntity.Player as IServerPlayer;
-            if (player == null) return;
+
+            if (SeraphLevelingModSystem.DebugLoggingEnabled)
+            {
+                SeraphLevelingModSystem.ServerApi?.Logger.Debug(
+                    $"[SeraphLeveling] Die_Postfix: Entity is EntityPlayer with UID={playerEntity.PlayerUID}");
+            }
+
+            // Use ServerApi.World to ensure we get the server-side player reference
+            var player = SeraphLevelingModSystem.ServerApi?.World?.PlayerByUid(playerEntity.PlayerUID) as IServerPlayer;
+            if (player == null)
+            {
+                if (SeraphLevelingModSystem.DebugLoggingEnabled)
+                {
+                    SeraphLevelingModSystem.ServerApi?.Logger.Debug(
+                        $"[SeraphLeveling] Die_Postfix: Could not get IServerPlayer for UID={playerEntity.PlayerUID}");
+                }
+                return;
+            }
+
+            if (SeraphLevelingModSystem.DebugLoggingEnabled)
+            {
+                SeraphLevelingModSystem.ServerApi?.Logger.Debug(
+                    $"[SeraphLeveling] Die_Postfix: Applying death penalty to {player.PlayerName}");
+            }
+
             SeraphLevelingModSystem.ApplyDeathPenalty(player);
         }
     }
@@ -18921,75 +19796,50 @@ namespace SeraphLeveling
     public static class BedSleepPatches
     {
         /// <summary>
-        /// Postfix for BEBehaviorBed.DidSleep - applies sleep buff when player wakes up.
-        /// The DidSleep method is called after a player finishes sleeping in a bed.
+        /// Postfix for BlockEntityBed.DidUnmount - applies sleep buff when player gets out of bed.
+        /// DidUnmount(EntityAgent) is called when a player unmounts from the bed after sleeping.
+        /// __instance is the BlockEntityBed itself (a BlockEntity subclass).
         /// </summary>
-        public static void DidSleep_Postfix(object __instance, IPlayer player)
+        public static void DidUnmount_Postfix(object __instance, EntityAgent entityAgent)
         {
             try
             {
                 if (!SeraphLevelingModSystem.EnableSleepBuff) return;
-                if (player == null) return;
+                if (entityAgent == null) return;
 
-                var serverPlayer = player as IServerPlayer;
+                var playerEntity = entityAgent as EntityPlayer;
+                if (playerEntity == null) return;
+
+                var serverPlayer = SeraphLevelingModSystem.ServerApi?.World?.PlayerByUid(playerEntity.PlayerUID) as IServerPlayer;
                 if (serverPlayer == null) return;
 
                 string playerUid = serverPlayer.PlayerUID;
                 if (string.IsNullOrEmpty(playerUid)) return;
 
-                // Determine bed type from the block entity behavior's parent block
+                // Determine bed type from the block entity's block code
                 float multiplier = SeraphLevelingModSystem.SleepBuffLinenBedMultiplier; // Default to linen bed multiplier
+                bool isHayBed = false;
 
                 try
                 {
-                    // Get the Blockentity from the behavior instance
-                    var behaviorType = __instance.GetType();
-                    var blockentityProp = behaviorType.GetProperty("Blockentity",
-                        System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance);
-
-                    if (blockentityProp != null)
+                    // __instance IS the BlockEntityBed, which inherits from BlockEntity
+                    var blockEntity = __instance as BlockEntity;
+                    if (blockEntity?.Block?.Code != null)
                     {
-                        var blockEntity = blockentityProp.GetValue(__instance);
-                        if (blockEntity != null)
+                        string blockCode = blockEntity.Block.Code.ToString().ToLowerInvariant();
+
+                        // Check if it's a hay bed
+                        if (blockCode.Contains("hay"))
                         {
-                            // Get the Block from BlockEntity
-                            var blockEntityType = blockEntity.GetType();
-                            var blockProp = blockEntityType.GetProperty("Block",
-                                System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance);
+                            isHayBed = true;
+                            multiplier = SeraphLevelingModSystem.SleepBuffHayBedMultiplier;
+                        }
+                        // Linen and old beds use the default linen multiplier
 
-                            if (blockProp != null)
-                            {
-                                var block = blockProp.GetValue(blockEntity);
-                                if (block != null)
-                                {
-                                    // Get the block code
-                                    var blockType = block.GetType();
-                                    var codeProp = blockType.GetProperty("Code",
-                                        System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance);
-
-                                    if (codeProp != null)
-                                    {
-                                        var code = codeProp.GetValue(block);
-                                        if (code != null)
-                                        {
-                                            string blockCode = code.ToString().ToLowerInvariant();
-
-                                            // Check if it's a hay bed
-                                            if (blockCode.Contains("hay"))
-                                            {
-                                                multiplier = SeraphLevelingModSystem.SleepBuffHayBedMultiplier;
-                                            }
-                                            // Linen and old beds use the default linen multiplier
-
-                                            if (SeraphLevelingModSystem.DebugLoggingEnabled)
-                                            {
-                                                SeraphLevelingModSystem.ServerApi?.Logger.Debug(
-                                                    $"[SeraphLeveling] Sleep buff: {serverPlayer.PlayerName} slept in {blockCode}, multiplier: {multiplier}x");
-                                            }
-                                        }
-                                    }
-                                }
-                            }
+                        if (SeraphLevelingModSystem.DebugLoggingEnabled)
+                        {
+                            SeraphLevelingModSystem.ServerApi?.Logger.Debug(
+                                $"[SeraphLeveling] Sleep buff: {serverPlayer.PlayerName} slept in {blockCode}, multiplier: {multiplier}x");
                         }
                     }
                 }
@@ -19006,9 +19856,10 @@ namespace SeraphLeveling
                 // Apply the buff
                 SeraphLevelingModSystem.SleepBuffExpiration[playerUid] = expirationDay;
                 SeraphLevelingModSystem.SleepBuffMultiplier[playerUid] = multiplier;
+                SeraphLevelingModSystem.pendingSleepBuffSave = true;
 
                 // Notify the player
-                string bedType = multiplier >= SeraphLevelingModSystem.SleepBuffLinenBedMultiplier ? "comfortable bed" : "hay bed";
+                string bedType = isHayBed ? "hay bed" : "comfortable bed";
                 serverPlayer.SendMessage(GlobalConstants.GeneralChatGroup,
                     $"Well rested! Skill XP x{multiplier} for the next {SeraphLevelingModSystem.SleepBuffDurationDays} day(s) from sleeping in a {bedType}.",
                     EnumChatType.Notification);
@@ -19018,7 +19869,7 @@ namespace SeraphLeveling
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"[SeraphLeveling] Error in DidSleep_Postfix: {ex.Message}");
+                System.Diagnostics.Debug.WriteLine($"[SeraphLeveling] Error in DidUnmount_Postfix: {ex.Message}");
             }
         }
     }

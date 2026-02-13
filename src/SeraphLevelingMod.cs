@@ -9993,7 +9993,7 @@ namespace SeraphLeveling
             var sb = new StringBuilder();
             int totalCreditsLost = 0;
 
-            // --- Per-tool dictionary skills (binary-search guaranteed credit loss) ---
+            // --- Per-tool dictionary skills ---
 
             // Mining
             if (!DeathPenaltyExemptSkills.Contains("mining") && !DisabledSkills.Contains("mining"))
@@ -10320,66 +10320,7 @@ namespace SeraphLeveling
                 }
             }
 
-            // --- Armor (special case - direct credit reduction) ---
-            if (!DeathPenaltyExemptSkills.Contains("armor") && !DisabledSkills.Contains("armor"))
-            {
-                if (ArmorProgress.TryGetValue(playerUid, out var armorProg))
-                {
-                    int armorCreditsLost = 0;
-                    var armorSb = new StringBuilder();
-
-                    if (armorProg.TotalDurabilityCredits > 0)
-                    {
-                        int old = armorProg.TotalDurabilityCredits;
-                        int loss = (int)Math.Ceiling(DeathPenaltyFraction * Math.Sqrt(old));
-                        armorProg.TotalDurabilityCredits = Math.Max(0, old - loss);
-                        armorCreditsLost += old - armorProg.TotalDurabilityCredits;
-                        armorSb.Append($"dur:{old}\u2192{armorProg.TotalDurabilityCredits} ");
-                    }
-
-                    if (armorProg.TotalWalkSpeedCredits > 0)
-                    {
-                        int old = armorProg.TotalWalkSpeedCredits;
-                        int loss = (int)Math.Ceiling(DeathPenaltyFraction * Math.Sqrt(old));
-                        armorProg.TotalWalkSpeedCredits = Math.Max(0, old - loss);
-                        armorCreditsLost += old - armorProg.TotalWalkSpeedCredits;
-                        armorSb.Append($"ws:{old}\u2192{armorProg.TotalWalkSpeedCredits} ");
-                    }
-
-                    if (armorProg.TotalHungerReductionCredits > 0)
-                    {
-                        int old = armorProg.TotalHungerReductionCredits;
-                        int loss = (int)Math.Ceiling(DeathPenaltyFraction * Math.Sqrt(old));
-                        armorProg.TotalHungerReductionCredits = Math.Max(0, old - loss);
-                        armorCreditsLost += old - armorProg.TotalHungerReductionCredits;
-                        armorSb.Append($"hunger:{old}\u2192{armorProg.TotalHungerReductionCredits} ");
-                    }
-
-                    if (armorProg.TotalHealingCredits > 0)
-                    {
-                        int old = armorProg.TotalHealingCredits;
-                        int loss = (int)Math.Ceiling(DeathPenaltyFraction * Math.Sqrt(old));
-                        armorProg.TotalHealingCredits = Math.Max(0, old - loss);
-                        armorCreditsLost += old - armorProg.TotalHealingCredits;
-                        armorSb.Append($"heal:{old}\u2192{armorProg.TotalHealingCredits} ");
-                    }
-
-                    if (armorCreditsLost > 0)
-                    {
-                        foreach (var kvp in armorProg.ArmorProgress)
-                        {
-                            kvp.Value.SecondsWornInIncrement = 0;
-                            kvp.Value.DamageBlockedInIncrement = 0;
-                            kvp.Value.RepairsInIncrement = 0;
-                        }
-                        totalCreditsLost += armorCreditsLost;
-                        pendingArmorProgressSave = true;
-                        sb.AppendLine($"  Armor: -{armorCreditsLost} credits ({armorSb.ToString().Trim()})");
-                    }
-                }
-            }
-
-            // --- CO Proficiency (per-proficiency binary-search drain) ---
+            // --- CO Proficiency (per-proficiency subcredit drain) ---
             if (!DeathPenaltyExemptSkills.Contains("coproficiency") && !DisabledSkills.Contains("coproficiency") && IsCOCompatEnabled)
             {
                 if (COProgress.TryGetValue(playerUid, out var coProg))
@@ -10425,12 +10366,15 @@ namespace SeraphLeveling
                     if (coProg.SteadyAimCredits > 0)
                     {
                         int old = coProg.SteadyAimCredits;
-                        int loss = (int)Math.Ceiling(DeathPenaltyFraction * Math.Sqrt(old));
-                        coProg.SteadyAimCredits = Math.Max(0, old - loss);
-                        int actualLoss = old - coProg.SteadyAimCredits;
-                        coCreditsLost += actualLoss;
-                        if (actualLoss > 0)
-                            coSb.AppendLine($"    SteadyAim: {old} \u2192 {coProg.SteadyAimCredits} (-{actualLoss} credits)");
+                        int loss = (int)Math.Floor(DeathPenaltyFraction * Math.Sqrt(Math.Max(1, old)));
+                        if (loss > 0)
+                        {
+                            coProg.SteadyAimCredits = Math.Max(0, old - loss);
+                            int actualLoss = old - coProg.SteadyAimCredits;
+                            coCreditsLost += actualLoss;
+                            if (actualLoss > 0)
+                                coSb.AppendLine($"    SteadyAim: {old} \u2192 {coProg.SteadyAimCredits} (-{actualLoss} credits)");
+                        }
                     }
                     if (coCreditsLost > 0)
                     {

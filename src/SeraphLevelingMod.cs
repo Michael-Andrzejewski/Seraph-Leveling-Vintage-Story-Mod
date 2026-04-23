@@ -2371,8 +2371,8 @@ namespace SeraphLeveling
                     .HandleWith(OnTraitMiningBaseCommand)
                 .EndSubCommand()
                 .BeginSubCommand("mininglevel")
-                    .WithDescription("Get or set your mining level (admin only)")
-                    .WithArgs(api.ChatCommands.Parsers.OptionalInt("level"))
+                    .WithDescription("Get or set your mining level (admin only). Usage: /trait mininglevel [level] [toolname]")
+                    .WithArgs(api.ChatCommands.Parsers.OptionalInt("level"), api.ChatCommands.Parsers.OptionalWord("toolname"))
                     .RequiresPrivilege(Privilege.controlserver)
                     .RequiresPlayer()
                     .HandleWith(OnTraitMiningLevelCommand)
@@ -2402,8 +2402,8 @@ namespace SeraphLeveling
                     .HandleWith(OnTraitMeleeBaseCommand)
                 .EndSubCommand()
                 .BeginSubCommand("meleelevel")
-                    .WithDescription("Get or set your melee level (admin only)")
-                    .WithArgs(api.ChatCommands.Parsers.OptionalInt("level"))
+                    .WithDescription("Get or set your melee level (admin only). Usage: /trait meleelevel [level] [toolname]")
+                    .WithArgs(api.ChatCommands.Parsers.OptionalInt("level"), api.ChatCommands.Parsers.OptionalWord("toolname"))
                     .RequiresPrivilege(Privilege.controlserver)
                     .RequiresPlayer()
                     .HandleWith(OnTraitMeleeLevelCommand)
@@ -2433,8 +2433,8 @@ namespace SeraphLeveling
                     .HandleWith(OnTraitRangedBaseCommand)
                 .EndSubCommand()
                 .BeginSubCommand("rangedlevel")
-                    .WithDescription("Get or set your ranged level (admin only)")
-                    .WithArgs(api.ChatCommands.Parsers.OptionalInt("level"))
+                    .WithDescription("Get or set your ranged level (admin only). Usage: /trait rangedlevel [level] [toolname]")
+                    .WithArgs(api.ChatCommands.Parsers.OptionalInt("level"), api.ChatCommands.Parsers.OptionalWord("toolname"))
                     .RequiresPrivilege(Privilege.controlserver)
                     .RequiresPlayer()
                     .HandleWith(OnTraitRangedLevelCommand)
@@ -2532,8 +2532,8 @@ namespace SeraphLeveling
                     .HandleWith(OnTraitArmorCommand)
                 .EndSubCommand()
                 .BeginSubCommand("armorlevel")
-                    .WithDescription("Get or set your armor durability level (admin only)")
-                    .WithArgs(api.ChatCommands.Parsers.OptionalInt("level"))
+                    .WithDescription("Get or set your armor durability level (admin only). Usage: /trait armorlevel [level] [armorpiece]")
+                    .WithArgs(api.ChatCommands.Parsers.OptionalInt("level"), api.ChatCommands.Parsers.OptionalWord("armorpiece"))
                     .RequiresPrivilege(Privilege.controlserver)
                     .RequiresPlayer()
                     .HandleWith(OnTraitArmorLevelCommand)
@@ -2728,8 +2728,8 @@ namespace SeraphLeveling
                     .HandleWith(OnTraitPreciseCommand)
                 .EndSubCommand()
                 .BeginSubCommand("preciselevel")
-                    .WithDescription("Get or set your precise level (admin only)")
-                    .WithArgs(api.ChatCommands.Parsers.OptionalInt("level"))
+                    .WithDescription("Get or set your precise level (admin only). Usage: /trait preciselevel [level] [toolname]")
+                    .WithArgs(api.ChatCommands.Parsers.OptionalInt("level"), api.ChatCommands.Parsers.OptionalWord("toolname"))
                     .RequiresPrivilege(Privilege.controlserver)
                     .RequiresPlayer()
                     .HandleWith(OnTraitPreciseLevelCommand)
@@ -2868,10 +2868,10 @@ namespace SeraphLeveling
                     .HandleWith(OnTraitCOProficiencyCommand)
                 .EndSubCommand()
                 .BeginSubCommand("colevel")
-                    .WithDescription("Set Combat Overhaul proficiency credits (admin only). Usage: /trait colevel [proficiency] [credits]")
+                    .WithDescription("Set Combat Overhaul proficiency credits (admin only). Usage: /trait colevel <proficiency> <credits> [toolname]")
                     .RequiresPrivilege(Privilege.controlserver)
                     .RequiresPlayer()
-                    .WithArgs(api.ChatCommands.Parsers.Word("proficiency"), api.ChatCommands.Parsers.Int("credits"))
+                    .WithArgs(api.ChatCommands.Parsers.Word("proficiency"), api.ChatCommands.Parsers.Int("credits"), api.ChatCommands.Parsers.OptionalWord("toolname"))
                     .HandleWith(OnTraitCOLevelCommand)
                 .EndSubCommand()
                 .BeginSubCommand("coreset")
@@ -3005,8 +3005,8 @@ namespace SeraphLeveling
                     .HandleWith(OnTraitAllCommand)
                 .EndSubCommand()
                 .BeginSubCommand("setplayer")
-                    .WithDescription("Set a trait level for another player. Usage: /trait setplayer <playername> <trait> <level>")
-                    .WithArgs(api.ChatCommands.Parsers.Word("playername"), api.ChatCommands.Parsers.Word("trait"), api.ChatCommands.Parsers.Int("level"))
+                    .WithDescription("Set a trait level for another player. Usage: /trait setplayer <playername> <trait> <level> [toolname]")
+                    .WithArgs(api.ChatCommands.Parsers.Word("playername"), api.ChatCommands.Parsers.Word("trait"), api.ChatCommands.Parsers.Int("level"), api.ChatCommands.Parsers.OptionalWord("toolname"))
                     .RequiresPrivilege(Privilege.controlserver)
                     .HandleWith(OnTraitSetPlayerCommand)
                 .EndSubCommand();
@@ -3092,17 +3092,17 @@ namespace SeraphLeveling
                 "  /trait mining - View your mining progression stats\n" +
                 "  /trait miningbase [value] - Get or set base points for first credit (admin)\n" +
                 "  /trait miningincrement [value] - Get or set increment step per credit (admin)\n" +
-                "  /trait mininglevel [level] - Get or set your mining level (admin)\n" +
+                "  /trait mininglevel [level] [toolname] - Get or set your mining level (admin)\n" +
                 "  /trait miningmax [percent] - Get or set max mining speed bonus (admin)\n" +
                 "  /trait melee - View your melee damage progression stats\n" +
                 "  /trait meleebase [value] - Get or set base damage for first credit (admin)\n" +
                 "  /trait meleeincrement [value] - Get or set melee increment step per credit (admin)\n" +
-                "  /trait meleelevel [level] - Get or set your melee level (admin)\n" +
+                "  /trait meleelevel [level] [toolname] - Get or set your melee level (admin)\n" +
                 "  /trait meleemax [percent] - Get or set max melee damage bonus (admin)\n" +
                 "  /trait ranged - View your ranged damage progression stats\n" +
                 "  /trait rangedbase [value] - Get or set base damage for first credit (admin)\n" +
                 "  /trait rangedincrement [value] - Get or set ranged increment step per credit (admin)\n" +
-                "  /trait rangedlevel [level] - Get or set your ranged level (admin)\n" +
+                "  /trait rangedlevel [level] [toolname] - Get or set your ranged level (admin)\n" +
                 "  /trait rangedmax [percent] - Get or set max ranged damage bonus (admin)\n" +
                 "  /trait rangedmaxacc [percent] - Get or set max ranged accuracy bonus (admin)\n" +
                 "  /trait rangedmaxdist [percent] - Get or set max ranged distance bonus (admin)\n" +
@@ -3117,12 +3117,12 @@ namespace SeraphLeveling
                 "  /trait hungerlevel [level] - Get or set your hunger level (admin)\n" +
                 "  /trait hungermax [percent] - Get or set max hunger rate reduction (admin)\n" +
                 "  /trait armor - View your armor progression stats\n" +
-                "  /trait armorlevel [level] - Get or set your armor durability level (admin)\n" +
+                "  /trait armorlevel [level] [armorpiece] - Get or set your armor durability level (admin)\n" +
                 "  /trait armorwalkspeedlevel [level] - Get or set walk speed penalty reduction level (admin)\n" +
                 "  /trait armordurabilitymax [percent] - Get or set max durability bonus (admin)\n" +
                 "  /trait armorwalkspeedmax [percent] - Get or set max walk speed reduction (admin)\n" +
                 "  /trait all - View all trait progression at once\n" +
-                "  /trait setplayer <name> <trait> <level> - Set trait level for another player (admin)\n" +
+                "  /trait setplayer <name> <trait> <level> [toolname] - Set trait level for another player (admin)\n" +
                 "  /trait reset - Reset all trait progression to 0 (admin)\n" +
                 "  /trait resetconfig - Reset all config values to defaults (admin)\n" +
                 "  /trait maxall - Set all trait progression to maximum for testing (admin)");
@@ -3248,6 +3248,7 @@ namespace SeraphLeveling
             string playerName = (string)args[0];
             string traitName = ((string)args[1]).ToLowerInvariant();
             int level = (int)args[2];
+            string toolName = (string)args[3];
 
             if (level < 0)
                 return TextCommandResult.Error("Level cannot be negative.");
@@ -3257,52 +3258,30 @@ namespace SeraphLeveling
                 return TextCommandResult.Error($"Could not find online player matching '{playerName}'.");
 
             string targetUid = targetPlayer.PlayerUID;
+
+            // Traits with per-tool support delegate to shared helpers
+            switch (traitName)
+            {
+                case "mining":
+                    return SetMiningLevelForPlayer(targetPlayer, level, toolName);
+                case "melee":
+                    return SetMeleeLevelForPlayer(targetPlayer, level, toolName);
+                case "ranged":
+                    return SetRangedLevelForPlayer(targetPlayer, level, toolName);
+                case "precise":
+                    return SetPreciseLevelForPlayer(targetPlayer, level, toolName);
+                case "armor":
+                    return SetArmorLevelForPlayer(targetPlayer, level, toolName);
+            }
+
+            // Traits without per-tool support — reject toolName if provided
+            if (toolName != null)
+                return TextCommandResult.Error($"The '{traitName}' trait does not support per-tool level setting.");
+
             string result;
 
             switch (traitName)
             {
-                case "mining":
-                {
-                    int maxCredits = GetMaxMiningCredits(targetPlayer.Entity);
-                    if (level > maxCredits) return TextCommandResult.Error($"Level cannot exceed max ({maxCredits}).");
-                    var progress = MiningProgress.GetOrAdd(targetUid, _ => new MiningProgressData());
-                    progress.TotalCredits = level;
-                    progress.PickaxeProgress.Clear();
-                    pendingMiningProgressSave = true;
-                    int bonus = ApplyMiningBonus(targetPlayer, level);
-                    CheckHardyHealthUnlock(targetPlayer);
-                    CheckClaustrophobicRemoval(targetPlayer);
-                    UpdateSkillActivityDay(targetUid, "mining");
-                    result = $"Mining level set to {level} (+{bonus}% speed) for {targetPlayer.PlayerName}.";
-                    break;
-                }
-                case "melee":
-                {
-                    if (level > MaxMeleeDamagePercent) return TextCommandResult.Error($"Level cannot exceed max ({MaxMeleeDamagePercent}).");
-                    var progress = MeleeProgress.GetOrAdd(targetUid, _ => new MeleeProgressData());
-                    progress.TotalCredits = level;
-                    progress.WeaponProgress.Clear();
-                    pendingMeleeProgressSave = true;
-                    ApplyMeleeBonusStatic(targetPlayer, level);
-                    CheckMercilessUnlock(targetPlayer);
-                    UpdateSkillActivityDay(targetUid, "melee");
-                    result = $"Melee level set to {level} (+{level}% damage) for {targetPlayer.PlayerName}.";
-                    break;
-                }
-                case "ranged":
-                {
-                    if (level > MaxRangedDamagePercent) return TextCommandResult.Error($"Level cannot exceed max ({MaxRangedDamagePercent}).");
-                    var progress = RangedProgress.GetOrAdd(targetUid, _ => new RangedProgressData());
-                    progress.TotalCredits = level;
-                    progress.WeaponProgress.Clear();
-                    pendingRangedProgressSave = true;
-                    ApplyRangedBonusStatic(targetPlayer, level);
-                    CheckBowyerUnlock(targetPlayer);
-                    CheckImproviserUnlock(targetPlayer);
-                    UpdateSkillActivityDay(targetUid, "ranged");
-                    result = $"Ranged level set to {level} for {targetPlayer.PlayerName}.";
-                    break;
-                }
                 case "walking":
                 {
                     if (level > MaxWalkingSpeedPercent) return TextCommandResult.Error($"Level cannot exceed max ({MaxWalkingSpeedPercent}).");
@@ -3380,21 +3359,8 @@ namespace SeraphLeveling
                     result = $"Furtive level set to {level} (-{level}% detection) for {targetPlayer.PlayerName}.";
                     break;
                 }
-                case "precise":
-                {
-                    if (level > MaxPrecisePercent) return TextCommandResult.Error($"Level cannot exceed max ({MaxPrecisePercent}).");
-                    var progress = PreciseProgress.GetOrAdd(targetUid, _ => new PreciseProgressData());
-                    progress.TotalCredits = level;
-                    progress.WeaponProgress.Clear();
-                    pendingPreciseProgressSave = true;
-                    ApplyPreciseBonusStatic(targetPlayer, level);
-                    CheckTinkererUnlock(targetPlayer);
-                    UpdateSkillActivityDay(targetUid, "precise");
-                    result = $"Precise level set to {level} (+{level}% mechanical dmg) for {targetPlayer.PlayerName}.";
-                    break;
-                }
                 default:
-                    return TextCommandResult.Error($"Unknown trait '{traitName}'. Valid traits: mining, melee, ranged, walking, hunger, mender, pilferer, resourceful, forager, furtive, precise");
+                    return TextCommandResult.Error($"Unknown trait '{traitName}'. Valid traits: mining, melee, ranged, walking, hunger, armor, mender, pilferer, resourceful, forager, furtive, precise");
             }
 
             return TextCommandResult.Success(result);
@@ -3502,9 +3468,446 @@ namespace SeraphLeveling
         }
 
         /// <summary>
+        /// Calculates credits earned by a tool from its CurrentIncrementSize.
+        /// Credits = (currentIncrementSize - baseIncrement) / incrementStep
+        /// </summary>
+        private static int CalculateToolCredits(int currentIncrementSize, int baseIncrement, int incrementStep)
+        {
+            if (incrementStep <= 0) return 0;
+            int credits = (currentIncrementSize - baseIncrement) / incrementStep;
+            return Math.Max(0, credits);
+        }
+
+        /// <summary>
+        /// Recalculates TotalCredits by summing credits from all per-tool entries.
+        /// </summary>
+        private static int RecalculateTotalCreditsFromTools<T>(
+            Dictionary<string, T> toolDict,
+            System.Func<T, int> getIncrementSize,
+            int baseIncrement, int incrementStep)
+        {
+            if (incrementStep <= 0) return 0;
+            int total = 0;
+            foreach (var kvp in toolDict)
+            {
+                int toolCredits = (getIncrementSize(kvp.Value) - baseIncrement) / incrementStep;
+                if (toolCredits > 0) total += toolCredits;
+            }
+            return total;
+        }
+
+        /// <summary>
+        /// Sets per-tool credits for mining. Returns the result or null if the caller should proceed with total-level setting.
+        /// </summary>
+        private TextCommandResult SetMiningLevelForPlayer(IServerPlayer player, int level, string toolName)
+        {
+            string playerUid = player.PlayerUID;
+            int maxCredits = GetMaxMiningCredits(player.Entity);
+            var progress = MiningProgress.GetOrAdd(playerUid, _ => new MiningProgressData());
+
+            if (level < 0)
+                return TextCommandResult.Error("Credits cannot be negative.");
+
+            if (toolName != null)
+            {
+                // Per-tool mode: set credits on a specific pickaxe without clearing others
+                int oldToolCredits = 0;
+                if (progress.PickaxeProgress.TryGetValue(toolName, out var existingTool))
+                    oldToolCredits = CalculateToolCredits(existingTool.CurrentIncrementSize, BaseBlocksPerIncrement, IncrementStep);
+
+                int projectedTotal = progress.TotalCredits - oldToolCredits + level;
+                if (projectedTotal > maxCredits)
+                    return TextCommandResult.Error($"Setting {level} credits on {toolName} would result in {projectedTotal} total credits, exceeding max ({maxCredits}).");
+
+                if (level == 0)
+                {
+                    progress.PickaxeProgress.Remove(toolName);
+                }
+                else
+                {
+                    var pickaxeProgress = progress.GetPickaxeProgress(toolName);
+                    pickaxeProgress.CurrentIncrementSize = BaseBlocksPerIncrement + (level * IncrementStep);
+                    pickaxeProgress.BlocksInIncrement = 0;
+                }
+
+                progress.TotalCredits = RecalculateTotalCreditsFromTools(
+                    progress.PickaxeProgress, p => p.CurrentIncrementSize,
+                    BaseBlocksPerIncrement, IncrementStep);
+
+                pendingMiningProgressSave = true;
+                int bonusPercent = ApplyMiningBonus(player, progress.TotalCredits);
+                CheckHardyHealthUnlock(player);
+                CheckClaustrophobicRemoval(player);
+                UpdateSkillActivityDay(playerUid, "mining");
+
+                return TextCommandResult.Success($"Set {level} credits on {toolName}. Total: {progress.TotalCredits}/{maxCredits} (+{bonusPercent}% mining speed).");
+            }
+            else
+            {
+                // Total mode: set TotalCredits directly and clear per-tool progress
+                if (level > maxCredits)
+                    return TextCommandResult.Error($"Credits cannot exceed max ({maxCredits}).");
+
+                progress.TotalCredits = level;
+                progress.PickaxeProgress.Clear();
+
+                pendingMiningProgressSave = true;
+                int bonusPercent = ApplyMiningBonus(player, level);
+                CheckHardyHealthUnlock(player);
+                CheckClaustrophobicRemoval(player);
+                UpdateSkillActivityDay(playerUid, "mining");
+
+                return TextCommandResult.Success($"Mining credits set to {level} (+{bonusPercent}% mining speed). Per-pickaxe progress reset.");
+            }
+        }
+
+        /// <summary>
+        /// Sets per-tool credits for melee.
+        /// </summary>
+        private TextCommandResult SetMeleeLevelForPlayer(IServerPlayer player, int level, string toolName)
+        {
+            string playerUid = player.PlayerUID;
+            int maxCredits = GetMaxMeleeCredits(player.Entity);
+            var progress = MeleeProgress.GetOrAdd(playerUid, _ => new MeleeProgressData());
+
+            if (level < 0)
+                return TextCommandResult.Error("Credits cannot be negative.");
+
+            if (toolName != null)
+            {
+                int oldToolCredits = 0;
+                if (progress.WeaponProgress.TryGetValue(toolName, out var existingTool))
+                    oldToolCredits = CalculateToolCredits(existingTool.CurrentIncrementSize, BaseDamagePerIncrement, MeleeIncrementStep);
+
+                int projectedTotal = progress.TotalCredits - oldToolCredits + level;
+                if (projectedTotal > maxCredits)
+                    return TextCommandResult.Error($"Setting {level} credits on {toolName} would result in {projectedTotal} total credits, exceeding max ({maxCredits}).");
+
+                if (level == 0)
+                {
+                    progress.WeaponProgress.Remove(toolName);
+                }
+                else
+                {
+                    var weaponProgress = progress.GetWeaponProgress(toolName);
+                    weaponProgress.CurrentIncrementSize = BaseDamagePerIncrement + (level * MeleeIncrementStep);
+                    weaponProgress.DamageInIncrement = 0;
+                }
+
+                progress.TotalCredits = RecalculateTotalCreditsFromTools(
+                    progress.WeaponProgress, w => w.CurrentIncrementSize,
+                    BaseDamagePerIncrement, MeleeIncrementStep);
+
+                pendingMeleeProgressSave = true;
+                int bonusPercent = ApplyMeleeBonusStatic(player, progress.TotalCredits);
+                CheckMercilessUnlock(player);
+                UpdateSkillActivityDay(playerUid, "melee");
+
+                return TextCommandResult.Success($"Set {level} credits on {toolName}. Total: {progress.TotalCredits}/{maxCredits} (+{bonusPercent}% melee damage).");
+            }
+            else
+            {
+                if (level > maxCredits)
+                    return TextCommandResult.Error($"Credits cannot exceed max ({maxCredits}).");
+
+                progress.TotalCredits = level;
+                progress.WeaponProgress.Clear();
+
+                pendingMeleeProgressSave = true;
+                int bonusPercent = ApplyMeleeBonusStatic(player, level);
+                CheckMercilessUnlock(player);
+                UpdateSkillActivityDay(playerUid, "melee");
+
+                return TextCommandResult.Success($"Melee credits set to {level} (+{bonusPercent}% melee damage). Per-weapon progress reset.");
+            }
+        }
+
+        /// <summary>
+        /// Sets per-tool credits for ranged.
+        /// </summary>
+        private TextCommandResult SetRangedLevelForPlayer(IServerPlayer player, int level, string toolName)
+        {
+            string playerUid = player.PlayerUID;
+            int maxCredits = GetMaxRangedCredits(player.Entity);
+            var progress = RangedProgress.GetOrAdd(playerUid, _ => new RangedProgressData());
+
+            if (level < 0)
+                return TextCommandResult.Error("Credits cannot be negative.");
+
+            if (toolName != null)
+            {
+                int oldToolCredits = 0;
+                if (progress.WeaponProgress.TryGetValue(toolName, out var existingTool))
+                    oldToolCredits = CalculateToolCredits(existingTool.CurrentIncrementSize, BaseRangedDamagePerIncrement, RangedIncrementStep);
+
+                int projectedTotal = progress.TotalCredits - oldToolCredits + level;
+                if (projectedTotal > maxCredits)
+                    return TextCommandResult.Error($"Setting {level} credits on {toolName} would result in {projectedTotal} total credits, exceeding max ({maxCredits}).");
+
+                if (level == 0)
+                {
+                    progress.WeaponProgress.Remove(toolName);
+                }
+                else
+                {
+                    var weaponProgress = progress.GetWeaponProgress(toolName);
+                    weaponProgress.CurrentIncrementSize = BaseRangedDamagePerIncrement + (level * RangedIncrementStep);
+                    weaponProgress.DamageInIncrement = 0;
+                }
+
+                progress.TotalCredits = RecalculateTotalCreditsFromTools(
+                    progress.WeaponProgress, w => w.CurrentIncrementSize,
+                    BaseRangedDamagePerIncrement, RangedIncrementStep);
+
+                pendingRangedProgressSave = true;
+                var (dmg, acc, dist) = ApplyRangedBonusStatic(player, progress.TotalCredits);
+                CheckBowyerUnlock(player);
+                CheckImproviserUnlock(player);
+                UpdateSkillActivityDay(playerUid, "ranged");
+
+                return TextCommandResult.Success($"Set {level} credits on {toolName}. Total: {progress.TotalCredits}/{maxCredits} (+{dmg}% damage, +{acc}% accuracy, +{dist}% distance).");
+            }
+            else
+            {
+                if (level > maxCredits)
+                    return TextCommandResult.Error($"Credits cannot exceed max ({maxCredits}).");
+
+                progress.TotalCredits = level;
+                progress.WeaponProgress.Clear();
+
+                pendingRangedProgressSave = true;
+                var (dmg, acc, dist) = ApplyRangedBonusStatic(player, level);
+                CheckBowyerUnlock(player);
+                CheckImproviserUnlock(player);
+                UpdateSkillActivityDay(playerUid, "ranged");
+
+                return TextCommandResult.Success($"Ranged credits set to {level} (+{dmg}% damage, +{acc}% accuracy, +{dist}% distance). Per-weapon progress reset.");
+            }
+        }
+
+        /// <summary>
+        /// Sets per-tool credits for precise.
+        /// </summary>
+        private TextCommandResult SetPreciseLevelForPlayer(IServerPlayer player, int level, string toolName)
+        {
+            string playerUid = player.PlayerUID;
+            var progress = PreciseProgress.GetOrAdd(playerUid, _ => new PreciseProgressData());
+
+            if (level < 0 || level > MaxPrecisePercent)
+                return TextCommandResult.Error($"Level must be between 0 and {MaxPrecisePercent}.");
+
+            if (toolName != null)
+            {
+                int oldToolCredits = 0;
+                if (progress.WeaponProgress.TryGetValue(toolName, out var existingTool))
+                    oldToolCredits = CalculateToolCredits(existingTool.CurrentIncrementSize, BasePreciseDamagePerIncrement, PreciseIncrementStep);
+
+                int projectedTotal = progress.TotalCredits - oldToolCredits + level;
+                if (projectedTotal > MaxPrecisePercent)
+                    return TextCommandResult.Error($"Setting {level} credits on {toolName} would result in {projectedTotal} total credits, exceeding max ({MaxPrecisePercent}).");
+
+                if (level == 0)
+                {
+                    progress.WeaponProgress.Remove(toolName);
+                }
+                else
+                {
+                    var weaponProgress = progress.GetWeaponProgress(toolName);
+                    weaponProgress.CurrentIncrementSize = BasePreciseDamagePerIncrement + (level * PreciseIncrementStep);
+                    weaponProgress.DamageInIncrement = 0;
+                }
+
+                progress.TotalCredits = RecalculateTotalCreditsFromTools(
+                    progress.WeaponProgress, w => w.CurrentIncrementSize,
+                    BasePreciseDamagePerIncrement, PreciseIncrementStep);
+
+                pendingPreciseProgressSave = true;
+                int bonusPercent = ApplyPreciseBonusStatic(player, progress.TotalCredits);
+                CheckTinkererUnlock(player);
+                UpdateSkillActivityDay(playerUid, "precise");
+
+                return TextCommandResult.Success($"Set {level} credits on {toolName}. Total: {progress.TotalCredits}/{MaxPrecisePercent} (+{bonusPercent}% mechanical damage).");
+            }
+            else
+            {
+                progress.TotalCredits = level;
+                progress.WeaponProgress.Clear();
+
+                pendingPreciseProgressSave = true;
+                int bonusPercent = ApplyPreciseBonusStatic(player, level);
+                CheckTinkererUnlock(player);
+                UpdateSkillActivityDay(playerUid, "precise");
+
+                return TextCommandResult.Success($"Precise level set to {level} (+{bonusPercent}% mechanical damage).");
+            }
+        }
+
+        /// <summary>
+        /// Sets per-tool credits for armor durability.
+        /// Armor has 3 credit streams (time, damage, repair) per piece, so per-piece setting
+        /// distributes credits equally across all 3 streams for the specified armor piece.
+        /// </summary>
+        private TextCommandResult SetArmorLevelForPlayer(IServerPlayer player, int level, string toolName)
+        {
+            string playerUid = player.PlayerUID;
+            var progress = ArmorProgress.GetOrAdd(playerUid, _ => new ArmorProgressData());
+
+            if (level < 0)
+                return TextCommandResult.Error("Credits cannot be negative.");
+
+            if (toolName != null)
+            {
+                // Per-piece mode: set durability credits on a specific armor piece.
+                // Each credit stream (time, damage, repair) for this piece is set to the given level.
+                // TotalDurabilityCredits = sum of all per-piece (time + damage + repair) credits.
+                int oldPieceCredits = 0;
+                if (progress.ArmorProgress.TryGetValue(toolName, out var existingPiece))
+                {
+                    oldPieceCredits += CalculateToolCredits(existingPiece.CurrentTimeIncrementSize, BaseSecondsInArmorPerIncrement, ArmorTimeIncrementStep);
+                    oldPieceCredits += CalculateToolCredits(existingPiece.CurrentDamageIncrementSize, BaseDamageBlockedPerIncrement, ArmorDamageIncrementStep);
+                    oldPieceCredits += CalculateToolCredits(existingPiece.CurrentRepairIncrementSize, BaseRepairsPerIncrement, ArmorRepairIncrementStep);
+                }
+
+                // Each of the 3 streams gets 'level' credits, so total piece contribution is level * 3
+                int newPieceCredits = level * 3;
+                int projectedTotal = progress.TotalDurabilityCredits - oldPieceCredits + newPieceCredits;
+                if (projectedTotal > MaxArmorDurabilityPercent)
+                    return TextCommandResult.Error($"Setting {level} credits per stream on {toolName} would result in {projectedTotal} total durability credits, exceeding max ({MaxArmorDurabilityPercent}).");
+
+                if (level == 0)
+                {
+                    progress.ArmorProgress.Remove(toolName);
+                }
+                else
+                {
+                    var pieceProgress = progress.GetArmorProgress(toolName);
+                    pieceProgress.CurrentTimeIncrementSize = BaseSecondsInArmorPerIncrement + (level * ArmorTimeIncrementStep);
+                    pieceProgress.SecondsWornInIncrement = 0;
+                    pieceProgress.TimeCredits = level;
+                    pieceProgress.CurrentDamageIncrementSize = BaseDamageBlockedPerIncrement + (level * ArmorDamageIncrementStep);
+                    pieceProgress.DamageBlockedInIncrement = 0;
+                    pieceProgress.DamageCredits = level;
+                    pieceProgress.CurrentRepairIncrementSize = BaseRepairsPerIncrement + (level * ArmorRepairIncrementStep);
+                    pieceProgress.RepairsInIncrement = 0;
+                    pieceProgress.RepairCredits = level;
+                    pieceProgress.HasBeenEquipped = true;
+                }
+
+                // Recalculate total durability credits from all armor pieces
+                int total = 0;
+                foreach (var kvp in progress.ArmorProgress)
+                {
+                    total += CalculateToolCredits(kvp.Value.CurrentTimeIncrementSize, BaseSecondsInArmorPerIncrement, ArmorTimeIncrementStep);
+                    total += CalculateToolCredits(kvp.Value.CurrentDamageIncrementSize, BaseDamageBlockedPerIncrement, ArmorDamageIncrementStep);
+                    total += CalculateToolCredits(kvp.Value.CurrentRepairIncrementSize, BaseRepairsPerIncrement, ArmorRepairIncrementStep);
+                }
+                progress.TotalDurabilityCredits = total;
+
+                pendingArmorProgressSave = true;
+                ApplyArmorBonusesStatic(player, progress.TotalDurabilityCredits, progress.TotalWalkSpeedCredits);
+                int bonusPercent = CalculateArmorDurabilityBonusPercent(progress.TotalDurabilityCredits, player.Entity);
+                CheckHardyHealthUnlock(player);
+                CheckMercilessUnlock(player);
+                UpdateSkillActivityDay(playerUid, "armor");
+
+                return TextCommandResult.Success($"Set {level} credits per stream on {toolName}. Total durability: {progress.TotalDurabilityCredits}/{MaxArmorDurabilityPercent} (+{bonusPercent}% durability).");
+            }
+            else
+            {
+                if (level > MaxArmorDurabilityPercent)
+                    return TextCommandResult.Error($"Credits cannot exceed max ({MaxArmorDurabilityPercent}).");
+
+                progress.TotalDurabilityCredits = level;
+                pendingArmorProgressSave = true;
+                ApplyArmorBonusesStatic(player, progress.TotalDurabilityCredits, progress.TotalWalkSpeedCredits);
+                int bonusPercent = CalculateArmorDurabilityBonusPercent(level, player.Entity);
+                CheckHardyHealthUnlock(player);
+                CheckMercilessUnlock(player);
+                UpdateSkillActivityDay(playerUid, "armor");
+
+                return TextCommandResult.Success($"Armor durability credits set to {level} (+{bonusPercent}% durability).");
+            }
+        }
+
+        /// <summary>
+        /// Sets per-tool credits for a Combat Overhaul proficiency.
+        /// </summary>
+        private TextCommandResult SetCOLevelForPlayer(IServerPlayer player, string proficiencyStat, int credits, string toolName)
+        {
+            string playerUid = player.PlayerUID;
+            int maxCredits = proficiencyStat == CO_STEADY_AIM
+                ? GetCOSteadyAimMaxCreditsForPlayer(playerUid)
+                : GetCOProficiencyMaxCreditsForPlayer(playerUid, proficiencyStat);
+
+            if (credits < 0 || credits > maxCredits)
+                return TextCommandResult.Error($"Credits must be between 0 and {maxCredits} for {GetCOProficiencyDisplayName(proficiencyStat)}.");
+
+            var playerProgress = COProgress.GetOrAdd(playerUid, _ => new COPlayerProgressData());
+
+            if (proficiencyStat == CO_STEADY_AIM)
+            {
+                if (toolName != null)
+                    return TextCommandResult.Error("Steady Aim does not support per-tool level setting.");
+
+                playerProgress.SteadyAimCredits = credits;
+                ApplyCOSteadyAimBonus(player, credits);
+            }
+            else
+            {
+                int profBase = GetCOProficiencyBase(proficiencyStat);
+                int profIncrement = GetCOProficiencyIncrement(proficiencyStat);
+                var profProgress = playerProgress.GetProficiencyProgress(proficiencyStat);
+
+                if (toolName != null)
+                {
+                    int oldToolCredits = 0;
+                    if (profProgress.WeaponProgress.TryGetValue(toolName, out var existingTool))
+                        oldToolCredits = CalculateToolCredits(existingTool.CurrentIncrementSize, profBase, profIncrement);
+
+                    int projectedTotal = profProgress.TotalCredits - oldToolCredits + credits;
+                    if (projectedTotal > maxCredits)
+                        return TextCommandResult.Error($"Setting {credits} credits on {toolName} would result in {projectedTotal} total credits, exceeding max ({maxCredits}).");
+
+                    if (credits == 0)
+                    {
+                        profProgress.WeaponProgress.Remove(toolName);
+                    }
+                    else
+                    {
+                        var weaponProgress = profProgress.GetWeaponProgress(toolName, profBase);
+                        weaponProgress.CurrentIncrementSize = profBase + (credits * profIncrement);
+                        weaponProgress.DamageInIncrement = 0;
+                    }
+
+                    profProgress.TotalCredits = RecalculateTotalCreditsFromTools(
+                        profProgress.WeaponProgress, w => w.CurrentIncrementSize,
+                        profBase, profIncrement);
+
+                    ApplyCOProficiencyBonusWithCancellation(player, proficiencyStat, profProgress.TotalCredits);
+                }
+                else
+                {
+                    profProgress.TotalCredits = credits;
+                    profProgress.WeaponProgress.Clear();
+                    ApplyCOProficiencyBonusWithCancellation(player, proficiencyStat, credits);
+                }
+            }
+
+            pendingCOProgressSave = true;
+            UpdateSkillActivityDay(playerUid, "coproficiency");
+
+            int finalCredits = proficiencyStat == CO_STEADY_AIM
+                ? playerProgress.SteadyAimCredits
+                : playerProgress.GetProficiencyProgress(proficiencyStat).TotalCredits;
+            float bonus = CalculateCOProficiencyBonus(finalCredits, GetCOProficiencyMax(proficiencyStat));
+            string toolSuffix = toolName != null ? $" on {toolName}. Total: {finalCredits}" : $" to {credits}";
+            return TextCommandResult.Success($"Set {GetCOProficiencyDisplayName(proficiencyStat)}{toolSuffix} credits (+{bonus * 100:F0}%).");
+        }
+
+        /// <summary>
         /// Handler for /trait mininglevel command.
         /// Gets or sets the player's mining credits (level) directly.
-        /// Note: Setting resets all per-pickaxe progress since we're setting credits directly.
+        /// Optionally specify a tool name to set credits on a specific pickaxe without clearing other progress.
         /// </summary>
         private TextCommandResult OnTraitMiningLevelCommand(TextCommandCallingArgs args)
         {
@@ -3514,46 +3917,19 @@ namespace SeraphLeveling
                 return TextCommandResult.Error("Could not find player entity");
             }
 
-            // Get the player-specific max credits (accounts for Weak/Claustrophobic penalties)
-            int maxCredits = GetMaxMiningCredits(player.Entity);
-            string playerUid = player.PlayerUID;
-            var progress = MiningProgress.GetOrAdd(playerUid, _ => new MiningProgressData());
-
             int? newCredits = (int?)args[0];
 
             // If no value provided, show current level
             if (!newCredits.HasValue)
             {
+                int maxCredits = GetMaxMiningCredits(player.Entity);
+                var progress = MiningProgress.GetOrAdd(player.PlayerUID, _ => new MiningProgressData());
                 int currentBonus = CalculateMiningBonusPercent(progress.TotalCredits);
                 return TextCommandResult.Success($"Current mining level: {progress.TotalCredits}/{maxCredits} (+{currentBonus}% mining speed)");
             }
 
-            if (newCredits.Value < 0)
-            {
-                return TextCommandResult.Error("Credits cannot be negative");
-            }
-
-            if (newCredits.Value > maxCredits)
-            {
-                return TextCommandResult.Error($"Credits cannot exceed max ({maxCredits})");
-            }
-
-            // Set the player's progress (clears per-pickaxe progress)
-            progress.TotalCredits = newCredits.Value;
-            progress.PickaxeProgress.Clear(); // Reset all pickaxe progress
-
-            pendingMiningProgressSave = true;
-
-            // Apply the bonus
-            int bonusPercent = ApplyMiningBonus(player, newCredits.Value);
-
-            // Check for trait unlocks that depend on mining level
-            CheckHardyHealthUnlock(player);
-            CheckClaustrophobicRemoval(player);
-
-            UpdateSkillActivityDay(playerUid, "mining");
-
-            return TextCommandResult.Success($"Mining credits set to {newCredits.Value} (+{bonusPercent}% mining speed). Per-pickaxe progress reset.");
+            string toolName = (string)args[1];
+            return SetMiningLevelForPlayer(player, newCredits.Value, toolName);
         }
 
         /// <summary>
@@ -3768,45 +4144,19 @@ namespace SeraphLeveling
                 return TextCommandResult.Error("Could not find player entity");
             }
 
-            // Get the player-specific max credits (accounts for Farsighted/Nervous penalties)
-            int maxCredits = GetMaxMeleeCredits(player.Entity);
-            string playerUid = player.PlayerUID;
-            var progress = MeleeProgress.GetOrAdd(playerUid, _ => new MeleeProgressData());
-
             int? newCredits = (int?)args[0];
 
             // If no value provided, show current level
             if (!newCredits.HasValue)
             {
+                int maxCredits = GetMaxMeleeCredits(player.Entity);
+                var progress = MeleeProgress.GetOrAdd(player.PlayerUID, _ => new MeleeProgressData());
                 int currentBonus = CalculateMeleeBonusPercent(progress.TotalCredits);
                 return TextCommandResult.Success($"Current melee level: {progress.TotalCredits}/{maxCredits} (+{currentBonus}% melee damage)");
             }
 
-            if (newCredits.Value < 0)
-            {
-                return TextCommandResult.Error("Credits cannot be negative");
-            }
-
-            if (newCredits.Value > maxCredits)
-            {
-                return TextCommandResult.Error($"Credits cannot exceed max ({maxCredits})");
-            }
-
-            // Set the player's progress (clears per-weapon progress)
-            progress.TotalCredits = newCredits.Value;
-            progress.WeaponProgress.Clear(); // Reset all weapon progress
-
-            pendingMeleeProgressSave = true;
-
-            // Apply the bonus
-            int bonusPercent = ApplyMeleeBonusStatic(player, newCredits.Value);
-
-            // Check for trait unlocks that depend on melee level
-            CheckMercilessUnlock(player);
-
-            UpdateSkillActivityDay(playerUid, "melee");
-
-            return TextCommandResult.Success($"Melee credits set to {newCredits.Value} (+{bonusPercent}% melee damage). Per-weapon progress reset.");
+            string toolName = (string)args[1];
+            return SetMeleeLevelForPlayer(player, newCredits.Value, toolName);
         }
 
         /// <summary>
@@ -3957,42 +4307,19 @@ namespace SeraphLeveling
                 return TextCommandResult.Error("Could not find player entity");
             }
 
-            // Get the player-specific max credits (accounts for Nearsighted/Frail penalties)
-            int maxCredits = GetMaxRangedCredits(player.Entity);
-            string playerUid = player.PlayerUID;
-            var progress = RangedProgress.GetOrAdd(playerUid, _ => new RangedProgressData());
-
             int? newCredits = (int?)args[0];
 
             // If no value provided, show current level
             if (!newCredits.HasValue)
             {
+                int maxCredits = GetMaxRangedCredits(player.Entity);
+                var progress = RangedProgress.GetOrAdd(player.PlayerUID, _ => new RangedProgressData());
                 var (damageBonus, accuracyBonus, distanceBonus) = CalculateRangedBonusPercents(progress.TotalCredits, player.Entity);
                 return TextCommandResult.Success($"Current ranged level: {progress.TotalCredits}/{maxCredits} (+{damageBonus}% damage, +{accuracyBonus}% accuracy, +{distanceBonus}% distance)");
             }
 
-            if (newCredits.Value < 0)
-            {
-                return TextCommandResult.Error("Credits cannot be negative");
-            }
-
-            if (newCredits.Value > maxCredits)
-            {
-                return TextCommandResult.Error($"Credits cannot exceed max ({maxCredits})");
-            }
-
-            // Set the player's progress (clears per-weapon progress)
-            progress.TotalCredits = newCredits.Value;
-            progress.WeaponProgress.Clear(); // Reset all weapon progress
-
-            pendingRangedProgressSave = true;
-
-            // Apply the bonus
-            var (newDamageBonus, newAccuracyBonus, newDistanceBonus) = ApplyRangedBonusStatic(player, newCredits.Value);
-
-            UpdateSkillActivityDay(playerUid, "ranged");
-
-            return TextCommandResult.Success($"Ranged credits set to {newCredits.Value} (+{newDamageBonus}% damage, +{newAccuracyBonus}% accuracy, +{newDistanceBonus}% distance). Per-weapon progress reset.");
+            string toolName = (string)args[1];
+            return SetRangedLevelForPlayer(player, newCredits.Value, toolName);
         }
 
         /// <summary>
@@ -4527,6 +4854,7 @@ namespace SeraphLeveling
         /// <summary>
         /// Handler for /trait armorlevel command.
         /// Gets or sets the player's armor durability credits (level) directly.
+        /// Optionally specify an armor piece to set credits on that specific piece.
         /// </summary>
         private TextCommandResult OnTraitArmorLevelCommand(TextCommandCallingArgs args)
         {
@@ -4536,42 +4864,18 @@ namespace SeraphLeveling
                 return TextCommandResult.Error("Could not find player entity");
             }
 
-            string playerUid = player.PlayerUID;
-            var progress = ArmorProgress.GetOrAdd(playerUid, _ => new ArmorProgressData());
-
             int? newCredits = (int?)args[0];
 
             // If no value provided, show current level
             if (!newCredits.HasValue)
             {
+                var progress = ArmorProgress.GetOrAdd(player.PlayerUID, _ => new ArmorProgressData());
                 int currentBonus = CalculateArmorDurabilityBonusPercent(progress.TotalDurabilityCredits, player.Entity);
                 return TextCommandResult.Success($"Current armor durability level: {progress.TotalDurabilityCredits}/{MaxArmorDurabilityPercent} (+{currentBonus}% durability)");
             }
 
-            if (newCredits.Value < 0)
-            {
-                return TextCommandResult.Error("Credits cannot be negative");
-            }
-
-            if (newCredits.Value > MaxArmorDurabilityPercent)
-            {
-                return TextCommandResult.Error($"Credits cannot exceed max ({MaxArmorDurabilityPercent})");
-            }
-
-            progress.TotalDurabilityCredits = newCredits.Value;
-            pendingArmorProgressSave = true;
-
-            ApplyArmorBonusesStatic(player, progress.TotalDurabilityCredits, progress.TotalWalkSpeedCredits);
-
-            int bonusPercent = CalculateArmorDurabilityBonusPercent(newCredits.Value, player.Entity);
-
-            // Check for trait unlocks that depend on armor durability
-            CheckHardyHealthUnlock(player);
-            CheckMercilessUnlock(player);
-
-            UpdateSkillActivityDay(playerUid, "armor");
-
-            return TextCommandResult.Success($"Armor durability credits set to {newCredits.Value} (+{bonusPercent}% durability).");
+            string toolName = (string)args[1];
+            return SetArmorLevelForPlayer(player, newCredits.Value, toolName);
         }
 
         /// <summary>
@@ -14571,34 +14875,19 @@ namespace SeraphLeveling
             IServerPlayer player = args.Caller.Player as IServerPlayer;
             if (player?.Entity == null) return TextCommandResult.Error("Player not found.");
 
-            string playerUid = player.PlayerUID;
-            var progress = PreciseProgress.GetOrAdd(playerUid, _ => new PreciseProgressData());
-
             int? newLevel = (int?)args[0];
 
             // If no value provided, show current level
             if (!newLevel.HasValue)
             {
+                var progress = PreciseProgress.GetOrAdd(player.PlayerUID, _ => new PreciseProgressData());
                 bool hasVanillaPrecise = PlayerHasVanillaPreciseStatic(player.Entity);
                 int currentBonus = hasVanillaPrecise ? VANILLA_PRECISE_MECHANICAL_DAMAGE_BONUS : progress.TotalCredits;
                 return TextCommandResult.Success($"Current precise level: {progress.TotalCredits}/{MaxPrecisePercent} (+{currentBonus}% mechanical damage)");
             }
 
-            if (newLevel.Value < 0 || newLevel.Value > MaxPrecisePercent)
-                return TextCommandResult.Error($"Level must be between 0 and {MaxPrecisePercent}.");
-
-            progress.TotalCredits = newLevel.Value;
-            progress.WeaponProgress.Clear();
-
-            pendingPreciseProgressSave = true;
-            int bonusPercent = ApplyPreciseBonusStatic(player, newLevel.Value);
-
-            // Check for trait unlocks that depend on precise level
-            CheckTinkererUnlock(player);
-
-            UpdateSkillActivityDay(player.PlayerUID, "precise");
-
-            return TextCommandResult.Success($"Precise level set to {newLevel.Value} (+{bonusPercent}% mechanical damage).");
+            string toolName = (string)args[1];
+            return SetPreciseLevelForPlayer(player, newLevel.Value, toolName);
         }
 
         /// <summary>
@@ -15598,6 +15887,7 @@ namespace SeraphLeveling
 
             string proficiencyArg = (string)args[0];
             int credits = (int)args[1];
+            string toolName = (string)args[2];
 
             // Map short names to full proficiency stat names
             string proficiencyStat = proficiencyArg.ToLowerInvariant() switch
@@ -15624,38 +15914,7 @@ namespace SeraphLeveling
                 return TextCommandResult.Error($"Unknown proficiency '{proficiencyArg}'. Valid options: bows, crossbows, firearms, slings, 1hswords, 2hswords, spears, javelins, maces, clubs, halberds, axes, quarterstaff, steadyaim");
             }
 
-            string playerUid = player.PlayerUID;
-
-            // Get max credits for this proficiency (player-aware, accounts for negative traits)
-            int maxCredits = proficiencyStat == CO_STEADY_AIM
-                ? GetCOSteadyAimMaxCreditsForPlayer(playerUid)
-                : GetCOProficiencyMaxCreditsForPlayer(playerUid, proficiencyStat);
-            if (credits < 0 || credits > maxCredits)
-            {
-                return TextCommandResult.Error($"Credits must be between 0 and {maxCredits} for {GetCOProficiencyDisplayName(proficiencyStat)}.");
-            }
-            var playerProgress = COProgress.GetOrAdd(playerUid, _ => new COPlayerProgressData());
-
-            if (proficiencyStat == CO_STEADY_AIM)
-            {
-                playerProgress.SteadyAimCredits = credits;
-                ApplyCOSteadyAimBonus(player, credits);
-            }
-            else
-            {
-                var profProgress = playerProgress.GetProficiencyProgress(proficiencyStat);
-                profProgress.TotalCredits = credits;
-                // Reset weapon progress since we're setting directly
-                profProgress.WeaponProgress.Clear();
-                ApplyCOProficiencyBonusWithCancellation(player, proficiencyStat, credits);
-            }
-
-            pendingCOProgressSave = true;
-
-            UpdateSkillActivityDay(playerUid, "coproficiency");
-
-            float bonus = CalculateCOProficiencyBonus(credits, GetCOProficiencyMax(proficiencyStat));
-            return TextCommandResult.Success($"Set {GetCOProficiencyDisplayName(proficiencyStat)} to {credits} credits (+{bonus * 100:F0}%).");
+            return SetCOLevelForPlayer(player, proficiencyStat, credits, toolName);
         }
 
         /// <summary>
@@ -15847,22 +16106,7 @@ namespace SeraphLeveling
                         return TextCommandResult.Success($"{displayName} current level: {credits} credits");
                     }
                     if (!isAdmin) return TextCommandResult.Error("Setting level requires admin privileges.");
-                    if (value.Value < 0) return TextCommandResult.Error("Level cannot be negative.");
-
-                    if (proficiencyStat == CO_STEADY_AIM)
-                    {
-                        playerProgress.SteadyAimCredits = value.Value;
-                        ApplyCOSteadyAimBonus(player, value.Value);
-                    }
-                    else
-                    {
-                        var profProgress = playerProgress.GetProficiencyProgress(proficiencyStat);
-                        profProgress.TotalCredits = value.Value;
-                        profProgress.WeaponProgress.Clear();
-                        ApplyCOProficiencyBonusWithCancellation(player, proficiencyStat, value.Value);
-                    }
-                    pendingCOProgressSave = true;
-                    return TextCommandResult.Success($"{displayName} set to {value.Value} credits.");
+                    return SetCOLevelForPlayer(player, proficiencyStat, value.Value, null);
 
                 case "max":
                     if (!value.HasValue)

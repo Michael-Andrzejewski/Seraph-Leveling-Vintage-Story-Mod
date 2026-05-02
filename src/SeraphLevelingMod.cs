@@ -2868,7 +2868,7 @@ namespace SeraphLeveling
                     .HandleWith(OnTraitCOProficiencyCommand)
                 .EndSubCommand()
                 .BeginSubCommand("colevel")
-                    .WithDescription("Set Combat Overhaul proficiency credits (admin only). Usage: /trait colevel <proficiency> <credits> [toolname]")
+                    .WithDescription("Set Combat Overhaul proficiency credits (admin only). Usage: /trait colevel &lt;proficiency&gt; &lt;credits&gt; [toolname]")
                     .RequiresPrivilege(Privilege.controlserver)
                     .RequiresPlayer()
                     .WithArgs(api.ChatCommands.Parsers.Word("proficiency"), api.ChatCommands.Parsers.Int("credits"), api.ChatCommands.Parsers.OptionalWord("toolname"))
@@ -3005,7 +3005,7 @@ namespace SeraphLeveling
                     .HandleWith(OnTraitAllCommand)
                 .EndSubCommand()
                 .BeginSubCommand("setplayer")
-                    .WithDescription("Set a trait level for another player. Usage: /trait setplayer <playername> <trait> <level> [toolname]")
+                    .WithDescription("Set a trait level for another player. Usage: /trait setplayer &lt;playername&gt; &lt;trait&gt; &lt;level&gt; [toolname]")
                     .WithArgs(api.ChatCommands.Parsers.Word("playername"), api.ChatCommands.Parsers.Word("trait"), api.ChatCommands.Parsers.Int("level"), api.ChatCommands.Parsers.OptionalWord("toolname"))
                     .RequiresPrivilege(Privilege.controlserver)
                     .HandleWith(OnTraitSetPlayerCommand)
@@ -3122,7 +3122,7 @@ namespace SeraphLeveling
                 "  /trait armordurabilitymax [percent] - Get or set max durability bonus (admin)\n" +
                 "  /trait armorwalkspeedmax [percent] - Get or set max walk speed reduction (admin)\n" +
                 "  /trait all - View all trait progression at once\n" +
-                "  /trait setplayer <name> <trait> <level> [toolname] - Set trait level for another player (admin)\n" +
+                "  /trait setplayer &lt;name&gt; &lt;trait&gt; &lt;level&gt; [toolname] - Set trait level for another player (admin)\n" +
                 "  /trait reset - Reset all trait progression to 0 (admin)\n" +
                 "  /trait resetconfig - Reset all config values to defaults (admin)\n" +
                 "  /trait maxall - Set all trait progression to maximum for testing (admin)");

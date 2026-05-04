@@ -55,7 +55,7 @@
   "message-furtive-level-up": "Furtive level up! You are now level {0} with -{1}% animal seeking range.",
   "trait-sitfurtivemastery": "<font color=\"#84ff84\">• Furtive </font>",
   "traitname-sitfurtivemastery": "Furtive",
-  "trait-furtive-dynamic": "<font color=\"#84ff84\">• Furtive </font> <font opacity=\"0.6\">(-{0}% animal seeking range)</font>",
+  "trait-furtive-dynamic": "<font color=\"#84ff84\">• Furtive </font> <font opacity=\"0.6\">(-{0}% animal detection range)</font>",
   "message-precise-level-up": "Precise level up! You are now level {0} with +{1}% damage against mechanicals.",
   "trait-sitprecisemastery": "<font color=\"#84ff84\">• Precise </font>",
   "traitname-sitprecisemastery": "Precise",

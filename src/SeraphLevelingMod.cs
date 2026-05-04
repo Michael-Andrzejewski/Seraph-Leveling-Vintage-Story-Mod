@@ -13757,6 +13757,7 @@ namespace SeraphLeveling
         /// </summary>
         private static bool PlayerHasVanillaMenderStatic(EntityPlayer entity)
         {
+            if (entity == null) return false;
             string[] classTraits = entity.WatchedAttributes.GetStringArray("characterTraits", null);
             if (classTraits != null)
             {
@@ -13768,7 +13769,10 @@ namespace SeraphLeveling
                     }
                 }
             }
-            return false;
+            // Class fallback for Tailor (vanilla Mender) — keeps server-side Apply consistent
+            // with client-side ClientHasVanillaTrait when characterTraits isn't populated.
+            string characterClass = entity.WatchedAttributes.GetString("characterClass", "");
+            return characterClass.Equals("tailor", StringComparison.OrdinalIgnoreCase);
         }
 
         /// <summary>
@@ -13994,6 +13998,7 @@ namespace SeraphLeveling
         /// </summary>
         private static bool PlayerHasVanillaPilfererStatic(EntityPlayer entity)
         {
+            if (entity == null) return false;
             string[] classTraits = entity.WatchedAttributes.GetStringArray("characterTraits", null);
             if (classTraits != null)
             {
@@ -14005,7 +14010,8 @@ namespace SeraphLeveling
                     }
                 }
             }
-            return false;
+            string characterClass = entity.WatchedAttributes.GetString("characterClass", "");
+            return characterClass.Equals("malefactor", StringComparison.OrdinalIgnoreCase);
         }
 
         /// <summary>
@@ -14301,6 +14307,7 @@ namespace SeraphLeveling
         /// </summary>
         private static bool PlayerHasVanillaResourcefulStatic(EntityPlayer entity)
         {
+            if (entity == null) return false;
             string[] classTraits = entity.WatchedAttributes.GetStringArray("characterTraits", null);
             if (classTraits != null)
             {
@@ -14312,7 +14319,13 @@ namespace SeraphLeveling
                     }
                 }
             }
-            return false;
+            // Fallback to characterClass — keeps server-side Apply consistent with the
+            // client-side ClientHasVanillaTrait check (otherwise Apply computes a higher
+            // earnable cap when characterTraits hasn't been populated, then the postfix
+            // adds the vanilla bonus on top and the displayed value exceeds the actual cap).
+            string characterClass = entity.WatchedAttributes.GetString("characterClass", "");
+            return characterClass.Equals("hunter", StringComparison.OrdinalIgnoreCase) ||
+                   characterClass.Equals("malefactor", StringComparison.OrdinalIgnoreCase);
         }
 
         /// <summary>
@@ -14617,6 +14630,7 @@ namespace SeraphLeveling
         /// </summary>
         private static bool PlayerHasVanillaForagerStatic(EntityPlayer entity)
         {
+            if (entity == null) return false;
             string[] classTraits = entity.WatchedAttributes.GetStringArray("characterTraits", null);
             if (classTraits != null)
             {
@@ -14628,7 +14642,9 @@ namespace SeraphLeveling
                     }
                 }
             }
-            return false;
+            string characterClass = entity.WatchedAttributes.GetString("characterClass", "");
+            return characterClass.Equals("hunter", StringComparison.OrdinalIgnoreCase) ||
+                   characterClass.Equals("malefactor", StringComparison.OrdinalIgnoreCase);
         }
 
         /// <summary>

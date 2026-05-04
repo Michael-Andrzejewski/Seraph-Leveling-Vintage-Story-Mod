@@ -19074,10 +19074,13 @@ namespace SeraphLeveling
 
                 if (hasVanillaSoldierArmor)
                 {
-                    // Class already has Soldier - update the existing armor stats
-                    // Vanilla Soldier shows: +15% armor durability, -25% armor speed penalty
+                    // Class already has Soldier (Blackguard) - update the existing armor stats inline.
+                    // Vanilla strings:
+                    //   "+15% armor durability"
+                    //   "walk speed penalty for wearing armor reduced by 25%"
+                    // (an earlier version looked for "-25% armor speed penalty" which silently
+                    // no-op'd against vanilla.)
 
-                    // Update armor durability if we have bonus
                     if (armorDurabilityBonus > 0)
                     {
                         int combinedDurability = SeraphLevelingModSystem.VANILLA_SOLDIER_ARMOR_DURABILITY_BONUS + armorDurabilityBonus;
@@ -19086,13 +19089,12 @@ namespace SeraphLeveling
                             $"+{combinedDurability}% armor durability");
                     }
 
-                    // Update armor speed penalty if we have bonus
                     if (armorWalkSpeedBonus > 0)
                     {
                         int combinedSpeedPenalty = SeraphLevelingModSystem.VANILLA_SOLDIER_ARMOR_WALKSPEED_BONUS + armorWalkSpeedBonus;
                         __result = __result.Replace(
-                            $"-{SeraphLevelingModSystem.VANILLA_SOLDIER_ARMOR_WALKSPEED_BONUS}% armor speed penalty",
-                            $"-{combinedSpeedPenalty}% armor speed penalty");
+                            $"walk speed penalty for wearing armor reduced by {SeraphLevelingModSystem.VANILLA_SOLDIER_ARMOR_WALKSPEED_BONUS}%",
+                            $"walk speed penalty for wearing armor reduced by {combinedSpeedPenalty}%");
                     }
                 }
                 else if (hasNoTraits)
@@ -19169,11 +19171,20 @@ namespace SeraphLeveling
 
                 if (hasVanillaMender)
                 {
-                    // Class already has Mender trait - update the existing durability value
-                    int combinedBonus = SeraphLevelingModSystem.VANILLA_MENDER_ARMOR_DURABILITY_BONUS + menderBonus;
-                    __result = __result.Replace(
-                        $"+{SeraphLevelingModSystem.VANILLA_MENDER_ARMOR_DURABILITY_BONUS}% armor durability",
-                        $"+{combinedBonus}% armor durability");
+                    // Class already has Mender trait (Tailor) - update inline. Vanilla actually
+                    // shows "+25% armor durability" but the VANILLA_MENDER_ARMOR_DURABILITY_BONUS
+                    // constant is 10 (used elsewhere for cap math, kept as-is to avoid changing
+                    // gameplay balance). Capture whatever number vanilla currently shows and add
+                    // the earned bonus on top, so display stays correct regardless of the cap
+                    // constant or any future vanilla rebalance.
+                    int captured = menderBonus;
+                    __result = System.Text.RegularExpressions.Regex.Replace(__result,
+                        @"<font color=""#84ff84"">• Mender </font> <font opacity=""0\.6"">\(\+(?<v>\d+)% armor durability\)</font>",
+                        m =>
+                        {
+                            int vanillaVal = int.Parse(m.Groups["v"].Value);
+                            return $"<font color=\"#84ff84\">• Mender </font> <font opacity=\"0.6\">(+{vanillaVal + captured}% armor durability)</font>";
+                        });
                 }
                 else if (hasNoTraits)
                 {
@@ -19209,19 +19220,21 @@ namespace SeraphLeveling
 
                 if (hasVanillaPilferer)
                 {
-                    // Class already has Pilferer trait - update the existing values
+                    // Class already has Pilferer trait (Malefactor) - replace the whole vanilla
+                    // line with our combined dynamic. Substring Replace doesn't work cleanly here:
+                    //   - vanilla "+15% drop rate" (vesselContentsDropRate) is too generic to
+                    //     substring-match safely without risk of hitting unrelated tokens
+                    //   - vanilla "12% chance to collect cracked vessels intact" doesn't follow
+                    //     the "+X% <thing>" pattern, so a value-prefixed Replace target can't hit it
+                    // Match the whole vanilla Pilferer line in one regex and swap it atomically.
                     int combinedRusty = SeraphLevelingModSystem.VANILLA_PILFERER_RUSTY_GEAR_BONUS + pilfererBonus;
                     int combinedVessel = SeraphLevelingModSystem.VANILLA_PILFERER_VESSEL_CONTENTS_BONUS + pilfererBonus;
                     int combinedCollection = SeraphLevelingModSystem.VANILLA_PILFERER_WHOLE_VESSEL_BONUS + pilfererBonus;
-                    __result = __result.Replace(
-                        $"+{SeraphLevelingModSystem.VANILLA_PILFERER_RUSTY_GEAR_BONUS}% rusty gear",
-                        $"+{combinedRusty}% rusty gear");
-                    __result = __result.Replace(
-                        $"+{SeraphLevelingModSystem.VANILLA_PILFERER_VESSEL_CONTENTS_BONUS}% cracked vessel drops",
-                        $"+{combinedVessel}% cracked vessel drops");
-                    __result = __result.Replace(
-                        $"+{SeraphLevelingModSystem.VANILLA_PILFERER_WHOLE_VESSEL_BONUS}% vessel collection",
-                        $"+{combinedCollection}% vessel collection");
+                    string combinedPilfererTrait = Lang.Get("seraphleveling:trait-pilferer-dynamic",
+                        combinedVessel, combinedRusty, combinedCollection);
+                    __result = System.Text.RegularExpressions.Regex.Replace(__result,
+                        @"<font color=""#84ff84"">• Pilferer </font> <font opacity=""0\.6"">\(\+\d+% drop rate, \+\d+% rusty gear drop rate, \d+% chance to collect cracked vessels intact\)</font>",
+                        combinedPilfererTrait);
                 }
                 else if (hasNoTraits)
                 {
@@ -19389,11 +19402,14 @@ namespace SeraphLeveling
 
                 if (hasVanillaPrecise)
                 {
-                    // Class already has Precise trait - update the existing values
+                    // Class already has Precise trait (Clockmaker) - update the existing value.
+                    // Vanilla string is "+25% damage against mechanicals" (an earlier version
+                    // used "damage vs mechanicals" / "damage to mechanicals" which silently
+                    // no-op'd against vanilla and wouldn't have rendered consistently anyway.)
                     int combinedBonus = SeraphLevelingModSystem.VANILLA_PRECISE_MECHANICAL_DAMAGE_BONUS + preciseBonus;
                     __result = __result.Replace(
-                        $"+{SeraphLevelingModSystem.VANILLA_PRECISE_MECHANICAL_DAMAGE_BONUS}% damage vs mechanicals",
-                        $"+{combinedBonus}% damage to mechanicals");
+                        $"+{SeraphLevelingModSystem.VANILLA_PRECISE_MECHANICAL_DAMAGE_BONUS}% damage against mechanicals",
+                        $"+{combinedBonus}% damage against mechanicals");
                 }
                 else if (hasNoTraits)
                 {

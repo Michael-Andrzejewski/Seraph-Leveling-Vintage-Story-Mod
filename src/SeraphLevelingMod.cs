@@ -1854,6 +1854,14 @@ namespace SeraphLeveling
         private const string PILFERER_PROGRESS_SAVE_KEY = "sitPilfererProgress";
         public const string WATCHED_PILFERER_LEVEL = "sitPilfererLevel";
         public const string WATCHED_PILFERER_BONUS = "sitPilfererBonusPercent";
+        // Per-stat displayed bonuses. Pilferer's three stats have different vanilla values
+        // (vessel +15%, rusty gear +10%, whole vessel +12%), so a single shared bonus value
+        // can't drive all three to the same cap simultaneously for Malefactor (vanilla
+        // Pilferer). Tracking each stat's earned amount independently keeps every class at
+        // exactly +20% per stat at maxall.
+        public const string WATCHED_PILFERER_VESSEL_BONUS = "sitPilfererVesselBonus";
+        public const string WATCHED_PILFERER_RUSTY_BONUS = "sitPilfererRustyBonus";
+        public const string WATCHED_PILFERER_WHOLE_BONUS = "sitPilfererWholeBonus";
         public const string PILFERER_TRAIT_CODE = "sitpilferermastery";
 
         // Pilferer progression configuration
@@ -6826,33 +6834,42 @@ namespace SeraphLeveling
             // Set the mining speed stat
             player.Entity.Stats.Set("miningSpeedMul", MINING_STAT_CODE, bonus, false);
 
-            // When Claustrophobic mining penalty is fully cancelled, also negate the ore drop penalty
+            // Counter-stats: when a vanilla negative trait's mining penalty is fully cancelled
+            // (remaining == 0), apply a +penalty counter on the same stat so the ACTUAL applied
+            // mining speed matches the displayed value. Without this, Hunter (Claustrophobic)
+            // and Tailor (Weak) would land at a functional +40% mining at maxall (vanilla -10%
+            // still applied, our +50% on top, net +40%) while their displayed +50% suggests
+            // parity with other classes.
             if (hasClaustrophobic)
             {
                 if (claustrophobicMiningRemaining == 0)
                 {
+                    // Negate the -10% mining speed penalty by applying +10%
+                    player.Entity.Stats.Set("miningSpeedMul", "sitClaustrophobicMiningCancel", VANILLA_CLAUSTROPHOBIC_MINING_PENALTY * 0.01f, false);
                     // Negate the -15% ore drop penalty by applying +15%
                     player.Entity.Stats.Set("oreDropRate", "sitClaustrophobicOreCancel", VANILLA_CLAUSTROPHOBIC_ORE_PENALTY * 0.01f, false);
                 }
                 else
                 {
-                    // Remove the ore cancellation stat if penalty is still active
+                    player.Entity.Stats.Remove("miningSpeedMul", "sitClaustrophobicMiningCancel");
                     player.Entity.Stats.Remove("oreDropRate", "sitClaustrophobicOreCancel");
                 }
             }
 
-            // When Weak mining penalty is fully cancelled, also negate the HP penalty
+            // When Weak mining penalty is fully cancelled, also negate the HP penalty AND the mining speed penalty
             if (hasWeak)
             {
                 if (weakMiningRemaining == 0)
                 {
                     // Negate the -2 HP penalty by applying +2 HP
                     player.Entity.Stats.Set("maxhealthExtraPoints", WEAK_HP_CANCEL_STAT_CODE, VANILLA_WEAK_HP_PENALTY, false);
+                    // Negate the -10% mining speed penalty by applying +10%
+                    player.Entity.Stats.Set("miningSpeedMul", "sitWeakMiningCancel", VANILLA_WEAK_MINING_PENALTY * 0.01f, false);
                 }
                 else
                 {
-                    // Remove the HP cancellation stat if penalty is still active
                     player.Entity.Stats.Remove("maxhealthExtraPoints", WEAK_HP_CANCEL_STAT_CODE);
+                    player.Entity.Stats.Remove("miningSpeedMul", "sitWeakMiningCancel");
                 }
             }
 
@@ -7394,6 +7411,25 @@ namespace SeraphLeveling
             // Always apply stats (they're not persistent)
             player.Entity.Stats.Set("meleeWeaponsDamage", MELEE_STAT_CODE, bonus, false);
 
+            // Counter-stats: when Farsighted/Nervous melee penalty is fully cancelled, apply a
+            // +penalty counter so functional melee damage matches the displayed cap. Without
+            // this, Hunter (Farsighted) and Malefactor/Clockmaker (Nervous) would land on a
+            // functional +35% melee at maxall while their displayed +50% suggests parity.
+            if (hasFarsighted)
+            {
+                if (farsightedRemaining == 0)
+                    player.Entity.Stats.Set("meleeWeaponsDamage", "sitFarsightedMeleeCancel", VANILLA_FARSIGHTED_MELEE_PENALTY * 0.01f, false);
+                else
+                    player.Entity.Stats.Remove("meleeWeaponsDamage", "sitFarsightedMeleeCancel");
+            }
+            if (hasNervous)
+            {
+                if (nervousRemaining == 0)
+                    player.Entity.Stats.Set("meleeWeaponsDamage", "sitNervousMeleeCancel", VANILLA_NERVOUS_MELEE_PENALTY * 0.01f, false);
+                else
+                    player.Entity.Stats.Remove("meleeWeaponsDamage", "sitNervousMeleeCancel");
+            }
+
             // Check if any values have changed before updating WatchedAttributes
             var watchedAttrs = player.Entity.WatchedAttributes;
             int oldLevel = watchedAttrs.GetInt(WATCHED_MELEE_LEVEL, -1);
@@ -7875,16 +7911,28 @@ namespace SeraphLeveling
             player.Entity.Stats.Set("rangedWeaponsAcc", RANGED_ACCURACY_STAT_CODE, accuracyBonus, false);
             player.Entity.Stats.Set("bowDrawingStrength", RANGED_DISTANCE_STAT_CODE, distanceBonus, false);
 
-            // When Frail distance penalty is fully cancelled, also negate the HP penalty
+            // Counter-stats: when Nearsighted damage / Frail distance penalty is fully cancelled,
+            // apply a +penalty counter so functional ranged stats match the displayed cap.
+            if (hasNearsighted)
+            {
+                if (nearsightedRemaining == 0)
+                    player.Entity.Stats.Set("rangedWeaponsDamage", "sitNearsightedRangedCancel", VANILLA_NEARSIGHTED_RANGED_PENALTY * 0.01f, false);
+                else
+                    player.Entity.Stats.Remove("rangedWeaponsDamage", "sitNearsightedRangedCancel");
+            }
+
+            // When Frail distance penalty is fully cancelled, also negate the HP penalty AND the distance penalty
             if (hasFrail)
             {
                 if (frailDistanceRemaining == 0)
                 {
                     player.Entity.Stats.Set("maxhealthExtraPoints", FRAIL_HP_CANCEL_STAT_CODE, VANILLA_FRAIL_HP_PENALTY, false);
+                    player.Entity.Stats.Set("bowDrawingStrength", "sitFrailDistanceCancel", VANILLA_FRAIL_DISTANCE_PENALTY * 0.01f, false);
                 }
                 else
                 {
                     player.Entity.Stats.Remove("maxhealthExtraPoints", FRAIL_HP_CANCEL_STAT_CODE);
+                    player.Entity.Stats.Remove("bowDrawingStrength", "sitFrailDistanceCancel");
                 }
             }
 
@@ -13974,31 +14022,55 @@ namespace SeraphLeveling
             // Calculate remaining Heavyhanded vessel penalty
             int heavyhandedVesselRemaining = hasHeavyhanded ? CalculateRemainingPenalty(VANILLA_HEAVYHANDED_VESSEL_PENALTY, level) : 0;
 
-            // Calculate net bonus after cancelling negative traits
+            // Calculate net level after cancelling Heavyhanded's vessel penalty (only affects vessel stat)
             int netLevel = level;
             if (hasHeavyhanded)
             {
-                // Heavyhanded vessel penalty is cancelled first, then bonus starts
                 netLevel = Math.Max(0, level - VANILLA_HEAVYHANDED_VESSEL_PENALTY);
             }
 
-            // Apply vanilla caps if player has Pilferer trait
-            int vanillaBonus = hasVanillaPilferer ? VANILLA_PILFERER_RUSTY_GEAR_BONUS : 0;
-            int maxEarnable = Math.Max(0, MaxPilfererPercent - vanillaBonus);
-            int bonusPercent = Math.Min(netLevel, maxEarnable);
+            // Per-stat earned bonuses. Pilferer's three stats have different vanilla values,
+            // so we compute the earnable cap per stat (MaxPilfererPercent - vanilla_for_that_stat).
+            // Earlier code used a single shared `bonusPercent` based on the rusty-gear cap,
+            // which let Malefactor's vessel total exceed +20% (15 vanilla + 10 earned = 25)
+            // and left rusty/whole below the cap. Splitting per-stat keeps every class at
+            // exactly +20% per stat at maxall.
+            int vanillaVessel = hasVanillaPilferer ? VANILLA_PILFERER_VESSEL_CONTENTS_BONUS : 0;
+            int vanillaRusty = hasVanillaPilferer ? VANILLA_PILFERER_RUSTY_GEAR_BONUS : 0;
+            int vanillaWhole = hasVanillaPilferer ? VANILLA_PILFERER_WHOLE_VESSEL_BONUS : 0;
 
-            float bonus = bonusPercent * 0.01f;
+            int earnableVessel = Math.Max(0, MaxPilfererPercent - vanillaVessel);
+            int earnableRusty = Math.Max(0, MaxPilfererPercent - vanillaRusty);
+            int earnableWhole = Math.Max(0, MaxPilfererPercent - vanillaWhole);
 
-            // Apply to pilferer-related stats
-            // Note: These are additive stats where vanilla traits use values like 0.1 for +10%.
-            // The game applies (1 + blended) as the multiplier. Using just the bonus value.
-            player.Entity.Stats.Set("rustyGearDropRate", PILFERER_RUSTY_GEAR_STAT_CODE, bonus, false);
-            player.Entity.Stats.Set("vesselContentsDropRate", PILFERER_VESSEL_CONTENTS_STAT_CODE, bonus, false);
-            player.Entity.Stats.Set("wholeVesselLootChance", PILFERER_WHOLE_VESSEL_STAT_CODE, bonus, false);
+            int vesselBonus = Math.Min(netLevel, earnableVessel);
+            int rustyBonus = Math.Min(level, earnableRusty);  // rusty/whole aren't affected by Heavyhanded
+            int wholeBonus = Math.Min(level, earnableWhole);
+
+            // Apply per-stat. These additive stats use values like 0.1 for +10%; the game
+            // applies (1 + blended) as the final multiplier.
+            player.Entity.Stats.Set("rustyGearDropRate", PILFERER_RUSTY_GEAR_STAT_CODE, rustyBonus * 0.01f, false);
+            player.Entity.Stats.Set("vesselContentsDropRate", PILFERER_VESSEL_CONTENTS_STAT_CODE, vesselBonus * 0.01f, false);
+            player.Entity.Stats.Set("wholeVesselLootChance", PILFERER_WHOLE_VESSEL_STAT_CODE, wholeBonus * 0.01f, false);
+
+            // Counter-stat: when Heavyhanded vessel penalty is fully cancelled, apply +10% to
+            // negate the vanilla -10% so functional vessel drop rate hits the displayed cap.
+            if (hasHeavyhanded)
+            {
+                if (heavyhandedVesselRemaining == 0)
+                    player.Entity.Stats.Set("vesselContentsDropRate", "sitHeavyhandedVesselCancel", VANILLA_HEAVYHANDED_VESSEL_PENALTY * 0.01f, false);
+                else
+                    player.Entity.Stats.Remove("vesselContentsDropRate", "sitHeavyhandedVesselCancel");
+            }
 
             // Sync to WatchedAttributes
             player.Entity.WatchedAttributes.SetInt(WATCHED_PILFERER_LEVEL, level);
-            player.Entity.WatchedAttributes.SetInt(WATCHED_PILFERER_BONUS, bonusPercent);
+            // Keep WATCHED_PILFERER_BONUS as the max of the three for any legacy readers
+            // (display now uses the per-stat values instead).
+            player.Entity.WatchedAttributes.SetInt(WATCHED_PILFERER_BONUS, Math.Max(vesselBonus, Math.Max(rustyBonus, wholeBonus)));
+            player.Entity.WatchedAttributes.SetInt(WATCHED_PILFERER_VESSEL_BONUS, vesselBonus);
+            player.Entity.WatchedAttributes.SetInt(WATCHED_PILFERER_RUSTY_BONUS, rustyBonus);
+            player.Entity.WatchedAttributes.SetInt(WATCHED_PILFERER_WHOLE_BONUS, wholeBonus);
             player.Entity.WatchedAttributes.SetBool("sitHasVanillaPilferer", hasVanillaPilferer);
 
             // Sync negative trait status (Heavyhanded vessel part)
@@ -14009,7 +14081,8 @@ namespace SeraphLeveling
             // Update extraTraits
             UpdateExtraTraitStatic(player.Entity, PILFERER_TRAIT_CODE, level > 0 && !hasVanillaPilferer);
 
-            return bonusPercent;
+            // Return the largest earned bonus (caller is informational; all three may differ)
+            return Math.Max(vesselBonus, Math.Max(rustyBonus, wholeBonus));
         }
 
         /// <summary>
@@ -14203,18 +14276,24 @@ namespace SeraphLeveling
         /// </summary>
         public static int GetMaxResourcefulCredits(EntityPlayer entity)
         {
-            if (entity == null) return MaxResourcefulLootPercent;
+            // Resourceful covers two stats with different caps (loot 20%, speed 25%).
+            // The credit count must be high enough to fill BOTH stats to their cap, so:
+            //   base = max(MaxLoot, MaxSpeed)
+            //   Kind classes need an extra buffer of max(KindLootPenalty, KindSpeedPenalty)
+            //     so the larger penalty is fully cancelled before earnable bonus starts.
+            // Earlier versions used `MaxLoot + KindSpeedPenalty` (20 + 25 = 45) which was
+            // too low — Tailor would land at +20% speed instead of the +25% cap.
+            int baseMax = Math.Max(MaxResourcefulLootPercent, MaxResourcefulSpeedPercent);
+            if (entity == null) return baseMax;
 
             bool hasKind = PlayerHasVanillaKind(entity);
-
-            // Kind has two penalties - use the larger one (speed = 25%)
-            // Loot penalty is 10%, speed penalty is 25%
             if (hasKind)
             {
-                return MaxResourcefulLootPercent + VANILLA_KIND_SPEED_PENALTY;
+                int largestKindPenalty = Math.Max(VANILLA_KIND_LOOT_PENALTY, VANILLA_KIND_SPEED_PENALTY);
+                return baseMax + largestKindPenalty;
             }
 
-            return MaxResourcefulLootPercent;
+            return baseMax;
         }
 
         /// <summary>
@@ -14288,6 +14367,23 @@ namespace SeraphLeveling
             // like 0.1 for +10%. We set just the bonus value, not 1 + bonus.
             player.Entity.Stats.Set("animalLootDropRate", RESOURCEFUL_LOOT_STAT_CODE, lootBonus, false);
             player.Entity.Stats.Set("harvestingSpeedMul", RESOURCEFUL_SPEED_STAT_CODE, speedBonus, false);
+
+            // Counter-stats for Kind (Tailor): when each penalty is fully cancelled, apply a
+            // counter on the same stat vanilla uses so functional matches displayed cap.
+            // Kind sets animalLootDropRate -0.10 and animalHarvestingTime +0.25.
+            if (hasKind)
+            {
+                if (kindLootRemaining == 0)
+                    player.Entity.Stats.Set("animalLootDropRate", "sitKindLootCancel", VANILLA_KIND_LOOT_PENALTY * 0.01f, false);
+                else
+                    player.Entity.Stats.Remove("animalLootDropRate", "sitKindLootCancel");
+
+                if (kindSpeedRemaining == 0)
+                    // Kind uses animalHarvestingTime where positive = slower; cancel with negative.
+                    player.Entity.Stats.Set("animalHarvestingTime", "sitKindSpeedCancel", -VANILLA_KIND_SPEED_PENALTY * 0.01f, false);
+                else
+                    player.Entity.Stats.Remove("animalHarvestingTime", "sitKindSpeedCancel");
+            }
 
             // Sync to WatchedAttributes
             player.Entity.WatchedAttributes.SetInt(WATCHED_RESOURCEFUL_LEVEL, level);
@@ -14619,6 +14715,29 @@ namespace SeraphLeveling
             // Using just the bonus value (not 1 + bonus) to avoid doubling.
             player.Entity.Stats.Set("forageDropRate", FORAGER_LOOT_STAT_CODE, lootBonus, false);
             player.Entity.Stats.Set("wildCropDropRate", FORAGER_WILD_CROP_STAT_CODE, wildCropBonus, false);
+
+            // Counter-stats: when negative trait penalties are fully cancelled, apply +penalty
+            // counters so functional foraging stats match the displayed cap. Civil affects loot
+            // (Tailor); Heavyhanded affects loot AND wild crop (Blackguard).
+            if (hasCivil)
+            {
+                if (civilRemaining == 0)
+                    player.Entity.Stats.Set("forageDropRate", "sitCivilForagingCancel", VANILLA_CIVIL_FORAGING_PENALTY * 0.01f, false);
+                else
+                    player.Entity.Stats.Remove("forageDropRate", "sitCivilForagingCancel");
+            }
+            if (hasHeavyhanded)
+            {
+                if (heavyhandedForagingRemaining == 0)
+                    player.Entity.Stats.Set("forageDropRate", "sitHeavyhandedForagingCancel", VANILLA_HEAVYHANDED_FORAGING_PENALTY * 0.01f, false);
+                else
+                    player.Entity.Stats.Remove("forageDropRate", "sitHeavyhandedForagingCancel");
+
+                if (heavyhandedWildCropRemaining == 0)
+                    player.Entity.Stats.Set("wildCropDropRate", "sitHeavyhandedWildCropCancel", VANILLA_HEAVYHANDED_WILD_CROP_PENALTY * 0.01f, false);
+                else
+                    player.Entity.Stats.Remove("wildCropDropRate", "sitHeavyhandedWildCropCancel");
+            }
 
             // Sync to WatchedAttributes
             player.Entity.WatchedAttributes.SetInt(WATCHED_FORAGER_LEVEL, level);
@@ -19213,16 +19332,21 @@ namespace SeraphLeveling
                 }
             }
 
-            // Process Pilferer trait (improves rusty gear, vessel loot, vessel collection)
+            // Process Pilferer trait (improves rusty gear, vessel loot, vessel collection).
+            // Read per-stat bonuses (each stat capped independently so all classes hit the
+            // same +20% per-stat total at maxall, regardless of vanilla Pilferer offsets).
             int pilfererLevel = eplr.WatchedAttributes.GetInt(SeraphLevelingModSystem.WATCHED_PILFERER_LEVEL, 0);
-            int pilfererBonus = eplr.WatchedAttributes.GetInt(SeraphLevelingModSystem.WATCHED_PILFERER_BONUS, 0);
+            int pilfererVesselBonus = eplr.WatchedAttributes.GetInt(SeraphLevelingModSystem.WATCHED_PILFERER_VESSEL_BONUS, 0);
+            int pilfererRustyBonus = eplr.WatchedAttributes.GetInt(SeraphLevelingModSystem.WATCHED_PILFERER_RUSTY_BONUS, 0);
+            int pilfererWholeBonus = eplr.WatchedAttributes.GetInt(SeraphLevelingModSystem.WATCHED_PILFERER_WHOLE_BONUS, 0);
             bool hasVanillaPilferer = ClientHasVanillaTrait(eplr, "pilferer", "malefactor");
-            // Only show Pilferer when bonus > 0 (after Heavyhanded vessel penalty is cancelled)
-            if (pilfererBonus > 0)
+            // Only show Pilferer when any per-stat bonus > 0 (after Heavyhanded vessel penalty is cancelled for vessel)
+            if (pilfererVesselBonus > 0 || pilfererRustyBonus > 0 || pilfererWholeBonus > 0)
             {
                 string plainPilfererTraitName = Lang.Get("seraphleveling:trait-sitpilferermastery");
-                // Pilferer uses the same bonus for all 3 stats (vessel drops, rusty gear, vessel collection)
-                string dynamicPilfererTrait = Lang.Get("seraphleveling:trait-pilferer-dynamic", pilfererBonus, pilfererBonus, pilfererBonus);
+                // Dynamic format params are (vesselContents, rustyGear, wholeVessel)
+                string dynamicPilfererTrait = Lang.Get("seraphleveling:trait-pilferer-dynamic",
+                    pilfererVesselBonus, pilfererRustyBonus, pilfererWholeBonus);
 
                 // Re-check hasNoTraits
                 hasNoTraits = string.IsNullOrEmpty(__result) ||
@@ -19239,12 +19363,12 @@ namespace SeraphLeveling
                     //     substring-match safely without risk of hitting unrelated tokens
                     //   - vanilla "12% chance to collect cracked vessels intact" doesn't follow
                     //     the "+X% <thing>" pattern, so a value-prefixed Replace target can't hit it
-                    // Match the whole vanilla Pilferer line in one regex and swap it atomically.
-                    int combinedRusty = SeraphLevelingModSystem.VANILLA_PILFERER_RUSTY_GEAR_BONUS + pilfererBonus;
-                    int combinedVessel = SeraphLevelingModSystem.VANILLA_PILFERER_VESSEL_CONTENTS_BONUS + pilfererBonus;
-                    int combinedCollection = SeraphLevelingModSystem.VANILLA_PILFERER_WHOLE_VESSEL_BONUS + pilfererBonus;
+                    // Combine per-stat earned with per-stat vanilla so each total caps correctly.
+                    int combinedVessel = SeraphLevelingModSystem.VANILLA_PILFERER_VESSEL_CONTENTS_BONUS + pilfererVesselBonus;
+                    int combinedRusty = SeraphLevelingModSystem.VANILLA_PILFERER_RUSTY_GEAR_BONUS + pilfererRustyBonus;
+                    int combinedWhole = SeraphLevelingModSystem.VANILLA_PILFERER_WHOLE_VESSEL_BONUS + pilfererWholeBonus;
                     string combinedPilfererTrait = Lang.Get("seraphleveling:trait-pilferer-dynamic",
-                        combinedVessel, combinedRusty, combinedCollection);
+                        combinedVessel, combinedRusty, combinedWhole);
                     __result = System.Text.RegularExpressions.Regex.Replace(__result,
                         @"<font color=""#84ff84"">• Pilferer </font> <font opacity=""0\.6"">\(\+\d+% drop rate, \+\d+% rusty gear drop rate, \d+% chance to collect cracked vessels intact\)</font>",
                         combinedPilfererTrait);
@@ -19438,13 +19562,24 @@ namespace SeraphLeveling
                 }
             }
 
-            // Process Hunger trait (reduces hunger rate)
+            // Process Hunger trait (reduces hunger rate).
+            // For Ravenous classes (Blackguard) the raw `hungerBonus` value includes credits
+            // spent cancelling the +30% Ravenous penalty. The actual stat applied (negative
+            // hungerrate) cancels Ravenous and produces the same NET reduction other classes
+            // get from their full bonus, so functional behavior already matches across classes.
+            // The display, however, was showing the gross reduction (e.g. -55% on Blackguard
+            // vs -25% on Hunter at maxall). Subtract the Ravenous penalty from the displayed
+            // value so all classes converge on the same visible cap (-25% at maxall).
             int hungerLevel = eplr.WatchedAttributes.GetInt(SeraphLevelingModSystem.WATCHED_HUNGER_LEVEL, 0);
             int hungerBonus = eplr.WatchedAttributes.GetInt(SeraphLevelingModSystem.WATCHED_HUNGER_BONUS, 0);
-            if (hungerLevel > 0)
+            bool hasRavenousForHunger = ClientHasVanillaTrait(eplr, "ravenous", "blackguard");
+            int displayedHungerReduction = hasRavenousForHunger
+                ? Math.Max(0, hungerBonus - SeraphLevelingModSystem.VANILLA_RAVENOUS_HUNGER_PENALTY)
+                : hungerBonus;
+            if (hungerLevel > 0 && displayedHungerReduction > 0)
             {
                 string plainHungerTraitName = Lang.Get("seraphleveling:trait-sithungermastery");
-                string dynamicHungerTrait = Lang.Get("seraphleveling:trait-hunger-dynamic", hungerBonus);
+                string dynamicHungerTrait = Lang.Get("seraphleveling:trait-hunger-dynamic", displayedHungerReduction);
 
                 // Re-check hasNoTraits
                 hasNoTraits = string.IsNullOrEmpty(__result) ||

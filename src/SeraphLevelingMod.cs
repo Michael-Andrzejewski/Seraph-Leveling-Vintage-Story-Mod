@@ -2161,7 +2161,7 @@ namespace SeraphLeveling
         // =========================================================================
 
         /// <summary>Whether Combat Overhaul mod is loaded.</summary>
-        public static bool IsCombatOverhaulLoaded { get; private set; } = false;
+        public static bool IsCombatOverhaulLoaded { get; internal set; } = false;
 
         /// <summary>Whether CO compatibility is enabled (mod loaded AND config enabled).</summary>
         public static bool IsCOCompatEnabled => IsCombatOverhaulLoaded && COEnableCompat;
@@ -6490,19 +6490,25 @@ namespace SeraphLeveling
                 HasResourceful = traitSet.Contains("resourceful") || characterClass == "hunter" || characterClass == "malefactor",
                 HasForager = traitSet.Contains("forager") || characterClass == "hunter" || characterClass == "malefactor",
 
-                // Combat Overhaul negative traits (using CO trait naming conventions, with class fallbacks)
-                HasCOTremblingAim = traitSet.Contains("tremblingaim") || traitSet.Contains("trembling aim") || characterClass == "blackguard",
-                HasCOClumsyHands = traitSet.Contains("clumsyhands") || traitSet.Contains("clumsy hands"),
-                HasCOFearOfMelee = traitSet.Contains("fearofmelee") || traitSet.Contains("fear of melee") || traitSet.Contains("frightenedofmelee") || traitSet.Contains("frightened of melee") || characterClass == "clockmaker",
-                HasCOWeakHand = traitSet.Contains("weakhand") || traitSet.Contains("weak hand"),
-                HasCONervous = traitSet.Contains("nervous") || characterClass == "malefactor" || characterClass == "clockmaker",
+                // Combat Overhaul traits — gated on IsCombatOverhaulLoaded. CO traits don't
+                // exist in the game world unless CO itself is loaded, so the class fallbacks
+                // (e.g. "Blackguard always has Trembling Aim") should only fire when CO is
+                // actually installed. Otherwise the cache reports phantom CO traits and downstream
+                // Apply* functions write penalty values into watched attrs that the postfix then
+                // renders as ghost debuffs (the "Trembling Aim -30%" symptom on Blackguard with
+                // CO uninstalled).
+                HasCOTremblingAim = IsCombatOverhaulLoaded && (traitSet.Contains("tremblingaim") || traitSet.Contains("trembling aim") || characterClass == "blackguard"),
+                HasCOClumsyHands = IsCombatOverhaulLoaded && (traitSet.Contains("clumsyhands") || traitSet.Contains("clumsy hands")),
+                HasCOFearOfMelee = IsCombatOverhaulLoaded && (traitSet.Contains("fearofmelee") || traitSet.Contains("fear of melee") || traitSet.Contains("frightenedofmelee") || traitSet.Contains("frightened of melee") || characterClass == "clockmaker"),
+                HasCOWeakHand = IsCombatOverhaulLoaded && (traitSet.Contains("weakhand") || traitSet.Contains("weak hand")),
+                HasCONervous = IsCombatOverhaulLoaded && (traitSet.Contains("nervous") || characterClass == "malefactor" || characterClass == "clockmaker"),
 
                 // Combat Overhaul mixed/positive traits (Big Head, Thick Skull, Leg Day, Melee Expert, Self Defence)
-                HasCOBigHead = traitSet.Contains("bighead") || traitSet.Contains("big head") || characterClass == "clockmaker",
-                HasCOThickSkull = traitSet.Contains("thickskull") || traitSet.Contains("thick skull") || characterClass == "malefactor",
-                HasCOLegDay = traitSet.Contains("legday") || traitSet.Contains("leg day") || characterClass == "blackguard",
-                HasCOMeleeExpert = traitSet.Contains("meleeexpert") || traitSet.Contains("melee expert") || traitSet.Contains("expert in melee") || characterClass == "blackguard",
-                HasCOSelfDefence = traitSet.Contains("selfdefence") || traitSet.Contains("self defence") || characterClass == "tailor"
+                HasCOBigHead = IsCombatOverhaulLoaded && (traitSet.Contains("bighead") || traitSet.Contains("big head") || characterClass == "clockmaker"),
+                HasCOThickSkull = IsCombatOverhaulLoaded && (traitSet.Contains("thickskull") || traitSet.Contains("thick skull") || characterClass == "malefactor"),
+                HasCOLegDay = IsCombatOverhaulLoaded && (traitSet.Contains("legday") || traitSet.Contains("leg day") || characterClass == "blackguard"),
+                HasCOMeleeExpert = IsCombatOverhaulLoaded && (traitSet.Contains("meleeexpert") || traitSet.Contains("melee expert") || traitSet.Contains("expert in melee") || characterClass == "blackguard"),
+                HasCOSelfDefence = IsCombatOverhaulLoaded && (traitSet.Contains("selfdefence") || traitSet.Contains("self defence") || characterClass == "tailor")
             };
 
             VanillaTraitsCache[playerUid] = cache;
@@ -18544,6 +18550,12 @@ namespace SeraphLeveling
             base.StartClientSide(api);
             clientApi = api;
 
+            // Mirror server's IsCombatOverhaulLoaded flag on the client. The server-side
+            // assignment in StartServerSide doesn't run on a client-only instance, so without
+            // this the postfix would think CO is never loaded and skip CO trait display
+            // even when CO is actually installed.
+            SeraphLevelingModSystem.IsCombatOverhaulLoaded = api.ModLoader.IsModEnabled("combatoverhaul");
+
             // Register network channel for receiving level-up sounds from server
             api.Network.RegisterChannel("seraphleveling")
                 .RegisterMessageType<LevelUpSoundMessage>()
@@ -19945,6 +19957,15 @@ namespace SeraphLeveling
             // Display CO proficiencies that have credits > 0
             // =========================================================================
 
+            // Defense-in-depth: even if a save has stale CO watched attrs from a previous
+            // installation, never render CO trait lines when CO itself isn't installed.
+            // The Apply/cache layer should already keep these attrs at 0/false when CO is
+            // unloaded (via the IsCombatOverhaulLoaded gate in PopulateVanillaTraitsCache),
+            // but skipping the entire section also avoids any future code path leaking a
+            // phantom CO debuff through.
+            if (SeraphLevelingModSystem.IsCombatOverhaulLoaded)
+            {
+
             // Check if CO is enabled by looking for any CO credits
             var coProficiencies = new (string statName, string displayName, float maxBonus)[]
             {
@@ -20071,6 +20092,8 @@ namespace SeraphLeveling
                 string coNervousTrait = $"<font color=\"#ff8484\">• Nervous </font> <font opacity=\"0.6\">(-{coNervousRemaining} piercing tier)</font>";
                 __result = __result + "\n" + coNervousTrait;
             }
+
+            } // end of IsCombatOverhaulLoaded gate around CO trait display
 
             // Clean up any newline issues that might have been introduced
             // First normalize line endings (handle \r\n, \r, and \n)

@@ -134,7 +134,7 @@ namespace SeraphLeveling
         // Mender progression
         public int MenderBaseRepairsPerIncrement { get; set; } = 5;
         public int MenderIncrementStep { get; set; } = 1;
-        public int MenderMaxPercent { get; set; } = 20;
+        public int MenderMaxPercent { get; set; } = 25;
 
         // Pilferer progression
         public int PilfererBasePointsPerIncrement { get; set; } = 10;
@@ -1827,10 +1827,13 @@ namespace SeraphLeveling
         // Mender progression configuration
         public static int BaseMenderRepairsPerIncrement = 5;   // Base repairs for first credit
         public static int MenderIncrementStep = 1;              // Increment step per credit
-        public static int MaxMenderPercent = 20;                // 20% max armor/clothing durability bonus
+        public static int MaxMenderPercent = 25;                // 25% total cap (matches vanilla Mender +25% so Tailor and non-Tailor end up equal)
 
         // Vanilla Mender trait bonus (used for cap calculations)
-        public const int VANILLA_MENDER_ARMOR_DURABILITY_BONUS = 10;
+        // Vanilla Mender shows "+25% armor durability" (armorDurabilityLoss: -0.25). This is
+        // used both for cap math (Tailor's earnable = MaxMenderPercent - 25, so total caps at
+        // MaxMenderPercent like every other class) and for inline display Replace.
+        public const int VANILLA_MENDER_ARMOR_DURABILITY_BONUS = 25;
 
         // Storage for mender progress
         public static ConcurrentDictionary<string, MenderProgressData> MenderProgress = new ConcurrentDictionary<string, MenderProgressData>();
@@ -15462,20 +15465,26 @@ namespace SeraphLeveling
             string playerUid = player.PlayerUID;
 
             // Max Mining
+            // Pass raw credits to ApplyMiningBonus, NOT CalculateMiningBonusPercent(credits).
+            // ApplyMiningBonus expects the raw credit/level value and subtracts the negative-
+            // trait penalty internally (Hunter's Claustrophobic -10%, Tailor's Weak -10%).
+            // Passing the already-capped bonus percent caused the penalty to be subtracted
+            // twice, so Hunter would land at +40% mining instead of the intended +50%.
             int maxMiningCredits = GetMaxMiningCredits(player.Entity);
             var miningProg = MiningProgress.GetOrAdd(playerUid, _ => new MiningProgressData());
             miningProg.TotalCredits = maxMiningCredits;
             miningProg.PickaxeProgress.Clear();
             pendingMiningProgressSave = true;
-            ApplyMiningBonus(player, CalculateMiningBonusPercent(maxMiningCredits));
+            ApplyMiningBonus(player, maxMiningCredits);
 
-            // Max Melee
+            // Max Melee — same fix as Mining (pass raw credits so Farsighted/Nervous penalties
+            // don't get subtracted twice and Hunter/Malefactor/Clockmaker can hit +50%).
             int maxMeleeCredits = GetMaxMeleeCredits(player.Entity);
             var meleeProg = MeleeProgress.GetOrAdd(playerUid, _ => new MeleeProgressData());
             meleeProg.TotalCredits = maxMeleeCredits;
             meleeProg.WeaponProgress.Clear();
             pendingMeleeProgressSave = true;
-            ApplyMeleeBonusStatic(player, CalculateMeleeBonusPercent(maxMeleeCredits));
+            ApplyMeleeBonusStatic(player, maxMeleeCredits);
 
             // Max Ranged
             int maxRangedCredits = GetMaxRangedCredits(player.Entity);
@@ -15639,19 +15648,19 @@ namespace SeraphLeveling
             string playerUid = player.PlayerUID;
             const int CREDITS = 1;
 
-            // Mining
+            // Mining (pass raw credits — Apply* handles negative-trait subtraction internally)
             var miningProg = MiningProgress.GetOrAdd(playerUid, _ => new MiningProgressData());
             miningProg.TotalCredits = CREDITS;
             miningProg.PickaxeProgress.Clear();
             pendingMiningProgressSave = true;
-            ApplyMiningBonus(player, CalculateMiningBonusPercent(CREDITS));
+            ApplyMiningBonus(player, CREDITS);
 
             // Melee
             var meleeProg = MeleeProgress.GetOrAdd(playerUid, _ => new MeleeProgressData());
             meleeProg.TotalCredits = CREDITS;
             meleeProg.WeaponProgress.Clear();
             pendingMeleeProgressSave = true;
-            ApplyMeleeBonusStatic(player, CalculateMeleeBonusPercent(CREDITS));
+            ApplyMeleeBonusStatic(player, CREDITS);
 
             // Ranged
             var rangedProg = RangedProgress.GetOrAdd(playerUid, _ => new RangedProgressData());
@@ -15838,7 +15847,7 @@ namespace SeraphLeveling
             // Mender defaults
             BaseMenderRepairsPerIncrement = 5;
             MenderIncrementStep = 1;
-            MaxMenderPercent = 20;
+            MaxMenderPercent = 25;
 
             // Pilferer defaults
             BasePilfererPointsPerIncrement = 10;
@@ -19171,20 +19180,12 @@ namespace SeraphLeveling
 
                 if (hasVanillaMender)
                 {
-                    // Class already has Mender trait (Tailor) - update inline. Vanilla actually
-                    // shows "+25% armor durability" but the VANILLA_MENDER_ARMOR_DURABILITY_BONUS
-                    // constant is 10 (used elsewhere for cap math, kept as-is to avoid changing
-                    // gameplay balance). Capture whatever number vanilla currently shows and add
-                    // the earned bonus on top, so display stays correct regardless of the cap
-                    // constant or any future vanilla rebalance.
-                    int captured = menderBonus;
-                    __result = System.Text.RegularExpressions.Regex.Replace(__result,
-                        @"<font color=""#84ff84"">• Mender </font> <font opacity=""0\.6"">\(\+(?<v>\d+)% armor durability\)</font>",
-                        m =>
-                        {
-                            int vanillaVal = int.Parse(m.Groups["v"].Value);
-                            return $"<font color=\"#84ff84\">• Mender </font> <font opacity=\"0.6\">(+{vanillaVal + captured}% armor durability)</font>";
-                        });
+                    // Class already has Mender trait (Tailor) - update the existing durability value.
+                    // Vanilla shows "+25% armor durability".
+                    int combinedBonus = SeraphLevelingModSystem.VANILLA_MENDER_ARMOR_DURABILITY_BONUS + menderBonus;
+                    __result = __result.Replace(
+                        $"+{SeraphLevelingModSystem.VANILLA_MENDER_ARMOR_DURABILITY_BONUS}% armor durability",
+                        $"+{combinedBonus}% armor durability");
                 }
                 else if (hasNoTraits)
                 {
@@ -19701,8 +19702,10 @@ namespace SeraphLeveling
                 }
             }
 
-            // Kind trait (Tailor) - animal loot and harvesting speed penalty
-            // Vanilla format: <font color="#ff8484">• Kind </font> <font opacity="0.6">(-10% animal loot, -25% harvesting speed)</font>
+            // Kind trait (Tailor) - animal loot and harvesting speed penalty.
+            // Vanilla wording is "-25% animal harvesting speed" (must include "animal" — earlier
+            // versions looked for "% harvesting speed" and silently no-op'd against vanilla).
+            // Vanilla format: <font color="#ff8484">• Kind </font> <font opacity="0.6">(-10% animal loot, -25% animal harvesting speed)</font>
             bool hasKind = ClientHasVanillaTrait(eplr, "kind", "tailor");
             int kindLootRemaining = eplr.WatchedAttributes.GetInt(SeraphLevelingModSystem.WATCHED_KIND_LOOT_REMAINING, 0);
             int kindSpeedRemaining = eplr.WatchedAttributes.GetInt(SeraphLevelingModSystem.WATCHED_KIND_SPEED_REMAINING, 0);
@@ -19724,14 +19727,13 @@ namespace SeraphLeveling
                         dynamicKindTrait = Lang.Get("seraphleveling:trait-kind-speed-only-dynamic", kindSpeedRemaining);
                     }
                     __result = System.Text.RegularExpressions.Regex.Replace(__result,
-                        @"<font color=""#ff8484"">• Kind </font> <font opacity=""0\.6"">\(-\d+% animal loot, -\d+% harvesting speed\)</font>",
+                        @"<font color=""#ff8484"">• Kind </font> <font opacity=""0\.6"">\(-\d+% animal loot, -\d+% animal harvesting speed\)</font>",
                         dynamicKindTrait);
                 }
                 else
                 {
-                    // Remove Kind trait completely - use empty string, cleanup at end handles newlines
                     __result = System.Text.RegularExpressions.Regex.Replace(__result,
-                        @"\n?<font color=""#ff8484"">• Kind </font> <font opacity=""0\.6"">\(-\d+% animal loot, -\d+% harvesting speed\)</font>",
+                        @"\n?<font color=""#ff8484"">• Kind </font> <font opacity=""0\.6"">\(-\d+% animal loot, -\d+% animal harvesting speed\)</font>",
                         "");
                 }
             }
@@ -19827,8 +19829,12 @@ namespace SeraphLeveling
                 }
             }
 
-            // Heavyhanded trait (Blackguard) - vessel, foraging, wild crop penalties
-            // Vanilla format: <font color="#ff8484">• Heavyhanded </font> <font opacity="0.6">(-10% cracked vessel loot, -15% loot from foraging, -20% wild crop drop rate)</font>
+            // Heavyhanded trait (Blackguard) - vessel, foraging, wild crop penalties.
+            // Vanilla wording (must match exactly — earlier versions used "cracked vessel loot"
+            // and "wild crop drop rate" which silently no-op'd against vanilla "loot from cracked
+            // vessels" and "wild crop harvesting", leaving Heavyhanded permanently visible):
+            //   <font color="#ff8484">• Heavyhanded </font>
+            //   <font opacity="0.6">(-10% loot from cracked vessels, -15% loot from foraging, -20% wild crop harvesting)</font>
             bool hasHeavyhanded = ClientHasVanillaTrait(eplr, "heavyhanded", "blackguard");
             int heavyhandedVesselRemaining = eplr.WatchedAttributes.GetInt(SeraphLevelingModSystem.WATCHED_HEAVYHANDED_VESSEL_REMAINING, 0);
             int heavyhandedForagingRemaining = eplr.WatchedAttributes.GetInt(SeraphLevelingModSystem.WATCHED_HEAVYHANDED_FORAGING_REMAINING, 0);
@@ -19837,23 +19843,24 @@ namespace SeraphLeveling
             {
                 if (heavyhandedVesselRemaining > 0 || heavyhandedForagingRemaining > 0 || heavyhandedWildCropRemaining > 0)
                 {
-                    // Build partial description
+                    // Build partial description using vanilla wording so the partial line reads
+                    // consistently with vanilla phrasing for the stats still in effect.
                     var parts = new System.Collections.Generic.List<string>();
-                    if (heavyhandedVesselRemaining > 0) parts.Add($"-{heavyhandedVesselRemaining}% cracked vessel loot");
+                    if (heavyhandedVesselRemaining > 0) parts.Add($"-{heavyhandedVesselRemaining}% loot from cracked vessels");
                     if (heavyhandedForagingRemaining > 0) parts.Add($"-{heavyhandedForagingRemaining}% loot from foraging");
-                    if (heavyhandedWildCropRemaining > 0) parts.Add($"-{heavyhandedWildCropRemaining}% wild crop drop rate");
+                    if (heavyhandedWildCropRemaining > 0) parts.Add($"-{heavyhandedWildCropRemaining}% wild crop harvesting");
 
                     string partialDescription = string.Join(", ", parts);
                     string dynamicHeavyhandedTrait = Lang.Get("seraphleveling:trait-heavyhanded-partial-dynamic", partialDescription);
                     __result = System.Text.RegularExpressions.Regex.Replace(__result,
-                        @"<font color=""#ff8484"">• Heavyhanded </font> <font opacity=""0\.6"">\(-\d+% cracked vessel loot, -\d+% loot from foraging, -\d+% wild crop drop rate\)</font>",
+                        @"<font color=""#ff8484"">• Heavyhanded </font> <font opacity=""0\.6"">\(-\d+% loot from cracked vessels, -\d+% loot from foraging, -\d+% wild crop harvesting\)</font>",
                         dynamicHeavyhandedTrait);
                 }
                 else
                 {
-                    // Remove Heavyhanded trait completely - use empty string, cleanup at end handles newlines
+                    // All three penalties cancelled — remove the Heavyhanded line entirely.
                     __result = System.Text.RegularExpressions.Regex.Replace(__result,
-                        @"\n?<font color=""#ff8484"">• Heavyhanded </font> <font opacity=""0\.6"">\(-\d+% cracked vessel loot, -\d+% loot from foraging, -\d+% wild crop drop rate\)</font>",
+                        @"\n?<font color=""#ff8484"">• Heavyhanded </font> <font opacity=""0\.6"">\(-\d+% loot from cracked vessels, -\d+% loot from foraging, -\d+% wild crop harvesting\)</font>",
                         "");
                 }
             }

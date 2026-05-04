@@ -2860,6 +2860,15 @@ namespace SeraphLeveling
                     .WithArgs(api.ChatCommands.Parsers.OptionalWord("category"))
                     .HandleWith(OnTraitTestSuiteCommand)
                 .EndSubCommand()
+                // Visual format probe: every progression at exactly 1 credit so every dynamic
+                // trait line renders, but with values low enough that negative traits aren't
+                // fully cancelled (so reduction-style displays also show).
+                .BeginSubCommand("testsuite1")
+                    .WithDescription("Set every progression skill to 1 credit to visually inspect dynamic trait formatting (admin only)")
+                    .RequiresPrivilege(Privilege.controlserver)
+                    .RequiresPlayer()
+                    .HandleWith(OnTraitTestSuite1Command)
+                .EndSubCommand()
                 // Combat Overhaul proficiency commands
                 .BeginSubCommand("coproficiency")
                     .WithDescription("View all Combat Overhaul proficiency progression (requires CO mod)")
@@ -15433,7 +15442,12 @@ namespace SeraphLeveling
             SleepBuffMultiplier.TryRemove(playerUid, out _);
             pendingSleepBuffSave = true;
 
-            return TextCommandResult.Success("All trait progression has been reset to 0.");
+            // Also reset Combat Overhaul proficiency progression so no stale per-weapon
+            // bonuses linger after a full reset. No-op if CO isn't loaded.
+            ResetCOProgressForPlayer(player);
+
+            string coNote = IsCombatOverhaulLoaded ? " (including Combat Overhaul proficiencies)" : "";
+            return TextCommandResult.Success($"All trait progression has been reset to 0{coNote}.");
         }
 
         /// <summary>
@@ -15604,6 +15618,138 @@ namespace SeraphLeveling
             ApplyClaustrophobicRemovalStatic(player, true);
 
             return TextCommandResult.Success("All trait progression has been set to maximum for testing.");
+        }
+
+        /// <summary>
+        /// Handler for /trait testsuite1 command.
+        /// Sets every progression skill to exactly 1 credit. Used to visually verify the
+        /// dynamic trait display formatting at the smallest non-zero progression: every
+        /// dynamic line renders, but values stay low enough that negative-trait cancellation
+        /// branches also show their reduced-penalty format.
+        ///
+        /// Does NOT touch the binary unlock traits (Hardy Health, Bowyer, Improviser,
+        /// Tinkerer, Merciless, Technical, Sewing Kit, Claustrophobic Removal). Those are
+        /// already covered by individual /trait &lt;name&gt;unlock commands.
+        /// </summary>
+        private TextCommandResult OnTraitTestSuite1Command(TextCommandCallingArgs args)
+        {
+            IServerPlayer player = args.Caller.Player as IServerPlayer;
+            if (player?.Entity == null) return TextCommandResult.Error("Player not found.");
+
+            string playerUid = player.PlayerUID;
+            const int CREDITS = 1;
+
+            // Mining
+            var miningProg = MiningProgress.GetOrAdd(playerUid, _ => new MiningProgressData());
+            miningProg.TotalCredits = CREDITS;
+            miningProg.PickaxeProgress.Clear();
+            pendingMiningProgressSave = true;
+            ApplyMiningBonus(player, CalculateMiningBonusPercent(CREDITS));
+
+            // Melee
+            var meleeProg = MeleeProgress.GetOrAdd(playerUid, _ => new MeleeProgressData());
+            meleeProg.TotalCredits = CREDITS;
+            meleeProg.WeaponProgress.Clear();
+            pendingMeleeProgressSave = true;
+            ApplyMeleeBonusStatic(player, CalculateMeleeBonusPercent(CREDITS));
+
+            // Ranged
+            var rangedProg = RangedProgress.GetOrAdd(playerUid, _ => new RangedProgressData());
+            rangedProg.TotalCredits = CREDITS;
+            rangedProg.WeaponProgress.Clear();
+            pendingRangedProgressSave = true;
+            ApplyRangedBonusStatic(player, CREDITS);
+
+            // Walking
+            var walkingProg = WalkingProgress.GetOrAdd(playerUid, _ => new WalkingProgressData());
+            walkingProg.TotalCredits = CREDITS;
+            walkingProg.BlocksInIncrement = 0;
+            walkingProg.CurrentIncrementSize = BaseBlocksWalkedPerIncrement;
+            pendingWalkingProgressSave = true;
+            ApplyWalkingBonusStatic(player, CREDITS);
+
+            // Hunger
+            var hungerProg = HungerProgress.GetOrAdd(playerUid, _ => new HungerProgressData());
+            hungerProg.TotalCredits = CREDITS;
+            hungerProg.SecondsInIncrement = 0;
+            hungerProg.CurrentIncrementSize = BaseSecondsPerIncrement;
+            pendingHungerProgressSave = true;
+            ApplyHungerBonusStatic(player, CalculateHungerBonusPercent(CREDITS, player.Entity));
+
+            // Armor (both durability and walkspeed tracks)
+            var armorProg = ArmorProgress.GetOrAdd(playerUid, _ => new ArmorProgressData());
+            armorProg.TotalDurabilityCredits = CREDITS;
+            armorProg.TotalWalkSpeedCredits = CREDITS;
+            armorProg.ArmorProgress.Clear();
+            pendingArmorProgressSave = true;
+            ApplyArmorBonusesStatic(player, CREDITS, CREDITS);
+
+            // Mender
+            var menderProg = MenderProgress.GetOrAdd(playerUid, _ => new MenderProgressData());
+            menderProg.TotalCredits = CREDITS;
+            menderProg.RepairsInIncrement = 0;
+            menderProg.CurrentIncrementSize = BaseMenderRepairsPerIncrement;
+            pendingMenderProgressSave = true;
+            ApplyMenderBonusStatic(player, CREDITS);
+
+            // Pilferer
+            var pilfererProg = PilfererProgress.GetOrAdd(playerUid, _ => new PilfererProgressData());
+            pilfererProg.TotalCredits = CREDITS;
+            pilfererProg.PointsInIncrement = 0;
+            pilfererProg.CurrentIncrementSize = BasePilfererPointsPerIncrement;
+            pendingPilfererProgressSave = true;
+            ApplyPilfererBonusStatic(player, CREDITS);
+
+            // Resourceful
+            var resourcefulProg = ResourcefulProgress.GetOrAdd(playerUid, _ => new ResourcefulProgressData());
+            resourcefulProg.TotalCredits = CREDITS;
+            resourcefulProg.AnimalsInIncrement = 0;
+            resourcefulProg.CurrentIncrementSize = BaseResourcefulAnimalsPerIncrement;
+            pendingResourcefulProgressSave = true;
+            ApplyResourcefulBonusStatic(player, CREDITS);
+
+            // Forager
+            var foragerProg = ForagerProgress.GetOrAdd(playerUid, _ => new ForagerProgressData());
+            foragerProg.TotalCredits = CREDITS;
+            foragerProg.CropsInIncrement = 0;
+            foragerProg.CurrentIncrementSize = BaseForagerCropsPerIncrement;
+            pendingForagerProgressSave = true;
+            ApplyForagerBonusStatic(player, CREDITS);
+
+            // Furtive
+            var furtiveProg = FurtiveProgress.GetOrAdd(playerUid, _ => new FurtiveProgressData());
+            furtiveProg.TotalCredits = CREDITS;
+            furtiveProg.BlocksInIncrement = 0;
+            furtiveProg.CurrentIncrementSize = BaseFurtiveSneakBlocksPerIncrement;
+            pendingFurtiveProgressSave = true;
+            ApplyFurtiveBonusStatic(player, CREDITS);
+
+            // Precise
+            var preciseProg = PreciseProgress.GetOrAdd(playerUid, _ => new PreciseProgressData());
+            preciseProg.TotalCredits = CREDITS;
+            preciseProg.WeaponProgress.Clear();
+            pendingPreciseProgressSave = true;
+            ApplyPreciseBonusStatic(player, CREDITS);
+
+            // Combat Overhaul proficiencies (only if CO is loaded)
+            string coNote = "";
+            if (IsCombatOverhaulLoaded)
+            {
+                var coProgress = COProgress.GetOrAdd(playerUid, _ => new COPlayerProgressData());
+                foreach (var proficiencyStat in AllCOProficiencies)
+                {
+                    var profProgress = coProgress.GetProficiencyProgress(proficiencyStat);
+                    profProgress.TotalCredits = CREDITS;
+                    profProgress.WeaponProgress.Clear();
+                    ApplyCOProficiencyBonusWithCancellation(player, proficiencyStat, CREDITS);
+                }
+                coProgress.SteadyAimCredits = CREDITS;
+                ApplyCOSteadyAimBonus(player, CREDITS);
+                pendingCOProgressSave = true;
+                coNote = " (including Combat Overhaul proficiencies)";
+            }
+
+            return TextCommandResult.Success($"All progression skills set to 1 credit{coNote}. Open the character sheet to inspect dynamic trait formatting.");
         }
 
         /// <summary>
@@ -15919,21 +16065,34 @@ namespace SeraphLeveling
 
         /// <summary>
         /// Handler for /trait coreset command.
-        /// Resets all Combat Overhaul progression to 0.
+        /// Resets all Combat Overhaul progression to 0. Also works when CO is uninstalled,
+        /// to clear lingering progress data saved on the player.
         /// </summary>
         private TextCommandResult OnTraitCOResetCommand(TextCommandCallingArgs args)
         {
             IServerPlayer player = args.Caller.Player as IServerPlayer;
             if (player?.Entity == null) return TextCommandResult.Error("Player not found.");
 
-            if (!IsCombatOverhaulLoaded)
-            {
-                return TextCommandResult.Error("Combat Overhaul mod is not installed.");
-            }
+            bool coLoaded = IsCombatOverhaulLoaded;
+            ResetCOProgressForPlayer(player);
+
+            return TextCommandResult.Success(coLoaded
+                ? "All Combat Overhaul proficiency progression has been reset to 0."
+                : "Combat Overhaul is not currently installed; cleared any lingering proficiency data saved on the player.");
+        }
+
+        /// <summary>
+        /// Shared helper for resetting Combat Overhaul progression. Used by both /trait coreset
+        /// and /trait reset. Runs even when CO isn't loaded so stale watched attributes /
+        /// progress dictionary entries left over from a prior install can still be cleaned up
+        /// (otherwise the display postfix keeps rendering ghost CO traits forever).
+        /// </summary>
+        private void ResetCOProgressForPlayer(IServerPlayer player)
+        {
+            if (player?.Entity == null) return;
 
             string playerUid = player.PlayerUID;
 
-            // Reset all CO progress
             if (COProgress.TryRemove(playerUid, out _))
             {
                 pendingCOProgressSave = true;
@@ -15952,8 +16111,6 @@ namespace SeraphLeveling
 
             // Reapply Steady Aim with 0 credits to properly set Trembling Aim remaining
             ApplyCOSteadyAimBonus(player, 0);
-
-            return TextCommandResult.Success("All Combat Overhaul proficiency progression has been reset to 0.");
         }
 
         /// <summary>
@@ -18687,31 +18844,31 @@ namespace SeraphLeveling
             // Get mining progression data
             int miningLevel = eplr.WatchedAttributes.GetInt(SeraphLevelingModSystem.WATCHED_MINING_LEVEL, 0);
             int miningBonus = eplr.WatchedAttributes.GetInt(SeraphLevelingModSystem.WATCHED_MINING_BONUS, 0);
-            bool hasVanillaHardy = eplr.WatchedAttributes.GetBool("sitHasVanillaHardy", false);
+            bool hasVanillaHardy = ClientHasVanillaTrait(eplr, "hardy", "blackguard");
 
             // Get melee progression data
             int meleeLevel = eplr.WatchedAttributes.GetInt(SeraphLevelingModSystem.WATCHED_MELEE_LEVEL, 0);
             int meleeBonus = eplr.WatchedAttributes.GetInt(SeraphLevelingModSystem.WATCHED_MELEE_BONUS, 0);
-            bool hasVanillaSoldier = eplr.WatchedAttributes.GetBool("sitHasVanillaSoldier", false);
+            bool hasVanillaSoldier = ClientHasVanillaTrait(eplr, "soldier", "blackguard");
 
             // Get ranged progression data
             int rangedLevel = eplr.WatchedAttributes.GetInt(SeraphLevelingModSystem.WATCHED_RANGED_LEVEL, 0);
             int rangedDamageBonus = eplr.WatchedAttributes.GetInt(SeraphLevelingModSystem.WATCHED_RANGED_DAMAGE_BONUS, 0);
             int rangedAccuracyBonus = eplr.WatchedAttributes.GetInt(SeraphLevelingModSystem.WATCHED_RANGED_ACCURACY_BONUS, 0);
             int rangedDistanceBonus = eplr.WatchedAttributes.GetInt(SeraphLevelingModSystem.WATCHED_RANGED_DISTANCE_BONUS, 0);
-            bool hasVanillaFocused = eplr.WatchedAttributes.GetBool("sitHasVanillaFocused", false);
+            bool hasVanillaFocused = ClientHasVanillaTrait(eplr, "focused", "hunter");
 
             // Get walking progression data
             int walkingLevel = eplr.WatchedAttributes.GetInt(SeraphLevelingModSystem.WATCHED_WALKING_LEVEL, 0);
             int walkingBonus = eplr.WatchedAttributes.GetInt(SeraphLevelingModSystem.WATCHED_WALKING_BONUS, 0);
-            bool hasVanillaFleetfooted = eplr.WatchedAttributes.GetBool("sitHasVanillaFleetfooted", false);
+            bool hasVanillaFleetfooted = ClientHasVanillaTrait(eplr, "fleetfooted", "hunter", "clockmaker");
 
             // Get armor progression data
             int armorDurabilityLevel = eplr.WatchedAttributes.GetInt(SeraphLevelingModSystem.WATCHED_ARMOR_DURABILITY_LEVEL, 0);
             int armorDurabilityBonus = eplr.WatchedAttributes.GetInt(SeraphLevelingModSystem.WATCHED_ARMOR_DURABILITY_BONUS, 0);
             int armorWalkSpeedLevel = eplr.WatchedAttributes.GetInt(SeraphLevelingModSystem.WATCHED_ARMOR_WALKSPEED_LEVEL, 0);
             int armorWalkSpeedBonus = eplr.WatchedAttributes.GetInt(SeraphLevelingModSystem.WATCHED_ARMOR_WALKSPEED_BONUS, 0);
-            bool hasVanillaSoldierArmor = eplr.WatchedAttributes.GetBool("sitHasVanillaSoldierArmor", false);
+            bool hasVanillaSoldierArmor = ClientHasVanillaTrait(eplr, "soldier", "blackguard");
 
             ClientApi.Logger.Debug($"[SeraphLeveling] getClassTraitText postfix called. Mining: Level={miningLevel}, Bonus={miningBonus}%, HasHardy={hasVanillaHardy} | Melee: Level={meleeLevel}, Bonus={meleeBonus}%, HasSoldier={hasVanillaSoldier} | Ranged: Level={rangedLevel}, HasFocused={hasVanillaFocused} | Walking: Level={walkingLevel}, HasFleetfooted={hasVanillaFleetfooted} | Armor: Dur={armorDurabilityLevel}, Walk={armorWalkSpeedLevel}");
 
@@ -18742,13 +18899,9 @@ namespace SeraphLeveling
                         $"+{SeraphLevelingModSystem.VANILLA_HARDY_MINING_BONUS}% mining speed",
                         $"+{combinedBonus}% mining speed");
 
-                    // Remove our separate sitminingmastery entry if somehow present
-                    if (__result.Contains(plainMiningTraitName))
-                    {
-                        __result = __result.Replace("\n" + plainMiningTraitName, "");
-                        __result = __result.Replace(plainMiningTraitName + "\n", "");
-                        __result = __result.Replace(plainMiningTraitName, "");
-                    }
+                    // Remove any orphan plain Hardy entry; use orphan-only matching so the
+                    // vanilla Hardy line (which has its own description) is left intact.
+                    __result = RemoveOrphanTraitName(__result, plainMiningTraitName);
                 }
                 else if (hasNoTraits)
                 {
@@ -18757,10 +18910,10 @@ namespace SeraphLeveling
                     __result = Lang.Get("seraphleveling:trait-hardy-mining-only-dynamic", miningBonus);
                     hasNoTraits = false; // We now have traits
                 }
-                else if (__result.Contains(plainMiningTraitName))
+                else if (ContainsOrphanTraitName(__result, plainMiningTraitName))
                 {
-                    // We have our trait but no vanilla Hardy - replace plain name with dynamic version
-                    __result = __result.Replace(plainMiningTraitName,
+                    // We have our trait but no vanilla Hardy - replace orphan plain name with dynamic version
+                    __result = ReplaceOrphanTraitName(__result, plainMiningTraitName,
                         Lang.Get("seraphleveling:trait-hardy-mining-only-dynamic", miningBonus));
                 }
                 else
@@ -18791,23 +18944,17 @@ namespace SeraphLeveling
                         $"+{SeraphLevelingModSystem.VANILLA_SOLDIER_MELEE_BONUS}% melee damage",
                         $"+{combinedBonus}% melee damage");
 
-                    // Remove our separate sitmeleemastery entry if somehow present
-                    if (__result.Contains(plainMeleeTraitName))
-                    {
-                        __result = __result.Replace("\n" + plainMeleeTraitName, "");
-                        __result = __result.Replace(plainMeleeTraitName + "\n", "");
-                        __result = __result.Replace(plainMeleeTraitName, "");
-                    }
+                    __result = RemoveOrphanTraitName(__result, plainMeleeTraitName);
                 }
                 else if (hasNoTraits)
                 {
                     // Commoner or other class with no traits - replace entirely with our dynamic Soldier
                     __result = Lang.Get("seraphleveling:trait-soldier-dynamic", meleeBonus);
                 }
-                else if (__result.Contains(plainMeleeTraitName))
+                else if (ContainsOrphanTraitName(__result, plainMeleeTraitName))
                 {
-                    // We have our trait but no vanilla Soldier - replace plain name with dynamic version
-                    __result = __result.Replace(plainMeleeTraitName,
+                    // We have our trait but no vanilla Soldier - replace orphan plain name with dynamic version
+                    __result = ReplaceOrphanTraitName(__result, plainMeleeTraitName,
                         Lang.Get("seraphleveling:trait-soldier-dynamic", meleeBonus));
                 }
                 else
@@ -18851,23 +18998,17 @@ namespace SeraphLeveling
                         $"+{SeraphLevelingModSystem.VANILLA_FOCUSED_DISTANCE_BONUS}% ranged distance",
                         $"+{combinedDistance}% ranged distance");
 
-                    // Remove our separate sitrangedmastery entry if somehow present
-                    if (__result.Contains(plainRangedTraitName))
-                    {
-                        __result = __result.Replace("\n" + plainRangedTraitName, "");
-                        __result = __result.Replace(plainRangedTraitName + "\n", "");
-                        __result = __result.Replace(plainRangedTraitName, "");
-                    }
+                    __result = RemoveOrphanTraitName(__result, plainRangedTraitName);
                 }
                 else if (hasNoTraits)
                 {
                     // Commoner or other class with no traits - replace entirely with our dynamic Focused
                     __result = Lang.Get("seraphleveling:trait-focused-dynamic", rangedDamageBonus, rangedAccuracyBonus, rangedDistanceBonus);
                 }
-                else if (__result.Contains(plainRangedTraitName))
+                else if (ContainsOrphanTraitName(__result, plainRangedTraitName))
                 {
-                    // We have our trait but no vanilla Focused - replace plain name with dynamic version
-                    __result = __result.Replace(plainRangedTraitName,
+                    // We have our trait but no vanilla Focused - replace orphan plain name with dynamic version
+                    __result = ReplaceOrphanTraitName(__result, plainRangedTraitName,
                         Lang.Get("seraphleveling:trait-focused-dynamic", rangedDamageBonus, rangedAccuracyBonus, rangedDistanceBonus));
                 }
                 else
@@ -18897,23 +19038,17 @@ namespace SeraphLeveling
                         $"+{SeraphLevelingModSystem.VANILLA_FLEETFOOTED_WALK_BONUS}% walk speed",
                         $"+{combinedBonus}% walk speed");
 
-                    // Remove our separate sitwalkingmastery entry if somehow present
-                    if (__result.Contains(plainWalkingTraitName))
-                    {
-                        __result = __result.Replace("\n" + plainWalkingTraitName, "");
-                        __result = __result.Replace(plainWalkingTraitName + "\n", "");
-                        __result = __result.Replace(plainWalkingTraitName, "");
-                    }
+                    __result = RemoveOrphanTraitName(__result, plainWalkingTraitName);
                 }
                 else if (hasNoTraits)
                 {
                     // Commoner or other class with no traits - replace entirely with our dynamic Fleetfooted
                     __result = Lang.Get("seraphleveling:trait-fleetfooted-dynamic", walkingBonus);
                 }
-                else if (__result.Contains(plainWalkingTraitName))
+                else if (ContainsOrphanTraitName(__result, plainWalkingTraitName))
                 {
-                    // We have our trait but no vanilla Fleetfooted - replace plain name with dynamic version
-                    __result = __result.Replace(plainWalkingTraitName,
+                    // We have our trait but no vanilla Fleetfooted - replace orphan plain name with dynamic version
+                    __result = ReplaceOrphanTraitName(__result, plainWalkingTraitName,
                         Lang.Get("seraphleveling:trait-fleetfooted-dynamic", walkingBonus));
                 }
                 else
@@ -18990,7 +19125,7 @@ namespace SeraphLeveling
 
             // Process Clothier trait (unlocked by wearing 20 unique clothes)
             bool clothierUnlocked = eplr.WatchedAttributes.GetBool(SeraphLevelingModSystem.WATCHED_CLOTHIER_UNLOCKED, false);
-            if (clothierUnlocked)
+            if (clothierUnlocked && !ClientHasVanillaTrait(eplr, "clothier", "tailor"))
             {
                 string plainClothierTraitName = Lang.Get("seraphleveling:trait-sitclothiermastery");
                 string dynamicClothierTrait = Lang.Get("seraphleveling:trait-clothier-dynamic");
@@ -19006,9 +19141,9 @@ namespace SeraphLeveling
                 {
                     __result = dynamicClothierTrait;
                 }
-                else if (__result.Contains(plainClothierTraitName))
+                else if (ContainsOrphanTraitName(__result, plainClothierTraitName))
                 {
-                    __result = __result.Replace(plainClothierTraitName, dynamicClothierTrait);
+                    __result = ReplaceOrphanTraitName(__result, plainClothierTraitName, dynamicClothierTrait);
                 }
                 else
                 {
@@ -19019,7 +19154,7 @@ namespace SeraphLeveling
             // Process Mender trait (improves armor/clothing durability)
             int menderLevel = eplr.WatchedAttributes.GetInt(SeraphLevelingModSystem.WATCHED_MENDER_LEVEL, 0);
             int menderBonus = eplr.WatchedAttributes.GetInt(SeraphLevelingModSystem.WATCHED_MENDER_BONUS, 0);
-            bool hasVanillaMender = eplr.WatchedAttributes.GetBool("sitHasVanillaMender", false);
+            bool hasVanillaMender = ClientHasVanillaTrait(eplr, "mender", "tailor");
             if (menderLevel > 0)
             {
                 string plainMenderTraitName = Lang.Get("seraphleveling:trait-sitmendermastery");
@@ -19044,9 +19179,9 @@ namespace SeraphLeveling
                 {
                     __result = dynamicMenderTrait;
                 }
-                else if (__result.Contains(plainMenderTraitName))
+                else if (ContainsOrphanTraitName(__result, plainMenderTraitName))
                 {
-                    __result = __result.Replace(plainMenderTraitName, dynamicMenderTrait);
+                    __result = ReplaceOrphanTraitName(__result, plainMenderTraitName, dynamicMenderTrait);
                 }
                 else
                 {
@@ -19057,7 +19192,7 @@ namespace SeraphLeveling
             // Process Pilferer trait (improves rusty gear, vessel loot, vessel collection)
             int pilfererLevel = eplr.WatchedAttributes.GetInt(SeraphLevelingModSystem.WATCHED_PILFERER_LEVEL, 0);
             int pilfererBonus = eplr.WatchedAttributes.GetInt(SeraphLevelingModSystem.WATCHED_PILFERER_BONUS, 0);
-            bool hasVanillaPilferer = eplr.WatchedAttributes.GetBool("sitHasVanillaPilferer", false);
+            bool hasVanillaPilferer = ClientHasVanillaTrait(eplr, "pilferer", "malefactor");
             // Only show Pilferer when bonus > 0 (after Heavyhanded vessel penalty is cancelled)
             if (pilfererBonus > 0)
             {
@@ -19093,9 +19228,9 @@ namespace SeraphLeveling
                     __result = dynamicPilfererTrait;
                     hasNoTraits = false;
                 }
-                else if (__result.Contains(plainPilfererTraitName))
+                else if (ContainsOrphanTraitName(__result, plainPilfererTraitName))
                 {
-                    __result = __result.Replace(plainPilfererTraitName, dynamicPilfererTrait);
+                    __result = ReplaceOrphanTraitName(__result, plainPilfererTraitName, dynamicPilfererTrait);
                 }
                 else
                 {
@@ -19107,7 +19242,7 @@ namespace SeraphLeveling
             int resourcefulLevel = eplr.WatchedAttributes.GetInt(SeraphLevelingModSystem.WATCHED_RESOURCEFUL_LEVEL, 0);
             int resourcefulLootBonus = eplr.WatchedAttributes.GetInt(SeraphLevelingModSystem.WATCHED_RESOURCEFUL_LOOT_BONUS, 0);
             int resourcefulSpeedBonus = eplr.WatchedAttributes.GetInt(SeraphLevelingModSystem.WATCHED_RESOURCEFUL_SPEED_BONUS, 0);
-            bool hasVanillaResourceful = eplr.WatchedAttributes.GetBool("sitHasVanillaResourceful", false);
+            bool hasVanillaResourceful = ClientHasVanillaTrait(eplr, "resourceful", "hunter", "malefactor");
             // Only show Resourceful when any bonus > 0 (after Kind penalty is cancelled)
             if (resourcefulLootBonus > 0 || resourcefulSpeedBonus > 0)
             {
@@ -19123,23 +19258,25 @@ namespace SeraphLeveling
 
                 if (hasVanillaResourceful)
                 {
-                    // Class already has Resourceful trait - update the existing values
+                    // Class already has Resourceful trait - update the existing values.
+                    // Vanilla string is "+25% animal harvesting speed" — must match exactly,
+                    // a previous version omitted "animal " and the Replace silently no-op'd.
                     int combinedLoot = SeraphLevelingModSystem.VANILLA_RESOURCEFUL_LOOT_BONUS + resourcefulLootBonus;
                     int combinedSpeed = SeraphLevelingModSystem.VANILLA_RESOURCEFUL_SPEED_BONUS + resourcefulSpeedBonus;
                     __result = __result.Replace(
                         $"+{SeraphLevelingModSystem.VANILLA_RESOURCEFUL_LOOT_BONUS}% animal loot",
                         $"+{combinedLoot}% animal loot");
                     __result = __result.Replace(
-                        $"+{SeraphLevelingModSystem.VANILLA_RESOURCEFUL_SPEED_BONUS}% harvesting speed",
-                        $"+{combinedSpeed}% harvesting speed");
+                        $"+{SeraphLevelingModSystem.VANILLA_RESOURCEFUL_SPEED_BONUS}% animal harvesting speed",
+                        $"+{combinedSpeed}% animal harvesting speed");
                 }
                 else if (hasNoTraits)
                 {
                     __result = dynamicResourcefulTrait;
                 }
-                else if (__result.Contains(plainResourcefulTraitName))
+                else if (ContainsOrphanTraitName(__result, plainResourcefulTraitName))
                 {
-                    __result = __result.Replace(plainResourcefulTraitName, dynamicResourcefulTrait);
+                    __result = ReplaceOrphanTraitName(__result, plainResourcefulTraitName, dynamicResourcefulTrait);
                 }
                 else
                 {
@@ -19151,7 +19288,7 @@ namespace SeraphLeveling
             int foragerLevel = eplr.WatchedAttributes.GetInt(SeraphLevelingModSystem.WATCHED_FORAGER_LEVEL, 0);
             int foragerLootBonus = eplr.WatchedAttributes.GetInt(SeraphLevelingModSystem.WATCHED_FORAGER_LOOT_BONUS, 0);
             int foragerWildCropBonus = eplr.WatchedAttributes.GetInt(SeraphLevelingModSystem.WATCHED_FORAGER_WILD_CROP_BONUS, 0);
-            bool hasVanillaForager = eplr.WatchedAttributes.GetBool("sitHasVanillaForager", false);
+            bool hasVanillaForager = ClientHasVanillaTrait(eplr, "forager", "hunter", "malefactor");
             // Only show Forager when any bonus > 0 (after Civil/Heavyhanded penalties are cancelled)
             if (foragerLootBonus > 0 || foragerWildCropBonus > 0)
             {
@@ -19167,23 +19304,26 @@ namespace SeraphLeveling
 
                 if (hasVanillaForager)
                 {
-                    // Class already has Forager trait - update the existing values
+                    // Class already has Forager trait - update the existing values.
+                    // Vanilla strings are "+10% loot from foraging" and "+20% wild crop drop rate"
+                    // (must match exactly — earlier versions used "% foraging loot" / "% wild crop drops"
+                    // which silently no-op'd against vanilla).
                     int combinedLoot = SeraphLevelingModSystem.VANILLA_FORAGER_LOOT_BONUS + foragerLootBonus;
                     int combinedWildCrop = SeraphLevelingModSystem.VANILLA_FORAGER_WILD_CROP_BONUS + foragerWildCropBonus;
                     __result = __result.Replace(
-                        $"+{SeraphLevelingModSystem.VANILLA_FORAGER_LOOT_BONUS}% foraging loot",
-                        $"+{combinedLoot}% foraging loot");
+                        $"+{SeraphLevelingModSystem.VANILLA_FORAGER_LOOT_BONUS}% loot from foraging",
+                        $"+{combinedLoot}% loot from foraging");
                     __result = __result.Replace(
-                        $"+{SeraphLevelingModSystem.VANILLA_FORAGER_WILD_CROP_BONUS}% wild crop drops",
-                        $"+{combinedWildCrop}% wild crop drops");
+                        $"+{SeraphLevelingModSystem.VANILLA_FORAGER_WILD_CROP_BONUS}% wild crop drop rate",
+                        $"+{combinedWildCrop}% wild crop drop rate");
                 }
                 else if (hasNoTraits)
                 {
                     __result = dynamicForagerTrait;
                 }
-                else if (__result.Contains(plainForagerTraitName))
+                else if (ContainsOrphanTraitName(__result, plainForagerTraitName))
                 {
-                    __result = __result.Replace(plainForagerTraitName, dynamicForagerTrait);
+                    __result = ReplaceOrphanTraitName(__result, plainForagerTraitName, dynamicForagerTrait);
                 }
                 else
                 {
@@ -19194,7 +19334,7 @@ namespace SeraphLeveling
             // Process Furtive trait (reduces animal detection range)
             int furtiveLevel = eplr.WatchedAttributes.GetInt(SeraphLevelingModSystem.WATCHED_FURTIVE_LEVEL, 0);
             int furtiveBonus = eplr.WatchedAttributes.GetInt(SeraphLevelingModSystem.WATCHED_FURTIVE_BONUS, 0);
-            bool hasVanillaFurtive = eplr.WatchedAttributes.GetBool("sitHasVanillaFurtive", false);
+            bool hasVanillaFurtive = ClientHasVanillaTrait(eplr, "furtive", "malefactor");
             if (furtiveLevel > 0)
             {
                 string plainFurtiveTraitName = Lang.Get("seraphleveling:trait-sitfurtivemastery");
@@ -19209,19 +19349,21 @@ namespace SeraphLeveling
 
                 if (hasVanillaFurtive)
                 {
-                    // Class already has Furtive trait - update the existing values
+                    // Class already has Furtive trait - update the existing values.
+                    // Vanilla string is "-35% animal detection range" (earlier versions looked for
+                    // "% animal seeking range" which silently no-op'd against vanilla).
                     int combinedBonus = SeraphLevelingModSystem.VANILLA_FURTIVE_DETECTION_REDUCTION + furtiveBonus;
                     __result = __result.Replace(
-                        $"-{SeraphLevelingModSystem.VANILLA_FURTIVE_DETECTION_REDUCTION}% animal seeking range",
+                        $"-{SeraphLevelingModSystem.VANILLA_FURTIVE_DETECTION_REDUCTION}% animal detection range",
                         $"-{combinedBonus}% animal detection range");
                 }
                 else if (hasNoTraits)
                 {
                     __result = dynamicFurtiveTrait;
                 }
-                else if (__result.Contains(plainFurtiveTraitName))
+                else if (ContainsOrphanTraitName(__result, plainFurtiveTraitName))
                 {
-                    __result = __result.Replace(plainFurtiveTraitName, dynamicFurtiveTrait);
+                    __result = ReplaceOrphanTraitName(__result, plainFurtiveTraitName, dynamicFurtiveTrait);
                 }
                 else
                 {
@@ -19232,7 +19374,7 @@ namespace SeraphLeveling
             // Process Precise trait (improves damage to mechanicals)
             int preciseLevel = eplr.WatchedAttributes.GetInt(SeraphLevelingModSystem.WATCHED_PRECISE_LEVEL, 0);
             int preciseBonus = eplr.WatchedAttributes.GetInt(SeraphLevelingModSystem.WATCHED_PRECISE_BONUS, 0);
-            bool hasVanillaPrecise = eplr.WatchedAttributes.GetBool("sitHasVanillaPrecise", false);
+            bool hasVanillaPrecise = ClientHasVanillaTrait(eplr, "precise", "clockmaker");
             if (preciseLevel > 0)
             {
                 string plainPreciseTraitName = Lang.Get("seraphleveling:trait-sitprecisemastery");
@@ -19257,9 +19399,9 @@ namespace SeraphLeveling
                 {
                     __result = dynamicPreciseTrait;
                 }
-                else if (__result.Contains(plainPreciseTraitName))
+                else if (ContainsOrphanTraitName(__result, plainPreciseTraitName))
                 {
-                    __result = __result.Replace(plainPreciseTraitName, dynamicPreciseTrait);
+                    __result = ReplaceOrphanTraitName(__result, plainPreciseTraitName, dynamicPreciseTrait);
                 }
                 else
                 {
@@ -19286,9 +19428,9 @@ namespace SeraphLeveling
                 {
                     __result = dynamicHungerTrait;
                 }
-                else if (__result.Contains(plainHungerTraitName))
+                else if (ContainsOrphanTraitName(__result, plainHungerTraitName))
                 {
-                    __result = __result.Replace(plainHungerTraitName, dynamicHungerTrait);
+                    __result = ReplaceOrphanTraitName(__result, plainHungerTraitName, dynamicHungerTrait);
                 }
                 else
                 {
@@ -19298,7 +19440,7 @@ namespace SeraphLeveling
 
             // Process Technical unlock trait (translocator gear cost reduction)
             bool technicalUnlocked = eplr.WatchedAttributes.GetBool(SeraphLevelingModSystem.WATCHED_TECHNICAL_UNLOCKED, false);
-            if (technicalUnlocked)
+            if (technicalUnlocked && !ClientHasVanillaTrait(eplr, "technical", "clockmaker"))
             {
                 string plainTechnicalTraitName = Lang.Get("seraphleveling:trait-sittechnicalmastery");
                 string dynamicTechnicalTrait = Lang.Get("seraphleveling:trait-technical-dynamic");
@@ -19314,9 +19456,9 @@ namespace SeraphLeveling
                 {
                     __result = dynamicTechnicalTrait;
                 }
-                else if (__result.Contains(plainTechnicalTraitName))
+                else if (ContainsOrphanTraitName(__result, plainTechnicalTraitName))
                 {
-                    __result = __result.Replace(plainTechnicalTraitName, dynamicTechnicalTrait);
+                    __result = ReplaceOrphanTraitName(__result, plainTechnicalTraitName, dynamicTechnicalTrait);
                 }
                 else
                 {
@@ -19338,13 +19480,34 @@ namespace SeraphLeveling
                               __result.Contains(noTraitsMsg) ||
                               __result.Contains("No positive or negative traits");
 
-                if (hasNoTraits)
+                // If the Mining block already added a mining-only Hardy line for this player
+                // (no vanilla Hardy class), fold the health bonus INTO that line instead of
+                // adding a second `• Hardy` entry that would render as a duplicate.
+                var miningOnlyHardyMatch = System.Text.RegularExpressions.Regex.Match(__result,
+                    @"<font color=""#84ff84"">• Hardy </font> <font opacity=""0\.6"">\(\+(?<m>\d+)% mining speed\)</font>");
+                if (miningOnlyHardyMatch.Success)
+                {
+                    int miningPct = int.Parse(miningOnlyHardyMatch.Groups["m"].Value);
+                    string combined = Lang.Get("seraphleveling:trait-hardy-dynamic", miningPct, SeraphLevelingModSystem.HardyHealthBonus);
+                    __result = __result.Substring(0, miningOnlyHardyMatch.Index)
+                        + combined
+                        + __result.Substring(miningOnlyHardyMatch.Index + miningOnlyHardyMatch.Length);
+                }
+                // If vanilla Hardy line already lists health points (Blackguard), skip — the
+                // bonus is already represented by the vanilla line. (Stat is still applied via
+                // ApplyHardyHealthBonusStatic; this only avoids a duplicate display row.)
+                else if (System.Text.RegularExpressions.Regex.IsMatch(__result,
+                    @"<font color=""#84ff84"">• Hardy </font> <font opacity=""0\.6"">\([^)]*\d+ health points[^)]*\)</font>"))
+                {
+                    // intentional no-op
+                }
+                else if (hasNoTraits)
                 {
                     __result = dynamicHardyHealthTrait;
                 }
-                else if (__result.Contains(plainHardyHealthTraitName))
+                else if (ContainsOrphanTraitName(__result, plainHardyHealthTraitName))
                 {
-                    __result = __result.Replace(plainHardyHealthTraitName, dynamicHardyHealthTrait);
+                    __result = ReplaceOrphanTraitName(__result, plainHardyHealthTraitName, dynamicHardyHealthTrait);
                 }
                 else
                 {
@@ -19354,8 +19517,10 @@ namespace SeraphLeveling
 
             // Process Bowyer unlock trait (crude bow crafting)
             bool bowyerUnlocked = eplr.WatchedAttributes.GetBool(SeraphLevelingModSystem.WATCHED_BOWYER_UNLOCKED, false);
-            if (bowyerUnlocked)
+            if (bowyerUnlocked && !ClientHasVanillaTrait(eplr, "bowyer", "hunter"))
             {
+                // Skip if the player's class already shows a vanilla Bowyer line — vanilla covers it.
+                // (The unlock stat is still applied via ApplyBowyerBonusStatic; this only controls display.)
                 string plainBowyerTraitName = Lang.Get("seraphleveling:trait-sitbowyermastery");
                 string dynamicBowyerTrait = Lang.Get("seraphleveling:trait-bowyer-dynamic");
 
@@ -19370,9 +19535,9 @@ namespace SeraphLeveling
                 {
                     __result = dynamicBowyerTrait;
                 }
-                else if (__result.Contains(plainBowyerTraitName))
+                else if (ContainsOrphanTraitName(__result, plainBowyerTraitName))
                 {
-                    __result = __result.Replace(plainBowyerTraitName, dynamicBowyerTrait);
+                    __result = ReplaceOrphanTraitName(__result, plainBowyerTraitName, dynamicBowyerTrait);
                 }
                 else
                 {
@@ -19382,7 +19547,7 @@ namespace SeraphLeveling
 
             // Process Improviser unlock trait (sling crafting)
             bool improviserUnlocked = eplr.WatchedAttributes.GetBool(SeraphLevelingModSystem.WATCHED_IMPROVISER_UNLOCKED, false);
-            if (improviserUnlocked)
+            if (improviserUnlocked && !ClientHasVanillaTrait(eplr, "improviser", "malefactor"))
             {
                 string plainImproviserTraitName = Lang.Get("seraphleveling:trait-sitimprovisermastery");
                 string dynamicImproviserTrait = Lang.Get("seraphleveling:trait-improviser-dynamic");
@@ -19398,9 +19563,9 @@ namespace SeraphLeveling
                 {
                     __result = dynamicImproviserTrait;
                 }
-                else if (__result.Contains(plainImproviserTraitName))
+                else if (ContainsOrphanTraitName(__result, plainImproviserTraitName))
                 {
-                    __result = __result.Replace(plainImproviserTraitName, dynamicImproviserTrait);
+                    __result = ReplaceOrphanTraitName(__result, plainImproviserTraitName, dynamicImproviserTrait);
                 }
                 else
                 {
@@ -19410,7 +19575,7 @@ namespace SeraphLeveling
 
             // Process Tinkerer unlock trait (tuning spear crafting)
             bool tinkererUnlocked = eplr.WatchedAttributes.GetBool(SeraphLevelingModSystem.WATCHED_TINKERER_UNLOCKED, false);
-            if (tinkererUnlocked)
+            if (tinkererUnlocked && !ClientHasVanillaTrait(eplr, "tinkerer", "clockmaker"))
             {
                 string plainTinkererTraitName = Lang.Get("seraphleveling:trait-sittinkerermastery");
                 string dynamicTinkererTrait = Lang.Get("seraphleveling:trait-tinkerer-dynamic");
@@ -19426,9 +19591,9 @@ namespace SeraphLeveling
                 {
                     __result = dynamicTinkererTrait;
                 }
-                else if (__result.Contains(plainTinkererTraitName))
+                else if (ContainsOrphanTraitName(__result, plainTinkererTraitName))
                 {
-                    __result = __result.Replace(plainTinkererTraitName, dynamicTinkererTrait);
+                    __result = ReplaceOrphanTraitName(__result, plainTinkererTraitName, dynamicTinkererTrait);
                 }
                 else
                 {
@@ -19438,7 +19603,7 @@ namespace SeraphLeveling
 
             // Process Merciless unlock trait (shortsword/shield crafting)
             bool mercilessUnlocked = eplr.WatchedAttributes.GetBool(SeraphLevelingModSystem.WATCHED_MERCILESS_UNLOCKED, false);
-            if (mercilessUnlocked)
+            if (mercilessUnlocked && !ClientHasVanillaTrait(eplr, "merciless", "blackguard"))
             {
                 string plainMercilessTraitName = Lang.Get("seraphleveling:trait-sitmercilessmastery");
                 string dynamicMercilessTrait = Lang.Get("seraphleveling:trait-merciless-dynamic");
@@ -19454,9 +19619,9 @@ namespace SeraphLeveling
                 {
                     __result = dynamicMercilessTrait;
                 }
-                else if (__result.Contains(plainMercilessTraitName))
+                else if (ContainsOrphanTraitName(__result, plainMercilessTraitName))
                 {
-                    __result = __result.Replace(plainMercilessTraitName, dynamicMercilessTrait);
+                    __result = ReplaceOrphanTraitName(__result, plainMercilessTraitName, dynamicMercilessTrait);
                 }
                 else
                 {
@@ -19474,7 +19639,7 @@ namespace SeraphLeveling
             // =========================================================================
 
             // Civil trait (Tailor) - foraging loot penalty
-            bool hasCivil = eplr.WatchedAttributes.GetBool("sitHasCivil", false);
+            bool hasCivil = ClientHasVanillaTrait(eplr, "civil", "tailor");
             int civilRemaining = eplr.WatchedAttributes.GetInt(SeraphLevelingModSystem.WATCHED_CIVIL_REMAINING, 0);
             if (hasCivil)
             {
@@ -19498,7 +19663,7 @@ namespace SeraphLeveling
             // Weak trait (Tailor) - HP and mining speed penalty
             // Vanilla format: <font color="#ff8484">• Weak </font> <font opacity="0.6">(-2 health points, -10% mining speed)</font>
             // Both penalties are cancelled together at mining level 10
-            bool hasWeak = eplr.WatchedAttributes.GetBool("sitHasWeak", false);
+            bool hasWeak = ClientHasVanillaTrait(eplr, "weak", "tailor");
             int weakMiningRemaining = eplr.WatchedAttributes.GetInt(SeraphLevelingModSystem.WATCHED_WEAK_MINING_REMAINING, 0);
             int weakHpRemaining = eplr.WatchedAttributes.GetInt(SeraphLevelingModSystem.WATCHED_WEAK_HP_REMAINING, 0);
             if (hasWeak)
@@ -19522,7 +19687,7 @@ namespace SeraphLeveling
 
             // Kind trait (Tailor) - animal loot and harvesting speed penalty
             // Vanilla format: <font color="#ff8484">• Kind </font> <font opacity="0.6">(-10% animal loot, -25% harvesting speed)</font>
-            bool hasKind = eplr.WatchedAttributes.GetBool("sitHasKind", false);
+            bool hasKind = ClientHasVanillaTrait(eplr, "kind", "tailor");
             int kindLootRemaining = eplr.WatchedAttributes.GetInt(SeraphLevelingModSystem.WATCHED_KIND_LOOT_REMAINING, 0);
             int kindSpeedRemaining = eplr.WatchedAttributes.GetInt(SeraphLevelingModSystem.WATCHED_KIND_SPEED_REMAINING, 0);
             if (hasKind)
@@ -19557,7 +19722,7 @@ namespace SeraphLeveling
 
             // Farsighted trait (Hunter) - melee damage penalty
             // Vanilla format: <font color="#ff8484">• Farsighted </font> <font opacity="0.6">(-15% melee damage)</font>
-            bool hasFarsighted = eplr.WatchedAttributes.GetBool("sitHasFarsighted", false);
+            bool hasFarsighted = ClientHasVanillaTrait(eplr, "farsighted", "hunter");
             int farsightedRemaining = eplr.WatchedAttributes.GetInt(SeraphLevelingModSystem.WATCHED_FARSIGHTED_REMAINING, 0);
             if (hasFarsighted)
             {
@@ -19579,7 +19744,7 @@ namespace SeraphLeveling
 
             // Nervous trait (Malefactor, Clockmaker) - melee damage penalty
             // Vanilla format: <font color="#ff8484">• Nervous </font> <font opacity="0.6">(-15% melee damage)</font>
-            bool hasNervous = eplr.WatchedAttributes.GetBool("sitHasNervous", false);
+            bool hasNervous = ClientHasVanillaTrait(eplr, "nervous", "malefactor", "clockmaker");
             int nervousRemaining = eplr.WatchedAttributes.GetInt(SeraphLevelingModSystem.WATCHED_NERVOUS_REMAINING, 0);
             if (hasNervous)
             {
@@ -19601,7 +19766,7 @@ namespace SeraphLeveling
 
             // Nearsighted trait (Blackguard) - ranged damage penalty
             // Vanilla format: <font color="#ff8484">• Nearsighted </font> <font opacity="0.6">(-15% ranged damage)</font>
-            bool hasNearsighted = eplr.WatchedAttributes.GetBool("sitHasNearsighted", false);
+            bool hasNearsighted = ClientHasVanillaTrait(eplr, "nearsighted", "blackguard");
             int nearsightedRemaining = eplr.WatchedAttributes.GetInt(SeraphLevelingModSystem.WATCHED_NEARSIGHTED_REMAINING, 0);
             if (hasNearsighted)
             {
@@ -19624,7 +19789,7 @@ namespace SeraphLeveling
             // Frail trait (Malefactor, Clockmaker) - HP and ranged distance penalty
             // Vanilla format: <font color="#ff8484">• Frail </font> <font opacity="0.6">(-2.5 health points, -25% ranged distance)</font>
             // Both penalties are cancelled together at ranged level 25
-            bool hasFrail = eplr.WatchedAttributes.GetBool("sitHasFrail", false);
+            bool hasFrail = ClientHasVanillaTrait(eplr, "frail", "malefactor", "clockmaker");
             int frailDistanceRemaining = eplr.WatchedAttributes.GetInt(SeraphLevelingModSystem.WATCHED_FRAIL_DISTANCE_REMAINING, 0);
             float frailHpRemaining = eplr.WatchedAttributes.GetFloat(SeraphLevelingModSystem.WATCHED_FRAIL_HP_REMAINING, 0f);
             if (hasFrail)
@@ -19648,7 +19813,7 @@ namespace SeraphLeveling
 
             // Heavyhanded trait (Blackguard) - vessel, foraging, wild crop penalties
             // Vanilla format: <font color="#ff8484">• Heavyhanded </font> <font opacity="0.6">(-10% cracked vessel loot, -15% loot from foraging, -20% wild crop drop rate)</font>
-            bool hasHeavyhanded = eplr.WatchedAttributes.GetBool("sitHasHeavyhanded", false);
+            bool hasHeavyhanded = ClientHasVanillaTrait(eplr, "heavyhanded", "blackguard");
             int heavyhandedVesselRemaining = eplr.WatchedAttributes.GetInt(SeraphLevelingModSystem.WATCHED_HEAVYHANDED_VESSEL_REMAINING, 0);
             int heavyhandedForagingRemaining = eplr.WatchedAttributes.GetInt(SeraphLevelingModSystem.WATCHED_HEAVYHANDED_FORAGING_REMAINING, 0);
             int heavyhandedWildCropRemaining = eplr.WatchedAttributes.GetInt(SeraphLevelingModSystem.WATCHED_HEAVYHANDED_WILD_CROP_REMAINING, 0);
@@ -19679,7 +19844,7 @@ namespace SeraphLeveling
 
             // Ravenous trait (Blackguard) - hunger rate penalty
             // Vanilla format: <font color="#ff8484">• Ravenous </font> <font opacity="0.6">(+30% hunger rate)</font>
-            bool hasRavenous = eplr.WatchedAttributes.GetBool("sitHasVanillaRavenous", false);
+            bool hasRavenous = ClientHasVanillaTrait(eplr, "ravenous", "blackguard");
             int ravenousRemaining = eplr.WatchedAttributes.GetInt(SeraphLevelingModSystem.WATCHED_RAVENOUS_REMAINING, 0);
             if (hasRavenous)
             {
@@ -19703,7 +19868,7 @@ namespace SeraphLeveling
             // Claustrophobic trait (Hunter) - ore drop and mining speed penalties
             // Mining penalty decreases progressively with mining level (1-10)
             // At level 10, both mining and ore penalties are cancelled, and Hardy bonus starts showing
-            bool hasClaustrophobic = eplr.WatchedAttributes.GetBool("sitHasClaustrophobic", false);
+            bool hasClaustrophobic = ClientHasVanillaTrait(eplr, "claustrophobic", "hunter");
             int claustrophobicMiningRemaining = eplr.WatchedAttributes.GetInt(SeraphLevelingModSystem.WATCHED_CLAUSTROPHOBIC_MINING_REMAINING, 0);
 
             ClientApi.Logger.Debug($"[SeraphLeveling] Claustrophobic check: hasClaustrophobic={hasClaustrophobic}, miningRemaining={claustrophobicMiningRemaining}");
@@ -19711,69 +19876,44 @@ namespace SeraphLeveling
 
             if (hasClaustrophobic)
             {
+                // Single robust regex that anchors on the leading `<font color="#ff8484">•`
+                // and consumes the WHOLE trait line atomically. Tolerates whitespace
+                // variations and an optional leading newline.
+                //
+                // Use Match (not the old "did the string change?" check), because at level 0
+                // the dynamic replacement is byte-identical to vanilla — Replace returns the
+                // same content, the equality check thinks "no match", and the old fallback chain
+                // would fire and produce nested font tags + a duplicated bullet.
+                var claustroLineRegex = ClaustrophobicLineRegex;
+                var match = claustroLineRegex.Match(__result);
+
                 if (claustrophobicMiningRemaining > 0)
                 {
-                    // Show both ore drop (-15%) and mining speed penalties while being reduced
-                    // Ore penalty stays at -15% until fully cancelled, mining speed decreases progressively
                     string dynamicClaustrophobicTrait = Lang.Get("seraphleveling:trait-claustrophobic-dynamic",
                         SeraphLevelingModSystem.VANILLA_CLAUSTROPHOBIC_ORE_PENALTY, claustrophobicMiningRemaining);
                     ClientApi.Logger.Debug($"[SeraphLeveling] Replacing Claustrophobic with: {dynamicClaustrophobicTrait}");
 
-                    // Vanilla format: <font color="#ff8484">• Claustrophobic </font> <font opacity="0.6">(-15% ore drop rate, -10% mining speed)</font>
-                    string beforeReplace = __result;
-                    __result = System.Text.RegularExpressions.Regex.Replace(__result,
-                        @"<font color=""#ff8484"">• Claustrophobic </font> <font opacity=""0\.6"">\(-\d+% ore drop rate, -\d+% mining speed\)</font>",
-                        dynamicClaustrophobicTrait);
-
-                    if (__result == beforeReplace)
+                    if (match.Success)
                     {
-                        ClientApi.Logger.Debug("[SeraphLeveling] Primary regex did not match, trying alternative patterns");
-                        // Try without bullet
-                        __result = System.Text.RegularExpressions.Regex.Replace(__result,
-                            @"<font color=""#ff8484"">Claustrophobic</font>.*?\(-\d+% ore drop rate, -\d+% mining speed\).*?</font>",
-                            dynamicClaustrophobicTrait);
+                        // Preserve a leading newline so adjacent trait lines stay separated
+                        string prefix = match.Value.StartsWith("\n") ? "\n" : "";
+                        __result = __result.Remove(match.Index, match.Length)
+                                           .Insert(match.Index, prefix + dynamicClaustrophobicTrait);
+                        ClientApi.Logger.Debug("[SeraphLeveling] Claustrophobic replacement: SUCCESS");
                     }
-
-                    if (__result == beforeReplace)
+                    else
                     {
-                        // Try simple pattern without font tags
-                        __result = System.Text.RegularExpressions.Regex.Replace(__result,
-                            @"Claustrophobic.*?\(-\d+% ore drop rate, -\d+% mining speed\)",
-                            dynamicClaustrophobicTrait);
+                        ClientApi.Logger.Debug("[SeraphLeveling] Claustrophobic line not found in vanilla format; leaving as-is.");
                     }
-
-                    ClientApi.Logger.Debug($"[SeraphLeveling] After replacement: {(__result != beforeReplace ? "SUCCESS" : "FAILED")}");
                 }
                 else
                 {
-                    // Both penalties cancelled at level 10 - remove Claustrophobic entirely (Hardy will show instead)
-                    ClientApi.Logger.Debug("[SeraphLeveling] Trying to remove Claustrophobic (level >= 10)");
-                    string beforeReplace = __result;
-
-                    // Vanilla format: <font color="#ff8484">• Claustrophobic </font> <font opacity="0.6">(-15% ore drop rate, -10% mining speed)</font>
-                    // Use empty string replacement, cleanup at end handles newlines
-                    __result = System.Text.RegularExpressions.Regex.Replace(__result,
-                        @"\n?<font color=""#ff8484"">• Claustrophobic </font> <font opacity=""0\.6"">\(-\d+% ore drop rate, -\d+% mining speed\)</font>",
-                        "");
-
-                    if (__result == beforeReplace)
+                    // Both penalties cancelled at level 10 — remove the line entirely (Hardy shows instead)
+                    if (match.Success)
                     {
-                        ClientApi.Logger.Debug("[SeraphLeveling] Primary removal regex did not match, trying alternatives");
-                        // Try broader pattern
-                        __result = System.Text.RegularExpressions.Regex.Replace(__result,
-                            @"\n?<font color=""#ff8484"">.*?Claustrophobic.*?</font>.*?\(-\d+% ore drop rate, -\d+% mining speed\).*?</font>",
-                            "");
+                        __result = __result.Remove(match.Index, match.Length);
+                        ClientApi.Logger.Debug("[SeraphLeveling] Claustrophobic removal: SUCCESS");
                     }
-
-                    if (__result == beforeReplace)
-                    {
-                        // Try without font tags at all
-                        __result = System.Text.RegularExpressions.Regex.Replace(__result,
-                            @"\n?.*?Claustrophobic.*?\(-\d+% ore drop rate, -\d+% mining speed\).*?",
-                            "");
-                    }
-
-                    ClientApi.Logger.Debug($"[SeraphLeveling] Removal result: {(__result != beforeReplace ? "SUCCESS" : "FAILED")}");
                 }
             }
 
@@ -20022,10 +20162,134 @@ namespace SeraphLeveling
             }
             __result = string.Join("\n", nonEmptyLines);
 
+            // Defensive cleanup: collapse any duplicate-bullet patterns introduced
+            // by overlapping regex replacements on vanilla trait text. Catches things
+            // like "• • Claustrophobic" or nested-font variants regardless of which
+            // earlier replacement step produced them.
+            __result = CollapseDuplicateBullets(__result);
+
             // Final trim
             __result = __result.Trim();
 
             ClientApi.Logger.Debug($"[SeraphLeveling] Modified result: {__result}");
+        }
+
+        private static readonly System.Text.RegularExpressions.Regex DuplicateBulletPair =
+            new System.Text.RegularExpressions.Regex(
+                @"•(?<between>(?:[ \t]|<font[^>]*>|</font>)*)•",
+                System.Text.RegularExpressions.RegexOptions.Compiled);
+
+        // Cache compiled "orphan-only" regexes per plain trait name (e.g. "<font color="#84ff84">• Hardy </font>").
+        // These match the plain name ONLY when it's a standalone line entry (followed by newline or
+        // end-of-string), not when it's the leading name of a vanilla trait line that has its own
+        // " <font opacity..."  description tag immediately after. That distinction is critical:
+        // unrestricted Contains/Replace on the plain name corrupts vanilla lines (strips the name
+        // or inserts our dynamic before the vanilla description, leaving both descriptions stacked).
+        private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, System.Text.RegularExpressions.Regex> OrphanTraitPatternCache =
+            new System.Collections.Concurrent.ConcurrentDictionary<string, System.Text.RegularExpressions.Regex>();
+
+        private static System.Text.RegularExpressions.Regex GetOrphanTraitPattern(string plainName)
+        {
+            return OrphanTraitPatternCache.GetOrAdd(plainName, key =>
+                new System.Text.RegularExpressions.Regex(
+                    @"\n?" + System.Text.RegularExpressions.Regex.Escape(key) + @"(?=\n|$)",
+                    System.Text.RegularExpressions.RegexOptions.Compiled));
+        }
+
+        /// <summary>
+        /// Returns true if plainName appears as a standalone entry in text
+        /// (followed by a newline or end-of-string), not as a substring of a longer vanilla line.
+        /// </summary>
+        private static bool ContainsOrphanTraitName(string text, string plainName)
+        {
+            if (string.IsNullOrEmpty(text) || string.IsNullOrEmpty(plainName)) return false;
+            return GetOrphanTraitPattern(plainName).IsMatch(text);
+        }
+
+        /// <summary>
+        /// Replaces standalone occurrences of plainName with the given replacement.
+        /// Preserves the leading newline if matched. Vanilla lines are left untouched.
+        /// </summary>
+        private static string ReplaceOrphanTraitName(string text, string plainName, string replacement)
+        {
+            if (string.IsNullOrEmpty(text) || string.IsNullOrEmpty(plainName)) return text;
+            return GetOrphanTraitPattern(plainName).Replace(text, m =>
+                m.Value.StartsWith("\n") ? "\n" + replacement : replacement);
+        }
+
+        /// <summary>
+        /// Removes standalone occurrences of plainName (and the preceding newline if present).
+        /// Vanilla lines are left untouched.
+        /// </summary>
+        private static string RemoveOrphanTraitName(string text, string plainName)
+        {
+            if (string.IsNullOrEmpty(text) || string.IsNullOrEmpty(plainName)) return text;
+            return GetOrphanTraitPattern(plainName).Replace(text, "");
+        }
+
+        /// <summary>
+        /// Reliable client-side check for whether the player has a vanilla trait. Reads from
+        /// `characterTraits` and `characterClass` watched attributes (both reliably synced by
+        /// vanilla VS) instead of our own `sitHasVanillaX` bools, which depend on a MarkPathDirty
+        /// call that doesn't always cover sibling attributes and can leave the client reading
+        /// the default `false` even when the player's class genuinely has the trait.
+        /// </summary>
+        private static bool ClientHasVanillaTrait(EntityPlayer eplr, string traitCode, params string[] classFallbacks)
+        {
+            if (eplr == null) return false;
+
+            string[] traits = eplr.WatchedAttributes.GetStringArray("characterTraits", null);
+            if (traits != null)
+            {
+                for (int i = 0; i < traits.Length; i++)
+                {
+                    if (string.Equals(traits[i], traitCode, StringComparison.OrdinalIgnoreCase))
+                        return true;
+                }
+            }
+
+            if (classFallbacks != null && classFallbacks.Length > 0)
+            {
+                string charClass = eplr.WatchedAttributes.GetString("characterClass", "")?.ToLowerInvariant() ?? "";
+                for (int i = 0; i < classFallbacks.Length; i++)
+                {
+                    if (string.Equals(charClass, classFallbacks[i], StringComparison.OrdinalIgnoreCase))
+                        return true;
+                }
+            }
+
+            return false;
+        }
+
+        // Matches the full vanilla Claustrophobic trait line. Anchors on the red font tag
+        // and consumes through the closing opacity font, optionally including a leading newline.
+        // Tolerates whitespace variation between tokens.
+        private static readonly System.Text.RegularExpressions.Regex ClaustrophobicLineRegex =
+            new System.Text.RegularExpressions.Regex(
+                @"\n?<font[^>]*color[^>]*#ff8484[^>]*>[ \t]*•[ \t]*Claustrophobic[ \t]*</font>[ \t]*<font[^>]*opacity[^>]*>[ \t]*\(-\d+%\s*ore\s+drop\s+rate,\s*-\d+%\s*mining\s+speed\s*\)[ \t]*</font>",
+                System.Text.RegularExpressions.RegexOptions.Compiled);
+
+        /// <summary>
+        /// Collapses adjacent bullet markers ("•") separated only by whitespace
+        /// and/or font open/close tags into a single bullet. Same-line only; bullets
+        /// separated by a newline (i.e. different trait entries) are left alone.
+        /// Iterates so runs of 3+ bullets collapse fully; bounded by a safety counter.
+        /// </summary>
+        private static string CollapseDuplicateBullets(string text)
+        {
+            if (string.IsNullOrEmpty(text)) return text;
+
+            string previous;
+            int safety = 0;
+            do
+            {
+                previous = text;
+                text = DuplicateBulletPair.Replace(text, m => "•" + m.Groups["between"].Value);
+                safety++;
+            }
+            while (text != previous && safety < 8);
+
+            return text;
         }
     }
 

@@ -8080,7 +8080,7 @@ namespace SeraphLeveling
                 return $"{firearmCode}+{projCheck}";
             }
 
-            // Check for sling stones (thrown stones)
+            // Check for sling stones (slung from sling — entity is thrownstone-{rock})
             if (projCheck.StartsWith("stone-") || projCheck == "stone" || projCheck.StartsWith("thrownstone") ||
                 projCheck.Contains("slingstone") || projCheck.Contains("sling-stone"))
             {
@@ -8091,6 +8091,27 @@ namespace SeraphLeveling
                     slingCode = heldCheck;
                 }
                 return $"{slingCode}+{projCheck}";
+            }
+
+            // Generic thrown items (CollectibleBehaviorThrowable). VS 1.22 spawns hand-thrown
+            // stones, bones, etc. as a single shared `game:thrownitem` projectile entity — the
+            // actual item is in ProjectileStack. Peek there to figure out what was thrown so
+            // Improviser etc. can recognize it as a stone.
+            if (projCheck == "thrownitem" || projCheck.StartsWith("thrownitem-") || projCheck.StartsWith("thrownitem+"))
+            {
+                string stackCode = "";
+                if (projectile is IProjectile proj && proj.ProjectileStack?.Collectible?.Code != null)
+                {
+                    stackCode = proj.ProjectileStack.Collectible.Code.ToString();
+                }
+                string stackCheck = !string.IsNullOrEmpty(stackCode) && stackCode.Contains(":")
+                    ? stackCode.Substring(stackCode.IndexOf(':') + 1)
+                    : stackCode;
+                if (!string.IsNullOrEmpty(stackCheck))
+                {
+                    return $"thrown+{stackCheck}";
+                }
+                return $"thrown+{projCheck}";
             }
 
             // Check for spear/javelin throws (thrown spears deal ranged damage)

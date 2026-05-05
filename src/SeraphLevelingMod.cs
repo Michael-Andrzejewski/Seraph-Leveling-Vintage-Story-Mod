@@ -7714,13 +7714,25 @@ namespace SeraphLeveling
 
             string playerUid = attackerPlayer.PlayerUID;
 
+            // Track unlock-trait progression FIRST, independent of the ranged credit cap.
+            // Bowyer and Improviser are separate unlocks that should still progress for players
+            // who have already maxed their ranged credits.
+            if (IsSimpleBowOrLongbow(weaponCombo))
+            {
+                TrackBowyerBowDamage(attackerPlayer, damage);
+            }
+            if (IsThrownRock(weaponCombo))
+            {
+                TrackImproviserRockDamage(attackerPlayer, damage);
+            }
+
             // Get or create player progress data
             var playerProgress = RangedProgress.GetOrAdd(playerUid, _ => new RangedProgressData());
 
             // Get the player-specific max credits (accounts for Nearsighted/Frail penalties)
             int maxCredits = GetMaxRangedCredits(attackerPlayer.Entity);
 
-            // Skip all processing if already at max - completely invisible
+            // Skip remaining credit processing if already at max - completely invisible
             if (playerProgress.TotalCredits >= maxCredits) return;
 
             // Get or create progress for this specific weapon combination
@@ -7761,18 +7773,6 @@ namespace SeraphLeveling
 
                 // Check for trait unlocks that depend on ranged damage
                 CheckBowyerUnlock(attackerPlayer);
-            }
-
-            // Track bow damage for Bowyer unlock (simple bow or longbow)
-            if (IsSimpleBowOrLongbow(weaponCombo))
-            {
-                TrackBowyerBowDamage(attackerPlayer, damage);
-            }
-
-            // Track thrown rock damage for Improviser unlock
-            if (IsThrownRock(weaponCombo))
-            {
-                TrackImproviserRockDamage(attackerPlayer, damage);
             }
         }
 
@@ -7842,6 +7842,11 @@ namespace SeraphLeveling
             pendingImproviserProgressSave = true;
 
             player.Entity.WatchedAttributes.SetFloat(WATCHED_IMPROVISER_ROCK_DAMAGE, progress.TotalRockDamage);
+
+            if (DebugLoggingEnabled)
+            {
+                ServerApi?.Logger?.Debug($"[SeraphLeveling] Improviser rock damage tracked for {player.PlayerName}: +{modifiedDamage:F1} (total {progress.TotalRockDamage:F1}/{ImproviserRockDamageThreshold})");
+            }
 
             // Check if unlock threshold is reached
             CheckImproviserUnlock(player);

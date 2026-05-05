@@ -19095,19 +19095,19 @@ namespace SeraphLeveling
                 {
                     // Commoner or other class with no traits - replace entirely with our dynamic Hardy
                     // Use mining-only format since we don't have Hardy Health yet
-                    __result = Lang.Get("seraphleveling:trait-hardy-mining-only-dynamic", miningBonus);
+                    __result = BuildLocalizedTraitLine("hardy", "seraphleveling:trait-hardy-mining-only-dynamic", miningBonus);
                     hasNoTraits = false; // We now have traits
                 }
                 else if (ContainsOrphanTraitName(__result, plainMiningTraitName))
                 {
                     // We have our trait but no vanilla Hardy - replace orphan plain name with dynamic version
                     __result = ReplaceOrphanTraitName(__result, plainMiningTraitName,
-                        Lang.Get("seraphleveling:trait-hardy-mining-only-dynamic", miningBonus));
+                        BuildLocalizedTraitLine("hardy", "seraphleveling:trait-hardy-mining-only-dynamic", miningBonus));
                 }
                 else
                 {
                     // Has other traits but no Hardy at all - append our dynamic Hardy
-                    __result = __result + "\n" + Lang.Get("seraphleveling:trait-hardy-mining-only-dynamic", miningBonus);
+                    __result = __result + "\n" + BuildLocalizedTraitLine("hardy", "seraphleveling:trait-hardy-mining-only-dynamic", miningBonus);
                 }
             }
 
@@ -19135,18 +19135,18 @@ namespace SeraphLeveling
                 else if (hasNoTraits)
                 {
                     // Commoner or other class with no traits - replace entirely with our dynamic Soldier
-                    __result = Lang.Get("seraphleveling:trait-soldier-dynamic", meleeBonus);
+                    __result = BuildLocalizedTraitLine("soldier", "seraphleveling:trait-soldier-dynamic", meleeBonus);
                 }
                 else if (ContainsOrphanTraitName(__result, plainMeleeTraitName))
                 {
                     // We have our trait but no vanilla Soldier - replace orphan plain name with dynamic version
                     __result = ReplaceOrphanTraitName(__result, plainMeleeTraitName,
-                        Lang.Get("seraphleveling:trait-soldier-dynamic", meleeBonus));
+                        BuildLocalizedTraitLine("soldier", "seraphleveling:trait-soldier-dynamic", meleeBonus));
                 }
                 else
                 {
                     // Has other traits but no Soldier at all - append our dynamic Soldier
-                    __result = __result + "\n" + Lang.Get("seraphleveling:trait-soldier-dynamic", meleeBonus);
+                    __result = __result + "\n" + BuildLocalizedTraitLine("soldier", "seraphleveling:trait-soldier-dynamic", meleeBonus);
                 }
             }
 
@@ -19180,18 +19180,18 @@ namespace SeraphLeveling
                 else if (hasNoTraits)
                 {
                     // Commoner or other class with no traits - replace entirely with our dynamic Focused
-                    __result = Lang.Get("seraphleveling:trait-focused-dynamic", rangedDamageBonus, rangedAccuracyBonus, rangedDistanceBonus);
+                    __result = BuildLocalizedTraitLine("focused", "seraphleveling:trait-focused-dynamic", rangedDamageBonus, rangedAccuracyBonus, rangedDistanceBonus);
                 }
                 else if (ContainsOrphanTraitName(__result, plainRangedTraitName))
                 {
                     // We have our trait but no vanilla Focused - replace orphan plain name with dynamic version
                     __result = ReplaceOrphanTraitName(__result, plainRangedTraitName,
-                        Lang.Get("seraphleveling:trait-focused-dynamic", rangedDamageBonus, rangedAccuracyBonus, rangedDistanceBonus));
+                        BuildLocalizedTraitLine("focused", "seraphleveling:trait-focused-dynamic", rangedDamageBonus, rangedAccuracyBonus, rangedDistanceBonus));
                 }
                 else
                 {
                     // Has other traits but no Focused at all - append our dynamic Focused
-                    __result = __result + "\n" + Lang.Get("seraphleveling:trait-focused-dynamic", rangedDamageBonus, rangedAccuracyBonus, rangedDistanceBonus);
+                    __result = __result + "\n" + BuildLocalizedTraitLine("focused", "seraphleveling:trait-focused-dynamic", rangedDamageBonus, rangedAccuracyBonus, rangedDistanceBonus);
                 }
             }
 
@@ -19218,18 +19218,18 @@ namespace SeraphLeveling
                 else if (hasNoTraits)
                 {
                     // Commoner or other class with no traits - replace entirely with our dynamic Fleetfooted
-                    __result = Lang.Get("seraphleveling:trait-fleetfooted-dynamic", walkingBonus);
+                    __result = BuildLocalizedTraitLine("fleetfooted", "seraphleveling:trait-fleetfooted-dynamic", walkingBonus);
                 }
                 else if (ContainsOrphanTraitName(__result, plainWalkingTraitName))
                 {
                     // We have our trait but no vanilla Fleetfooted - replace orphan plain name with dynamic version
                     __result = ReplaceOrphanTraitName(__result, plainWalkingTraitName,
-                        Lang.Get("seraphleveling:trait-fleetfooted-dynamic", walkingBonus));
+                        BuildLocalizedTraitLine("fleetfooted", "seraphleveling:trait-fleetfooted-dynamic", walkingBonus));
                 }
                 else
                 {
                     // Has other traits but no Fleetfooted at all - append our dynamic Fleetfooted
-                    __result = __result + "\n" + Lang.Get("seraphleveling:trait-fleetfooted-dynamic", walkingBonus);
+                    __result = __result + "\n" + BuildLocalizedTraitLine("fleetfooted", "seraphleveling:trait-fleetfooted-dynamic", walkingBonus);
                 }
             }
 
@@ -19268,7 +19268,7 @@ namespace SeraphLeveling
                 else if (hasNoTraits)
                 {
                     // No traits at all - show our armor progression as a Soldier-like trait
-                    __result = Lang.Get("seraphleveling:trait-soldier-armor-dynamic", totalDurabilityBonus, totalWalkSpeedBonus);
+                    __result = BuildLocalizedTraitLine("soldier", "seraphleveling:trait-soldier-armor-dynamic", totalDurabilityBonus, totalWalkSpeedBonus);
                 }
                 else
                 {
@@ -19277,17 +19277,17 @@ namespace SeraphLeveling
                     if (totalDurabilityBonus > 0 || totalWalkSpeedBonus > 0)
                     {
                         // Check if melee progression already added a dynamic Soldier entry
-                        string meleeSoldierPattern = Lang.Get("seraphleveling:trait-soldier-dynamic", meleeBonus);
+                        string meleeSoldierPattern = BuildLocalizedTraitLine("soldier", "seraphleveling:trait-soldier-dynamic", meleeBonus);
                         if (meleeLevel > 0 && __result.Contains(meleeSoldierPattern))
                         {
                             // Replace the melee-only Soldier with a combined entry
                             __result = __result.Replace(meleeSoldierPattern,
-                                Lang.Get("seraphleveling:trait-soldier-combined-dynamic", meleeBonus, totalDurabilityBonus, totalWalkSpeedBonus));
+                                BuildLocalizedTraitLine("soldier", "seraphleveling:trait-soldier-combined-dynamic", meleeBonus, totalDurabilityBonus, totalWalkSpeedBonus));
                         }
                         else
                         {
                             // No melee Soldier was added, add armor-only entry
-                            __result = __result + "\n" + Lang.Get("seraphleveling:trait-soldier-armor-dynamic", totalDurabilityBonus, totalWalkSpeedBonus);
+                            __result = __result + "\n" + BuildLocalizedTraitLine("soldier", "seraphleveling:trait-soldier-armor-dynamic", totalDurabilityBonus, totalWalkSpeedBonus);
                         }
                     }
                 }
@@ -19298,7 +19298,7 @@ namespace SeraphLeveling
             if (clothierUnlocked && !ClientHasVanillaTrait(eplr, "clothier", "tailor"))
             {
                 string plainClothierTraitName = Lang.Get("seraphleveling:trait-sitclothiermastery");
-                string dynamicClothierTrait = Lang.Get("seraphleveling:trait-clothier-dynamic");
+                string dynamicClothierTrait = BuildLocalizedTraitLine("clothier", "seraphleveling:trait-clothier-dynamic");
 
                 // Re-check hasNoTraits after armor processing
                 hasNoTraits = string.IsNullOrEmpty(__result) ||
@@ -19328,7 +19328,7 @@ namespace SeraphLeveling
             if (menderLevel > 0)
             {
                 string plainMenderTraitName = Lang.Get("seraphleveling:trait-sitmendermastery");
-                string dynamicMenderTrait = Lang.Get("seraphleveling:trait-mender-dynamic", menderBonus);
+                string dynamicMenderTrait = BuildLocalizedTraitLine("mender", "seraphleveling:trait-mender-dynamic", menderBonus);
 
                 // Re-check hasNoTraits
                 hasNoTraits = string.IsNullOrEmpty(__result) ||
@@ -19371,7 +19371,7 @@ namespace SeraphLeveling
             {
                 string plainPilfererTraitName = Lang.Get("seraphleveling:trait-sitpilferermastery");
                 // Dynamic format params are (vesselContents, rustyGear, wholeVessel)
-                string dynamicPilfererTrait = Lang.Get("seraphleveling:trait-pilferer-dynamic",
+                string dynamicPilfererTrait = BuildLocalizedTraitLine("pilferer", "seraphleveling:trait-pilferer-dynamic",
                     pilfererVesselBonus, pilfererRustyBonus, pilfererWholeBonus);
 
                 // Re-check hasNoTraits
@@ -19393,7 +19393,7 @@ namespace SeraphLeveling
                     int combinedVessel = SeraphLevelingModSystem.VANILLA_PILFERER_VESSEL_CONTENTS_BONUS + pilfererVesselBonus;
                     int combinedRusty = SeraphLevelingModSystem.VANILLA_PILFERER_RUSTY_GEAR_BONUS + pilfererRustyBonus;
                     int combinedWhole = SeraphLevelingModSystem.VANILLA_PILFERER_WHOLE_VESSEL_BONUS + pilfererWholeBonus;
-                    string combinedPilfererTrait = Lang.Get("seraphleveling:trait-pilferer-dynamic",
+                    string combinedPilfererTrait = BuildLocalizedTraitLine("pilferer", "seraphleveling:trait-pilferer-dynamic",
                         combinedVessel, combinedRusty, combinedWhole);
                     __result = ReplaceVanillaTraitLine(__result, "pilferer", combinedPilfererTrait);
                 }
@@ -19421,7 +19421,7 @@ namespace SeraphLeveling
             if (resourcefulLootBonus > 0 || resourcefulSpeedBonus > 0)
             {
                 string plainResourcefulTraitName = Lang.Get("seraphleveling:trait-sitresourcefulmastery");
-                string dynamicResourcefulTrait = Lang.Get("seraphleveling:trait-resourceful-dynamic", resourcefulLootBonus, resourcefulSpeedBonus);
+                string dynamicResourcefulTrait = BuildLocalizedTraitLine("resourceful", "seraphleveling:trait-resourceful-dynamic", resourcefulLootBonus, resourcefulSpeedBonus);
 
                 // Re-check hasNoTraits
                 hasNoTraits = string.IsNullOrEmpty(__result) ||
@@ -19463,7 +19463,7 @@ namespace SeraphLeveling
             if (foragerLootBonus > 0 || foragerWildCropBonus > 0)
             {
                 string plainForagerTraitName = Lang.Get("seraphleveling:trait-sitforagermastery");
-                string dynamicForagerTrait = Lang.Get("seraphleveling:trait-forager-dynamic", foragerLootBonus, foragerWildCropBonus);
+                string dynamicForagerTrait = BuildLocalizedTraitLine("forager", "seraphleveling:trait-forager-dynamic", foragerLootBonus, foragerWildCropBonus);
 
                 // Re-check hasNoTraits
                 hasNoTraits = string.IsNullOrEmpty(__result) ||
@@ -19503,7 +19503,7 @@ namespace SeraphLeveling
             if (furtiveLevel > 0)
             {
                 string plainFurtiveTraitName = Lang.Get("seraphleveling:trait-sitfurtivemastery");
-                string dynamicFurtiveTrait = Lang.Get("seraphleveling:trait-furtive-dynamic", furtiveBonus);
+                string dynamicFurtiveTrait = BuildLocalizedTraitLine("furtive", "seraphleveling:trait-furtive-dynamic", furtiveBonus);
 
                 // Re-check hasNoTraits
                 hasNoTraits = string.IsNullOrEmpty(__result) ||
@@ -19540,7 +19540,7 @@ namespace SeraphLeveling
             if (preciseLevel > 0)
             {
                 string plainPreciseTraitName = Lang.Get("seraphleveling:trait-sitprecisemastery");
-                string dynamicPreciseTrait = Lang.Get("seraphleveling:trait-precise-dynamic", preciseBonus);
+                string dynamicPreciseTrait = BuildLocalizedTraitLine("precise", "seraphleveling:trait-precise-dynamic", preciseBonus);
 
                 // Re-check hasNoTraits
                 hasNoTraits = string.IsNullOrEmpty(__result) ||
@@ -19615,7 +19615,7 @@ namespace SeraphLeveling
             if (technicalUnlocked && !ClientHasVanillaTrait(eplr, "technical", "clockmaker"))
             {
                 string plainTechnicalTraitName = Lang.Get("seraphleveling:trait-sittechnicalmastery");
-                string dynamicTechnicalTrait = Lang.Get("seraphleveling:trait-technical-dynamic");
+                string dynamicTechnicalTrait = BuildLocalizedTraitLine("technical", "seraphleveling:trait-technical-dynamic");
 
                 // Re-check hasNoTraits
                 hasNoTraits = string.IsNullOrEmpty(__result) ||
@@ -19643,7 +19643,7 @@ namespace SeraphLeveling
             if (hardyHealthUnlocked)
             {
                 string plainHardyHealthTraitName = Lang.Get("seraphleveling:trait-sithardyhealthmastery");
-                string dynamicHardyHealthTrait = Lang.Get("seraphleveling:trait-hardyhealth-dynamic", SeraphLevelingModSystem.HardyHealthBonus);
+                string dynamicHardyHealthTrait = BuildLocalizedTraitLine("hardy", "seraphleveling:trait-hardyhealth-dynamic", SeraphLevelingModSystem.HardyHealthBonus);
 
                 // Re-check hasNoTraits
                 hasNoTraits = string.IsNullOrEmpty(__result) ||
@@ -19660,7 +19660,7 @@ namespace SeraphLeveling
                 if (miningOnlyHardyMatch.Success)
                 {
                     int miningPct = int.Parse(miningOnlyHardyMatch.Groups["m"].Value);
-                    string combined = Lang.Get("seraphleveling:trait-hardy-dynamic", miningPct, SeraphLevelingModSystem.HardyHealthBonus);
+                    string combined = BuildLocalizedTraitLine("hardy", "seraphleveling:trait-hardy-dynamic", miningPct, SeraphLevelingModSystem.HardyHealthBonus);
                     __result = __result.Substring(0, miningOnlyHardyMatch.Index)
                         + combined
                         + __result.Substring(miningOnlyHardyMatch.Index + miningOnlyHardyMatch.Length);
@@ -19694,7 +19694,7 @@ namespace SeraphLeveling
                 // Skip if the player's class already shows a vanilla Bowyer line — vanilla covers it.
                 // (The unlock stat is still applied via ApplyBowyerBonusStatic; this only controls display.)
                 string plainBowyerTraitName = Lang.Get("seraphleveling:trait-sitbowyermastery");
-                string dynamicBowyerTrait = Lang.Get("seraphleveling:trait-bowyer-dynamic");
+                string dynamicBowyerTrait = BuildLocalizedTraitLine("bowyer", "seraphleveling:trait-bowyer-dynamic");
 
                 // Re-check hasNoTraits
                 hasNoTraits = string.IsNullOrEmpty(__result) ||
@@ -19722,7 +19722,7 @@ namespace SeraphLeveling
             if (improviserUnlocked && !ClientHasVanillaTrait(eplr, "improviser", "malefactor"))
             {
                 string plainImproviserTraitName = Lang.Get("seraphleveling:trait-sitimprovisermastery");
-                string dynamicImproviserTrait = Lang.Get("seraphleveling:trait-improviser-dynamic");
+                string dynamicImproviserTrait = BuildLocalizedTraitLine("improviser", "seraphleveling:trait-improviser-dynamic");
 
                 // Re-check hasNoTraits
                 hasNoTraits = string.IsNullOrEmpty(__result) ||
@@ -19750,7 +19750,7 @@ namespace SeraphLeveling
             if (tinkererUnlocked && !ClientHasVanillaTrait(eplr, "tinkerer", "clockmaker"))
             {
                 string plainTinkererTraitName = Lang.Get("seraphleveling:trait-sittinkerermastery");
-                string dynamicTinkererTrait = Lang.Get("seraphleveling:trait-tinkerer-dynamic");
+                string dynamicTinkererTrait = BuildLocalizedTraitLine("tinkerer", "seraphleveling:trait-tinkerer-dynamic");
 
                 // Re-check hasNoTraits
                 hasNoTraits = string.IsNullOrEmpty(__result) ||
@@ -19778,7 +19778,7 @@ namespace SeraphLeveling
             if (mercilessUnlocked && !ClientHasVanillaTrait(eplr, "merciless", "blackguard"))
             {
                 string plainMercilessTraitName = Lang.Get("seraphleveling:trait-sitmercilessmastery");
-                string dynamicMercilessTrait = Lang.Get("seraphleveling:trait-merciless-dynamic");
+                string dynamicMercilessTrait = BuildLocalizedTraitLine("merciless", "seraphleveling:trait-merciless-dynamic");
 
                 // Re-check hasNoTraits
                 hasNoTraits = string.IsNullOrEmpty(__result) ||
@@ -19817,7 +19817,7 @@ namespace SeraphLeveling
             {
                 if (civilRemaining > 0)
                 {
-                    string dynamicCivilTrait = Lang.Get("seraphleveling:trait-civil-dynamic", civilRemaining);
+                    string dynamicCivilTrait = BuildLocalizedTraitLine("civil", "seraphleveling:trait-civil-dynamic", civilRemaining);
                     __result = ReplaceVanillaTraitLine(__result, "civil", dynamicCivilTrait);
                 }
                 else
@@ -19835,7 +19835,7 @@ namespace SeraphLeveling
             {
                 if (weakMiningRemaining > 0 || weakHpRemaining > 0)
                 {
-                    string dynamicWeakTrait = Lang.Get("seraphleveling:trait-weak-dynamic", weakHpRemaining, weakMiningRemaining);
+                    string dynamicWeakTrait = BuildLocalizedTraitLine("weak", "seraphleveling:trait-weak-dynamic", weakHpRemaining, weakMiningRemaining);
                     __result = ReplaceVanillaTraitLine(__result, "weak", dynamicWeakTrait);
                 }
                 else
@@ -19855,15 +19855,15 @@ namespace SeraphLeveling
                     string dynamicKindTrait;
                     if (kindLootRemaining > 0 && kindSpeedRemaining > 0)
                     {
-                        dynamicKindTrait = Lang.Get("seraphleveling:trait-kind-dynamic", kindLootRemaining, kindSpeedRemaining);
+                        dynamicKindTrait = BuildLocalizedTraitLine("kind", "seraphleveling:trait-kind-dynamic", kindLootRemaining, kindSpeedRemaining);
                     }
                     else if (kindLootRemaining > 0)
                     {
-                        dynamicKindTrait = Lang.Get("seraphleveling:trait-kind-loot-only-dynamic", kindLootRemaining);
+                        dynamicKindTrait = BuildLocalizedTraitLine("kind", "seraphleveling:trait-kind-loot-only-dynamic", kindLootRemaining);
                     }
                     else
                     {
-                        dynamicKindTrait = Lang.Get("seraphleveling:trait-kind-speed-only-dynamic", kindSpeedRemaining);
+                        dynamicKindTrait = BuildLocalizedTraitLine("kind", "seraphleveling:trait-kind-speed-only-dynamic", kindSpeedRemaining);
                     }
                     __result = ReplaceVanillaTraitLine(__result, "kind", dynamicKindTrait);
                 }
@@ -19880,7 +19880,7 @@ namespace SeraphLeveling
             {
                 if (farsightedRemaining > 0)
                 {
-                    string dynamicFarsightedTrait = Lang.Get("seraphleveling:trait-farsighted-dynamic", farsightedRemaining);
+                    string dynamicFarsightedTrait = BuildLocalizedTraitLine("farsighted", "seraphleveling:trait-farsighted-dynamic", farsightedRemaining);
                     __result = ReplaceVanillaTraitLine(__result, "farsighted", dynamicFarsightedTrait);
                 }
                 else
@@ -19896,7 +19896,7 @@ namespace SeraphLeveling
             {
                 if (nervousRemaining > 0)
                 {
-                    string dynamicNervousTrait = Lang.Get("seraphleveling:trait-nervous-dynamic", nervousRemaining);
+                    string dynamicNervousTrait = BuildLocalizedTraitLine("nervous", "seraphleveling:trait-nervous-dynamic", nervousRemaining);
                     __result = ReplaceVanillaTraitLine(__result, "nervous", dynamicNervousTrait);
                 }
                 else
@@ -19912,7 +19912,7 @@ namespace SeraphLeveling
             {
                 if (nearsightedRemaining > 0)
                 {
-                    string dynamicNearsightedTrait = Lang.Get("seraphleveling:trait-nearsighted-dynamic", nearsightedRemaining);
+                    string dynamicNearsightedTrait = BuildLocalizedTraitLine("nearsighted", "seraphleveling:trait-nearsighted-dynamic", nearsightedRemaining);
                     __result = ReplaceVanillaTraitLine(__result, "nearsighted", dynamicNearsightedTrait);
                 }
                 else
@@ -19930,7 +19930,7 @@ namespace SeraphLeveling
             {
                 if (frailDistanceRemaining > 0 || frailHpRemaining > 0)
                 {
-                    string dynamicFrailTrait = Lang.Get("seraphleveling:trait-frail-dynamic", frailHpRemaining, frailDistanceRemaining);
+                    string dynamicFrailTrait = BuildLocalizedTraitLine("frail", "seraphleveling:trait-frail-dynamic", frailHpRemaining, frailDistanceRemaining);
                     __result = ReplaceVanillaTraitLine(__result, "frail", dynamicFrailTrait);
                 }
                 else
@@ -19968,7 +19968,7 @@ namespace SeraphLeveling
                     }
 
                     string partialDescription = string.Join(", ", parts);
-                    string dynamicHeavyhandedTrait = Lang.Get("seraphleveling:trait-heavyhanded-partial-dynamic", partialDescription);
+                    string dynamicHeavyhandedTrait = BuildLocalizedTraitLine("heavyhanded", "seraphleveling:trait-heavyhanded-partial-dynamic", partialDescription);
                     __result = ReplaceVanillaTraitLine(__result, "heavyhanded", dynamicHeavyhandedTrait);
                 }
                 else
@@ -19984,7 +19984,7 @@ namespace SeraphLeveling
             {
                 if (ravenousRemaining > 0)
                 {
-                    string dynamicRavenousTrait = Lang.Get("seraphleveling:trait-ravenous-dynamic", ravenousRemaining);
+                    string dynamicRavenousTrait = BuildLocalizedTraitLine("ravenous", "seraphleveling:trait-ravenous-dynamic", ravenousRemaining);
                     __result = ReplaceVanillaTraitLine(__result, "ravenous", dynamicRavenousTrait);
                 }
                 else
@@ -20003,7 +20003,7 @@ namespace SeraphLeveling
             {
                 if (claustrophobicMiningRemaining > 0)
                 {
-                    string dynamicClaustrophobicTrait = Lang.Get("seraphleveling:trait-claustrophobic-dynamic",
+                    string dynamicClaustrophobicTrait = BuildLocalizedTraitLine("claustrophobic", "seraphleveling:trait-claustrophobic-dynamic",
                         SeraphLevelingModSystem.VANILLA_CLAUSTROPHOBIC_ORE_PENALTY, claustrophobicMiningRemaining);
                     __result = ReplaceVanillaTraitLine(__result, "claustrophobic", dynamicClaustrophobicTrait);
                 }
@@ -20462,6 +20462,21 @@ namespace SeraphLeveling
                 return "";
             }
             return SubstituteFirstNumber(baseLocalized, newPercent);
+        }
+
+        /// <summary>
+        /// Builds a fully localized trait line `{traitName} <font opacity="0.6">({desc})</font>`
+        /// using vanilla's `traitwithattributes` template, with the trait name pulled from the
+        /// vanilla `trait-{code}` lang key (so it shows up in the player's locale: "Hardy" in EN,
+        /// "Robuste" in FR, etc.) and the description from one of our `seraphleveling:` lang
+        /// values. The seraphleveling lang values store only the inner description text — the
+        /// trait label and font wrapper come from this helper.
+        /// </summary>
+        private static string BuildLocalizedTraitLine(string vanillaTraitCode, string seraphDescLangKey, params object[] descArgs)
+        {
+            string traitName = Lang.Get("trait-" + vanillaTraitCode);
+            string desc = Lang.Get(seraphDescLangKey, descArgs);
+            return Lang.Get("traitwithattributes", traitName, desc);
         }
 
         // Pattern for finding the first integer (or decimal) in a localized charattribute string.

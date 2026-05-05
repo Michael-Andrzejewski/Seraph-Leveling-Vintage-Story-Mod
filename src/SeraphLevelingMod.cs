@@ -19054,8 +19054,13 @@ namespace SeraphLeveling
 
             ClientApi.Logger.Debug($"[SeraphLeveling] getClassTraitText postfix called. Mining: Level={miningLevel}, Bonus={miningBonus}%, HasHardy={hasVanillaHardy} | Melee: Level={meleeLevel}, Bonus={meleeBonus}%, HasSoldier={hasVanillaSoldier} | Ranged: Level={rangedLevel}, HasFocused={hasVanillaFocused} | Walking: Level={walkingLevel}, HasFleetfooted={hasVanillaFleetfooted} | Armor: Dur={armorDurabilityLevel}, Walk={armorWalkSpeedLevel}");
 
-            // Get the "no traits" message - vanilla uses this for classes like Commoner
-            string noTraitsMsg = Lang.Get("charactersheet-notraits");
+            // Get the "no traits" message - vanilla uses this for classes like Commoner.
+            // The actual vanilla lang key is the literal phrase "No positive or negative traits"
+            // (yes, the key contains spaces). The previous "charactersheet-notraits" key doesn't
+            // exist in vanilla, so Lang.Get returned the key string itself, defeating the
+            // localization check. Subsequent `Contains("No positive or negative traits")`
+            // fallbacks below are kept as a defense-in-depth English match.
+            string noTraitsMsg = Lang.Get("No positive or negative traits");
 
             ClientApi.Logger.Debug($"[SeraphLeveling] Original result: '{__result}', noTraitsMsg: '{noTraitsMsg}'");
 
@@ -19075,11 +19080,12 @@ namespace SeraphLeveling
 
                 if (hasVanillaHardy)
                 {
-                    // Class already has Hardy (e.g., Blackguard) - update the existing Hardy's mining speed
+                    // Class already has Hardy (e.g., Blackguard) - update the existing Hardy's
+                    // mining speed value inline. Vanilla attribute "miningSpeedMul: 0.1" renders
+                    // as "+10% mining speed" via Lang.Get("charattribute-miningSpeedMul-0.1") in
+                    // the player's locale; we swap that exact string for the combined value.
                     int combinedBonus = SeraphLevelingModSystem.VANILLA_HARDY_MINING_BONUS + miningBonus;
-                    __result = __result.Replace(
-                        $"+{SeraphLevelingModSystem.VANILLA_HARDY_MINING_BONUS}% mining speed",
-                        $"+{combinedBonus}% mining speed");
+                    __result = ReplaceVanillaCharAttribute(__result, "miningSpeedMul", 0.1, combinedBonus);
 
                     // Remove any orphan plain Hardy entry; use orphan-only matching so the
                     // vanilla Hardy line (which has its own description) is left intact.
@@ -19120,11 +19126,9 @@ namespace SeraphLeveling
 
                 if (hasVanillaSoldier)
                 {
-                    // Class already has Soldier (e.g., Blackguard) - update the existing Soldier's melee damage
+                    // Class already has Soldier - update the inline melee damage value (locale-aware).
                     int combinedBonus = SeraphLevelingModSystem.VANILLA_SOLDIER_MELEE_BONUS + meleeBonus;
-                    __result = __result.Replace(
-                        $"+{SeraphLevelingModSystem.VANILLA_SOLDIER_MELEE_BONUS}% melee damage",
-                        $"+{combinedBonus}% melee damage");
+                    __result = ReplaceVanillaCharAttribute(__result, "meleeWeaponsDamage", 0.3, combinedBonus);
 
                     __result = RemoveOrphanTraitName(__result, plainMeleeTraitName);
                 }
@@ -19161,24 +19165,15 @@ namespace SeraphLeveling
 
                 if (hasVanillaFocused)
                 {
-                    // Class already has Focused (e.g., Hunter) - update the existing Focused's stats
-                    // Ranged damage
+                    // Class already has Focused (e.g., Hunter) - update each existing inline value.
                     int combinedDamage = SeraphLevelingModSystem.VANILLA_FOCUSED_DAMAGE_BONUS + rangedDamageBonus;
-                    __result = __result.Replace(
-                        $"+{SeraphLevelingModSystem.VANILLA_FOCUSED_DAMAGE_BONUS}% ranged damage",
-                        $"+{combinedDamage}% ranged damage");
+                    __result = ReplaceVanillaCharAttribute(__result, "rangedWeaponsDamage", 0.2, combinedDamage);
 
-                    // Ranged accuracy
                     int combinedAccuracy = SeraphLevelingModSystem.VANILLA_FOCUSED_ACCURACY_BONUS + rangedAccuracyBonus;
-                    __result = __result.Replace(
-                        $"+{SeraphLevelingModSystem.VANILLA_FOCUSED_ACCURACY_BONUS}% ranged accuracy",
-                        $"+{combinedAccuracy}% ranged accuracy");
+                    __result = ReplaceVanillaCharAttribute(__result, "rangedWeaponsAcc", 0.3, combinedAccuracy);
 
-                    // Ranged distance
                     int combinedDistance = SeraphLevelingModSystem.VANILLA_FOCUSED_DISTANCE_BONUS + rangedDistanceBonus;
-                    __result = __result.Replace(
-                        $"+{SeraphLevelingModSystem.VANILLA_FOCUSED_DISTANCE_BONUS}% ranged distance",
-                        $"+{combinedDistance}% ranged distance");
+                    __result = ReplaceVanillaCharAttribute(__result, "bowDrawingStrength", 0.2, combinedDistance);
 
                     __result = RemoveOrphanTraitName(__result, plainRangedTraitName);
                 }
@@ -19214,11 +19209,9 @@ namespace SeraphLeveling
 
                 if (hasVanillaFleetfooted)
                 {
-                    // Class already has Fleetfooted (e.g., Hunter, Clockmaker) - update the existing Fleetfooted's walk speed
+                    // Class already has Fleetfooted - update the inline walk speed value (locale-aware).
                     int combinedBonus = SeraphLevelingModSystem.VANILLA_FLEETFOOTED_WALK_BONUS + walkingBonus;
-                    __result = __result.Replace(
-                        $"+{SeraphLevelingModSystem.VANILLA_FLEETFOOTED_WALK_BONUS}% walk speed",
-                        $"+{combinedBonus}% walk speed");
+                    __result = ReplaceVanillaCharAttribute(__result, "walkspeed", 0.1, combinedBonus);
 
                     __result = RemoveOrphanTraitName(__result, plainWalkingTraitName);
                 }
@@ -19256,27 +19249,20 @@ namespace SeraphLeveling
 
                 if (hasVanillaSoldierArmor)
                 {
-                    // Class already has Soldier (Blackguard) - update the existing armor stats inline.
-                    // Vanilla strings:
-                    //   "+15% armor durability"
-                    //   "walk speed penalty for wearing armor reduced by 25%"
-                    // (an earlier version looked for "-25% armor speed penalty" which silently
-                    // no-op'd against vanilla.)
-
+                    // Class already has Soldier (Blackguard) - update the inline armor stats (locale-aware).
+                    // Vanilla attributes:
+                    //   armorDurabilityLoss: -0.15 → "+15% armor durability"
+                    //   armorWalkSpeedAffectedness: -0.25 → "walk speed penalty for wearing armor reduced by 25%"
                     if (armorDurabilityBonus > 0)
                     {
                         int combinedDurability = SeraphLevelingModSystem.VANILLA_SOLDIER_ARMOR_DURABILITY_BONUS + armorDurabilityBonus;
-                        __result = __result.Replace(
-                            $"+{SeraphLevelingModSystem.VANILLA_SOLDIER_ARMOR_DURABILITY_BONUS}% armor durability",
-                            $"+{combinedDurability}% armor durability");
+                        __result = ReplaceVanillaCharAttribute(__result, "armorDurabilityLoss", -0.15, combinedDurability);
                     }
 
                     if (armorWalkSpeedBonus > 0)
                     {
                         int combinedSpeedPenalty = SeraphLevelingModSystem.VANILLA_SOLDIER_ARMOR_WALKSPEED_BONUS + armorWalkSpeedBonus;
-                        __result = __result.Replace(
-                            $"walk speed penalty for wearing armor reduced by {SeraphLevelingModSystem.VANILLA_SOLDIER_ARMOR_WALKSPEED_BONUS}%",
-                            $"walk speed penalty for wearing armor reduced by {combinedSpeedPenalty}%");
+                        __result = ReplaceVanillaCharAttribute(__result, "armorWalkSpeedAffectedness", -0.25, combinedSpeedPenalty);
                     }
                 }
                 else if (hasNoTraits)
@@ -19353,12 +19339,10 @@ namespace SeraphLeveling
 
                 if (hasVanillaMender)
                 {
-                    // Class already has Mender trait (Tailor) - update the existing durability value.
-                    // Vanilla shows "+25% armor durability".
+                    // Class already has Mender trait (Tailor) - update the inline durability value (locale-aware).
+                    // Vanilla armorDurabilityLoss: -0.25 renders as "+25% armor durability".
                     int combinedBonus = SeraphLevelingModSystem.VANILLA_MENDER_ARMOR_DURABILITY_BONUS + menderBonus;
-                    __result = __result.Replace(
-                        $"+{SeraphLevelingModSystem.VANILLA_MENDER_ARMOR_DURABILITY_BONUS}% armor durability",
-                        $"+{combinedBonus}% armor durability");
+                    __result = ReplaceVanillaCharAttribute(__result, "armorDurabilityLoss", -0.25, combinedBonus);
                 }
                 else if (hasNoTraits)
                 {
@@ -19411,9 +19395,7 @@ namespace SeraphLeveling
                     int combinedWhole = SeraphLevelingModSystem.VANILLA_PILFERER_WHOLE_VESSEL_BONUS + pilfererWholeBonus;
                     string combinedPilfererTrait = Lang.Get("seraphleveling:trait-pilferer-dynamic",
                         combinedVessel, combinedRusty, combinedWhole);
-                    __result = System.Text.RegularExpressions.Regex.Replace(__result,
-                        @"<font color=""#84ff84"">• Pilferer </font> <font opacity=""0\.6"">\(\+\d+% drop rate, \+\d+% rusty gear drop rate, \d+% chance to collect cracked vessels intact\)</font>",
-                        combinedPilfererTrait);
+                    __result = ReplaceVanillaTraitLine(__result, "pilferer", combinedPilfererTrait);
                 }
                 else if (hasNoTraits)
                 {
@@ -19450,17 +19432,13 @@ namespace SeraphLeveling
 
                 if (hasVanillaResourceful)
                 {
-                    // Class already has Resourceful trait - update the existing values.
-                    // Vanilla string is "+25% animal harvesting speed" — must match exactly,
-                    // a previous version omitted "animal " and the Replace silently no-op'd.
+                    // Class already has Resourceful trait - update the inline values (locale-aware).
+                    // Vanilla animalLootDropRate: 0.1 → "+10% animal loot"
+                    // Vanilla animalHarvestingTime: -0.25 → "+25% animal harvesting speed"
                     int combinedLoot = SeraphLevelingModSystem.VANILLA_RESOURCEFUL_LOOT_BONUS + resourcefulLootBonus;
                     int combinedSpeed = SeraphLevelingModSystem.VANILLA_RESOURCEFUL_SPEED_BONUS + resourcefulSpeedBonus;
-                    __result = __result.Replace(
-                        $"+{SeraphLevelingModSystem.VANILLA_RESOURCEFUL_LOOT_BONUS}% animal loot",
-                        $"+{combinedLoot}% animal loot");
-                    __result = __result.Replace(
-                        $"+{SeraphLevelingModSystem.VANILLA_RESOURCEFUL_SPEED_BONUS}% animal harvesting speed",
-                        $"+{combinedSpeed}% animal harvesting speed");
+                    __result = ReplaceVanillaCharAttribute(__result, "animalLootDropRate", 0.1, combinedLoot);
+                    __result = ReplaceVanillaCharAttribute(__result, "animalHarvestingTime", -0.25, combinedSpeed);
                 }
                 else if (hasNoTraits)
                 {
@@ -19496,18 +19474,13 @@ namespace SeraphLeveling
 
                 if (hasVanillaForager)
                 {
-                    // Class already has Forager trait - update the existing values.
-                    // Vanilla strings are "+10% loot from foraging" and "+20% wild crop drop rate"
-                    // (must match exactly — earlier versions used "% foraging loot" / "% wild crop drops"
-                    // which silently no-op'd against vanilla).
+                    // Class already has Forager trait - update the inline values (locale-aware).
+                    // Vanilla forageDropRate: 0.1 → "+10% loot from foraging"
+                    // Vanilla wildCropDropRate: 0.2 → "+20% wild crop drop rate"
                     int combinedLoot = SeraphLevelingModSystem.VANILLA_FORAGER_LOOT_BONUS + foragerLootBonus;
                     int combinedWildCrop = SeraphLevelingModSystem.VANILLA_FORAGER_WILD_CROP_BONUS + foragerWildCropBonus;
-                    __result = __result.Replace(
-                        $"+{SeraphLevelingModSystem.VANILLA_FORAGER_LOOT_BONUS}% loot from foraging",
-                        $"+{combinedLoot}% loot from foraging");
-                    __result = __result.Replace(
-                        $"+{SeraphLevelingModSystem.VANILLA_FORAGER_WILD_CROP_BONUS}% wild crop drop rate",
-                        $"+{combinedWildCrop}% wild crop drop rate");
+                    __result = ReplaceVanillaCharAttribute(__result, "forageDropRate", 0.1, combinedLoot);
+                    __result = ReplaceVanillaCharAttribute(__result, "wildCropDropRate", 0.2, combinedWildCrop);
                 }
                 else if (hasNoTraits)
                 {
@@ -19541,13 +19514,10 @@ namespace SeraphLeveling
 
                 if (hasVanillaFurtive)
                 {
-                    // Class already has Furtive trait - update the existing values.
-                    // Vanilla string is "-35% animal detection range" (earlier versions looked for
-                    // "% animal seeking range" which silently no-op'd against vanilla).
+                    // Class already has Furtive trait - update the inline detection range value (locale-aware).
+                    // Vanilla animalSeekingRange: -0.35 → "-35% animal detection range"
                     int combinedBonus = SeraphLevelingModSystem.VANILLA_FURTIVE_DETECTION_REDUCTION + furtiveBonus;
-                    __result = __result.Replace(
-                        $"-{SeraphLevelingModSystem.VANILLA_FURTIVE_DETECTION_REDUCTION}% animal detection range",
-                        $"-{combinedBonus}% animal detection range");
+                    __result = ReplaceVanillaCharAttribute(__result, "animalSeekingRange", -0.35, combinedBonus);
                 }
                 else if (hasNoTraits)
                 {
@@ -19581,14 +19551,10 @@ namespace SeraphLeveling
 
                 if (hasVanillaPrecise)
                 {
-                    // Class already has Precise trait (Clockmaker) - update the existing value.
-                    // Vanilla string is "+25% damage against mechanicals" (an earlier version
-                    // used "damage vs mechanicals" / "damage to mechanicals" which silently
-                    // no-op'd against vanilla and wouldn't have rendered consistently anyway.)
+                    // Class already has Precise trait (Clockmaker) - update the inline value (locale-aware).
+                    // Vanilla mechanicalsDamage: 0.4705 (calibrated) → "+25% damage against mechanicals"
                     int combinedBonus = SeraphLevelingModSystem.VANILLA_PRECISE_MECHANICAL_DAMAGE_BONUS + preciseBonus;
-                    __result = __result.Replace(
-                        $"+{SeraphLevelingModSystem.VANILLA_PRECISE_MECHANICAL_DAMAGE_BONUS}% damage against mechanicals",
-                        $"+{combinedBonus}% damage against mechanicals");
+                    __result = ReplaceVanillaCharAttribute(__result, "mechanicalsDamage", 0.4705, combinedBonus);
                 }
                 else if (hasNoTraits)
                 {
@@ -19849,26 +19815,19 @@ namespace SeraphLeveling
             int civilRemaining = eplr.WatchedAttributes.GetInt(SeraphLevelingModSystem.WATCHED_CIVIL_REMAINING, 0);
             if (hasCivil)
             {
-                // Vanilla format: <font color="#ff8484">• Civil </font> <font opacity="0.6">(-10% loot from foraging)</font>
                 if (civilRemaining > 0)
                 {
                     string dynamicCivilTrait = Lang.Get("seraphleveling:trait-civil-dynamic", civilRemaining);
-                    __result = System.Text.RegularExpressions.Regex.Replace(__result,
-                        @"<font color=""#ff8484"">• Civil </font> <font opacity=""0\.6"">\(-\d+% loot from foraging\)</font>",
-                        dynamicCivilTrait);
+                    __result = ReplaceVanillaTraitLine(__result, "civil", dynamicCivilTrait);
                 }
                 else
                 {
-                    // Remove Civil trait completely - use empty string, cleanup at end handles newlines
-                    __result = System.Text.RegularExpressions.Regex.Replace(__result,
-                        @"\n?<font color=""#ff8484"">• Civil </font> <font opacity=""0\.6"">\(-\d+% loot from foraging\)</font>",
-                        "");
+                    __result = RemoveVanillaTraitLine(__result, "civil");
                 }
             }
 
-            // Weak trait (Tailor) - HP and mining speed penalty
-            // Vanilla format: <font color="#ff8484">• Weak </font> <font opacity="0.6">(-2 health points, -10% mining speed)</font>
-            // Both penalties are cancelled together at mining level 10
+            // Weak trait (Tailor) - HP and mining speed penalty.
+            // Both penalties cancelled together at mining level 10.
             bool hasWeak = ClientHasVanillaTrait(eplr, "weak", "tailor");
             int weakMiningRemaining = eplr.WatchedAttributes.GetInt(SeraphLevelingModSystem.WATCHED_WEAK_MINING_REMAINING, 0);
             int weakHpRemaining = eplr.WatchedAttributes.GetInt(SeraphLevelingModSystem.WATCHED_WEAK_HP_REMAINING, 0);
@@ -19876,25 +19835,16 @@ namespace SeraphLeveling
             {
                 if (weakMiningRemaining > 0 || weakHpRemaining > 0)
                 {
-                    // Show both penalties during progression (both are cancelled at level 10)
                     string dynamicWeakTrait = Lang.Get("seraphleveling:trait-weak-dynamic", weakHpRemaining, weakMiningRemaining);
-                    __result = System.Text.RegularExpressions.Regex.Replace(__result,
-                        @"<font color=""#ff8484"">• Weak </font> <font opacity=""0\.6"">\(-\d+ health points, -\d+% mining speed\)</font>",
-                        dynamicWeakTrait);
+                    __result = ReplaceVanillaTraitLine(__result, "weak", dynamicWeakTrait);
                 }
                 else
                 {
-                    // Remove Weak trait completely when both penalties are cancelled
-                    __result = System.Text.RegularExpressions.Regex.Replace(__result,
-                        @"\n?<font color=""#ff8484"">• Weak </font> <font opacity=""0\.6"">\(-\d+ health points, -\d+% mining speed\)</font>",
-                        "");
+                    __result = RemoveVanillaTraitLine(__result, "weak");
                 }
             }
 
             // Kind trait (Tailor) - animal loot and harvesting speed penalty.
-            // Vanilla wording is "-25% animal harvesting speed" (must include "animal" — earlier
-            // versions looked for "% harvesting speed" and silently no-op'd against vanilla).
-            // Vanilla format: <font color="#ff8484">• Kind </font> <font opacity="0.6">(-10% animal loot, -25% animal harvesting speed)</font>
             bool hasKind = ClientHasVanillaTrait(eplr, "kind", "tailor");
             int kindLootRemaining = eplr.WatchedAttributes.GetInt(SeraphLevelingModSystem.WATCHED_KIND_LOOT_REMAINING, 0);
             int kindSpeedRemaining = eplr.WatchedAttributes.GetInt(SeraphLevelingModSystem.WATCHED_KIND_SPEED_REMAINING, 0);
@@ -19915,20 +19865,15 @@ namespace SeraphLeveling
                     {
                         dynamicKindTrait = Lang.Get("seraphleveling:trait-kind-speed-only-dynamic", kindSpeedRemaining);
                     }
-                    __result = System.Text.RegularExpressions.Regex.Replace(__result,
-                        @"<font color=""#ff8484"">• Kind </font> <font opacity=""0\.6"">\(-\d+% animal loot, -\d+% animal harvesting speed\)</font>",
-                        dynamicKindTrait);
+                    __result = ReplaceVanillaTraitLine(__result, "kind", dynamicKindTrait);
                 }
                 else
                 {
-                    __result = System.Text.RegularExpressions.Regex.Replace(__result,
-                        @"\n?<font color=""#ff8484"">• Kind </font> <font opacity=""0\.6"">\(-\d+% animal loot, -\d+% animal harvesting speed\)</font>",
-                        "");
+                    __result = RemoveVanillaTraitLine(__result, "kind");
                 }
             }
 
             // Farsighted trait (Hunter) - melee damage penalty
-            // Vanilla format: <font color="#ff8484">• Farsighted </font> <font opacity="0.6">(-15% melee damage)</font>
             bool hasFarsighted = ClientHasVanillaTrait(eplr, "farsighted", "hunter");
             int farsightedRemaining = eplr.WatchedAttributes.GetInt(SeraphLevelingModSystem.WATCHED_FARSIGHTED_REMAINING, 0);
             if (hasFarsighted)
@@ -19936,21 +19881,15 @@ namespace SeraphLeveling
                 if (farsightedRemaining > 0)
                 {
                     string dynamicFarsightedTrait = Lang.Get("seraphleveling:trait-farsighted-dynamic", farsightedRemaining);
-                    __result = System.Text.RegularExpressions.Regex.Replace(__result,
-                        @"<font color=""#ff8484"">• Farsighted </font> <font opacity=""0\.6"">\(-\d+% melee damage\)</font>",
-                        dynamicFarsightedTrait);
+                    __result = ReplaceVanillaTraitLine(__result, "farsighted", dynamicFarsightedTrait);
                 }
                 else
                 {
-                    // Remove Farsighted trait completely - use empty string, cleanup at end handles newlines
-                    __result = System.Text.RegularExpressions.Regex.Replace(__result,
-                        @"\n?<font color=""#ff8484"">• Farsighted </font> <font opacity=""0\.6"">\(-\d+% melee damage\)</font>",
-                        "");
+                    __result = RemoveVanillaTraitLine(__result, "farsighted");
                 }
             }
 
             // Nervous trait (Malefactor, Clockmaker) - melee damage penalty
-            // Vanilla format: <font color="#ff8484">• Nervous </font> <font opacity="0.6">(-15% melee damage)</font>
             bool hasNervous = ClientHasVanillaTrait(eplr, "nervous", "malefactor", "clockmaker");
             int nervousRemaining = eplr.WatchedAttributes.GetInt(SeraphLevelingModSystem.WATCHED_NERVOUS_REMAINING, 0);
             if (hasNervous)
@@ -19958,21 +19897,15 @@ namespace SeraphLeveling
                 if (nervousRemaining > 0)
                 {
                     string dynamicNervousTrait = Lang.Get("seraphleveling:trait-nervous-dynamic", nervousRemaining);
-                    __result = System.Text.RegularExpressions.Regex.Replace(__result,
-                        @"<font color=""#ff8484"">• Nervous </font> <font opacity=""0\.6"">\(-\d+% melee damage\)</font>",
-                        dynamicNervousTrait);
+                    __result = ReplaceVanillaTraitLine(__result, "nervous", dynamicNervousTrait);
                 }
                 else
                 {
-                    // Remove Nervous trait completely - use empty string, cleanup at end handles newlines
-                    __result = System.Text.RegularExpressions.Regex.Replace(__result,
-                        @"\n?<font color=""#ff8484"">• Nervous </font> <font opacity=""0\.6"">\(-\d+% melee damage\)</font>",
-                        "");
+                    __result = RemoveVanillaTraitLine(__result, "nervous");
                 }
             }
 
             // Nearsighted trait (Blackguard) - ranged damage penalty
-            // Vanilla format: <font color="#ff8484">• Nearsighted </font> <font opacity="0.6">(-15% ranged damage)</font>
             bool hasNearsighted = ClientHasVanillaTrait(eplr, "nearsighted", "blackguard");
             int nearsightedRemaining = eplr.WatchedAttributes.GetInt(SeraphLevelingModSystem.WATCHED_NEARSIGHTED_REMAINING, 0);
             if (hasNearsighted)
@@ -19980,22 +19913,16 @@ namespace SeraphLeveling
                 if (nearsightedRemaining > 0)
                 {
                     string dynamicNearsightedTrait = Lang.Get("seraphleveling:trait-nearsighted-dynamic", nearsightedRemaining);
-                    __result = System.Text.RegularExpressions.Regex.Replace(__result,
-                        @"<font color=""#ff8484"">• Nearsighted </font> <font opacity=""0\.6"">\(-\d+% ranged damage\)</font>",
-                        dynamicNearsightedTrait);
+                    __result = ReplaceVanillaTraitLine(__result, "nearsighted", dynamicNearsightedTrait);
                 }
                 else
                 {
-                    // Remove Nearsighted trait completely - use empty string, cleanup at end handles newlines
-                    __result = System.Text.RegularExpressions.Regex.Replace(__result,
-                        @"\n?<font color=""#ff8484"">• Nearsighted </font> <font opacity=""0\.6"">\(-\d+% ranged damage\)</font>",
-                        "");
+                    __result = RemoveVanillaTraitLine(__result, "nearsighted");
                 }
             }
 
-            // Frail trait (Malefactor, Clockmaker) - HP and ranged distance penalty
-            // Vanilla format: <font color="#ff8484">• Frail </font> <font opacity="0.6">(-2.5 health points, -25% ranged distance)</font>
-            // Both penalties are cancelled together at ranged level 25
+            // Frail trait (Malefactor, Clockmaker) - HP and ranged distance penalty.
+            // Both penalties cancelled together at ranged level 25.
             bool hasFrail = ClientHasVanillaTrait(eplr, "frail", "malefactor", "clockmaker");
             int frailDistanceRemaining = eplr.WatchedAttributes.GetInt(SeraphLevelingModSystem.WATCHED_FRAIL_DISTANCE_REMAINING, 0);
             float frailHpRemaining = eplr.WatchedAttributes.GetFloat(SeraphLevelingModSystem.WATCHED_FRAIL_HP_REMAINING, 0f);
@@ -20003,27 +19930,16 @@ namespace SeraphLeveling
             {
                 if (frailDistanceRemaining > 0 || frailHpRemaining > 0)
                 {
-                    // Show both penalties during progression (both are cancelled at level 25)
                     string dynamicFrailTrait = Lang.Get("seraphleveling:trait-frail-dynamic", frailHpRemaining, frailDistanceRemaining);
-                    __result = System.Text.RegularExpressions.Regex.Replace(__result,
-                        @"<font color=""#ff8484"">• Frail </font> <font opacity=""0\.6"">\(-[\d\.]+ health points, -\d+% ranged distance\)</font>",
-                        dynamicFrailTrait);
+                    __result = ReplaceVanillaTraitLine(__result, "frail", dynamicFrailTrait);
                 }
                 else
                 {
-                    // Remove Frail trait completely when both penalties are cancelled
-                    __result = System.Text.RegularExpressions.Regex.Replace(__result,
-                        @"\n?<font color=""#ff8484"">• Frail </font> <font opacity=""0\.6"">\(-[\d\.]+ health points, -\d+% ranged distance\)</font>",
-                        "");
+                    __result = RemoveVanillaTraitLine(__result, "frail");
                 }
             }
 
             // Heavyhanded trait (Blackguard) - vessel, foraging, wild crop penalties.
-            // Vanilla wording (must match exactly — earlier versions used "cracked vessel loot"
-            // and "wild crop drop rate" which silently no-op'd against vanilla "loot from cracked
-            // vessels" and "wild crop harvesting", leaving Heavyhanded permanently visible):
-            //   <font color="#ff8484">• Heavyhanded </font>
-            //   <font opacity="0.6">(-10% loot from cracked vessels, -15% loot from foraging, -20% wild crop harvesting)</font>
             bool hasHeavyhanded = ClientHasVanillaTrait(eplr, "heavyhanded", "blackguard");
             int heavyhandedVesselRemaining = eplr.WatchedAttributes.GetInt(SeraphLevelingModSystem.WATCHED_HEAVYHANDED_VESSEL_REMAINING, 0);
             int heavyhandedForagingRemaining = eplr.WatchedAttributes.GetInt(SeraphLevelingModSystem.WATCHED_HEAVYHANDED_FORAGING_REMAINING, 0);
@@ -20032,100 +19948,68 @@ namespace SeraphLeveling
             {
                 if (heavyhandedVesselRemaining > 0 || heavyhandedForagingRemaining > 0 || heavyhandedWildCropRemaining > 0)
                 {
-                    // Build partial description using vanilla wording so the partial line reads
-                    // consistently with vanilla phrasing for the stats still in effect.
+                    // Build partial description from localized vanilla charattribute strings so
+                    // the partial line stays in the same locale as the rest of vanilla output.
                     var parts = new System.Collections.Generic.List<string>();
-                    if (heavyhandedVesselRemaining > 0) parts.Add($"-{heavyhandedVesselRemaining}% loot from cracked vessels");
-                    if (heavyhandedForagingRemaining > 0) parts.Add($"-{heavyhandedForagingRemaining}% loot from foraging");
-                    if (heavyhandedWildCropRemaining > 0) parts.Add($"-{heavyhandedWildCropRemaining}% wild crop harvesting");
+                    if (heavyhandedVesselRemaining > 0)
+                    {
+                        string s = LocalizedCharAttributeWithValue("vesselContentsDropRate", -0.1, heavyhandedVesselRemaining);
+                        if (!string.IsNullOrEmpty(s)) parts.Add(s);
+                    }
+                    if (heavyhandedForagingRemaining > 0)
+                    {
+                        string s = LocalizedCharAttributeWithValue("forageDropRate", -0.15, heavyhandedForagingRemaining);
+                        if (!string.IsNullOrEmpty(s)) parts.Add(s);
+                    }
+                    if (heavyhandedWildCropRemaining > 0)
+                    {
+                        string s = LocalizedCharAttributeWithValue("wildCropDropRate", -0.2, heavyhandedWildCropRemaining);
+                        if (!string.IsNullOrEmpty(s)) parts.Add(s);
+                    }
 
                     string partialDescription = string.Join(", ", parts);
                     string dynamicHeavyhandedTrait = Lang.Get("seraphleveling:trait-heavyhanded-partial-dynamic", partialDescription);
-                    __result = System.Text.RegularExpressions.Regex.Replace(__result,
-                        @"<font color=""#ff8484"">• Heavyhanded </font> <font opacity=""0\.6"">\(-\d+% loot from cracked vessels, -\d+% loot from foraging, -\d+% wild crop harvesting\)</font>",
-                        dynamicHeavyhandedTrait);
+                    __result = ReplaceVanillaTraitLine(__result, "heavyhanded", dynamicHeavyhandedTrait);
                 }
                 else
                 {
-                    // All three penalties cancelled — remove the Heavyhanded line entirely.
-                    __result = System.Text.RegularExpressions.Regex.Replace(__result,
-                        @"\n?<font color=""#ff8484"">• Heavyhanded </font> <font opacity=""0\.6"">\(-\d+% loot from cracked vessels, -\d+% loot from foraging, -\d+% wild crop harvesting\)</font>",
-                        "");
+                    __result = RemoveVanillaTraitLine(__result, "heavyhanded");
                 }
             }
 
             // Ravenous trait (Blackguard) - hunger rate penalty
-            // Vanilla format: <font color="#ff8484">• Ravenous </font> <font opacity="0.6">(+30% hunger rate)</font>
             bool hasRavenous = ClientHasVanillaTrait(eplr, "ravenous", "blackguard");
             int ravenousRemaining = eplr.WatchedAttributes.GetInt(SeraphLevelingModSystem.WATCHED_RAVENOUS_REMAINING, 0);
             if (hasRavenous)
             {
                 if (ravenousRemaining > 0)
                 {
-                    // Show Ravenous with remaining penalty
                     string dynamicRavenousTrait = Lang.Get("seraphleveling:trait-ravenous-dynamic", ravenousRemaining);
-                    __result = System.Text.RegularExpressions.Regex.Replace(__result,
-                        @"<font color=""#ff8484"">• Ravenous </font> <font opacity=""0\.6"">\(\+\d+% hunger rate\)</font>",
-                        dynamicRavenousTrait);
+                    __result = ReplaceVanillaTraitLine(__result, "ravenous", dynamicRavenousTrait);
                 }
                 else
                 {
-                    // Remove Ravenous trait completely at level 30 - use empty string, cleanup at end handles newlines
-                    __result = System.Text.RegularExpressions.Regex.Replace(__result,
-                        @"\n?<font color=""#ff8484"">• Ravenous </font> <font opacity=""0\.6"">\(\+\d+% hunger rate\)</font>",
-                        "");
+                    __result = RemoveVanillaTraitLine(__result, "ravenous");
                 }
             }
 
-            // Claustrophobic trait (Hunter) - ore drop and mining speed penalties
-            // Mining penalty decreases progressively with mining level (1-10)
-            // At level 10, both mining and ore penalties are cancelled, and Hardy bonus starts showing
+            // Claustrophobic trait (Hunter) - ore drop and mining speed penalties.
+            // Mining penalty decreases progressively with mining level (1-10).
+            // At level 10, both mining and ore penalties are cancelled, and Hardy bonus shows instead.
             bool hasClaustrophobic = ClientHasVanillaTrait(eplr, "claustrophobic", "hunter");
             int claustrophobicMiningRemaining = eplr.WatchedAttributes.GetInt(SeraphLevelingModSystem.WATCHED_CLAUSTROPHOBIC_MINING_REMAINING, 0);
 
-            ClientApi.Logger.Debug($"[SeraphLeveling] Claustrophobic check: hasClaustrophobic={hasClaustrophobic}, miningRemaining={claustrophobicMiningRemaining}");
-            ClientApi.Logger.Debug($"[SeraphLeveling] Result contains 'Claustrophobic': {__result.Contains("Claustrophobic")}");
-
             if (hasClaustrophobic)
             {
-                // Single robust regex that anchors on the leading `<font color="#ff8484">•`
-                // and consumes the WHOLE trait line atomically. Tolerates whitespace
-                // variations and an optional leading newline.
-                //
-                // Use Match (not the old "did the string change?" check), because at level 0
-                // the dynamic replacement is byte-identical to vanilla — Replace returns the
-                // same content, the equality check thinks "no match", and the old fallback chain
-                // would fire and produce nested font tags + a duplicated bullet.
-                var claustroLineRegex = ClaustrophobicLineRegex;
-                var match = claustroLineRegex.Match(__result);
-
                 if (claustrophobicMiningRemaining > 0)
                 {
                     string dynamicClaustrophobicTrait = Lang.Get("seraphleveling:trait-claustrophobic-dynamic",
                         SeraphLevelingModSystem.VANILLA_CLAUSTROPHOBIC_ORE_PENALTY, claustrophobicMiningRemaining);
-                    ClientApi.Logger.Debug($"[SeraphLeveling] Replacing Claustrophobic with: {dynamicClaustrophobicTrait}");
-
-                    if (match.Success)
-                    {
-                        // Preserve a leading newline so adjacent trait lines stay separated
-                        string prefix = match.Value.StartsWith("\n") ? "\n" : "";
-                        __result = __result.Remove(match.Index, match.Length)
-                                           .Insert(match.Index, prefix + dynamicClaustrophobicTrait);
-                        ClientApi.Logger.Debug("[SeraphLeveling] Claustrophobic replacement: SUCCESS");
-                    }
-                    else
-                    {
-                        ClientApi.Logger.Debug("[SeraphLeveling] Claustrophobic line not found in vanilla format; leaving as-is.");
-                    }
+                    __result = ReplaceVanillaTraitLine(__result, "claustrophobic", dynamicClaustrophobicTrait);
                 }
                 else
                 {
-                    // Both penalties cancelled at level 10 — remove the line entirely (Hardy shows instead)
-                    if (match.Success)
-                    {
-                        __result = __result.Remove(match.Index, match.Length);
-                        ClientApi.Logger.Debug("[SeraphLeveling] Claustrophobic removal: SUCCESS");
-                    }
+                    __result = RemoveVanillaTraitLine(__result, "claustrophobic");
                 }
             }
 
@@ -20484,13 +20368,114 @@ namespace SeraphLeveling
             return false;
         }
 
-        // Matches the full vanilla Claustrophobic trait line. Anchors on the red font tag
-        // and consumes through the closing opacity font, optionally including a leading newline.
-        // Tolerates whitespace variation between tokens.
-        private static readonly System.Text.RegularExpressions.Regex ClaustrophobicLineRegex =
-            new System.Text.RegularExpressions.Regex(
-                @"\n?<font[^>]*color[^>]*#ff8484[^>]*>[ \t]*•[ \t]*Claustrophobic[ \t]*</font>[ \t]*<font[^>]*opacity[^>]*>[ \t]*\(-\d+%\s*ore\s+drop\s+rate,\s*-\d+%\s*mining\s+speed\s*\)[ \t]*</font>",
-                System.Text.RegularExpressions.RegexOptions.Compiled);
+        // Cache for locale-aware vanilla trait line regexes. Built lazily per trait code from
+        // Lang.Get("trait-{code}"), so the regex works against whatever language the client is
+        // running. Without this, hardcoded English wording (Claustrophobic, "ore drop rate", etc.)
+        // would fail to match a French/German/etc. client and the vanilla line would render with
+        // its full original penalty wording even after the mod has functionally cancelled it.
+        private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, System.Text.RegularExpressions.Regex> VanillaTraitLineRegexCache =
+            new System.Collections.Concurrent.ConcurrentDictionary<string, System.Text.RegularExpressions.Regex>();
+
+        /// <summary>
+        /// Builds (or returns a cached) regex matching a full vanilla trait line in any locale.
+        /// Anchors on Lang.Get("trait-{code}") (which already includes the colored font + bullet)
+        /// and consumes the trailing "(...)" opacity font block. Includes an optional leading
+        /// newline so the same regex can be used for both replacement and removal.
+        /// Returns null if the trait lang key is unavailable.
+        /// </summary>
+        private static System.Text.RegularExpressions.Regex GetVanillaTraitLineRegex(string traitCode)
+        {
+            return VanillaTraitLineRegexCache.GetOrAdd(traitCode, code =>
+            {
+                string traitText = Lang.Get("trait-" + code);
+                if (string.IsNullOrEmpty(traitText) || traitText == "trait-" + code)
+                {
+                    return null;
+                }
+                string escaped = System.Text.RegularExpressions.Regex.Escape(traitText);
+                // Pattern: <optional newline><localized trait label><whitespace><opacity font>(<any non-tag content>)</font>
+                // We don't constrain the description content because it's a localized list of
+                // charattribute strings joined with ", " — different in every language.
+                string pattern = @"\n?" + escaped + @"\s*<font[^>]*opacity[^>]*>[^<]*</font>";
+                return new System.Text.RegularExpressions.Regex(pattern, System.Text.RegularExpressions.RegexOptions.Compiled);
+            });
+        }
+
+        /// <summary>
+        /// Replaces the entire vanilla trait line with the given replacement text. Preserves the
+        /// leading newline if matched (so adjacent trait entries stay separated). No-op if the
+        /// line isn't found.
+        /// </summary>
+        private static string ReplaceVanillaTraitLine(string text, string traitCode, string replacement)
+        {
+            var regex = GetVanillaTraitLineRegex(traitCode);
+            if (regex == null) return text;
+            return regex.Replace(text, m => m.Value.StartsWith("\n") ? "\n" + replacement : replacement);
+        }
+
+        /// <summary>
+        /// Removes the entire vanilla trait line, including the leading newline if matched.
+        /// No-op if the line isn't found.
+        /// </summary>
+        private static string RemoveVanillaTraitLine(string text, string traitCode)
+        {
+            var regex = GetVanillaTraitLineRegex(traitCode);
+            if (regex == null) return text;
+            return regex.Replace(text, "");
+        }
+
+        /// <summary>
+        /// Replaces a single inline vanilla charattribute string (e.g., "+10% mining speed") with
+        /// a new value while keeping the same locale. Looks up the localized base string via
+        /// Lang.Get("charattribute-{statKey}-{baseValue}"), then substitutes the first integer in
+        /// that string with newPercent. Used when a class already has a vanilla positive trait
+        /// (e.g., Blackguard's Hardy +10% mining speed) and we want to combine it with our
+        /// progression bonus inline rather than replacing the whole line.
+        /// </summary>
+        private static string ReplaceVanillaCharAttribute(string text, string statKey, double baseValue, int newPercent)
+        {
+            string baseLangKey = "charattribute-" + statKey + "-" +
+                baseValue.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            string baseLocalized = Lang.Get(baseLangKey);
+            if (string.IsNullOrEmpty(baseLocalized) || baseLocalized == baseLangKey || !text.Contains(baseLocalized))
+            {
+                return text;
+            }
+            string substituted = SubstituteFirstNumber(baseLocalized, newPercent);
+            if (substituted == baseLocalized) return text;
+            return text.Replace(baseLocalized, substituted);
+        }
+
+        /// <summary>
+        /// Returns the localized vanilla charattribute string with its first integer replaced by
+        /// the given value. Used for building partial penalty descriptions in the player's locale
+        /// (e.g., for Heavyhanded's three-stat partial display). Returns the empty string if the
+        /// lang key isn't found.
+        /// </summary>
+        private static string LocalizedCharAttributeWithValue(string statKey, double baseValue, int newPercent)
+        {
+            string baseLangKey = "charattribute-" + statKey + "-" +
+                baseValue.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            string baseLocalized = Lang.Get(baseLangKey);
+            if (string.IsNullOrEmpty(baseLocalized) || baseLocalized == baseLangKey)
+            {
+                return "";
+            }
+            return SubstituteFirstNumber(baseLocalized, newPercent);
+        }
+
+        // Pattern for finding the first integer (or decimal) in a localized charattribute string.
+        // Used to swap the percentage when combining vanilla + progression bonuses, since most
+        // languages place the value as the first numeric token in the string.
+        private static readonly System.Text.RegularExpressions.Regex FirstNumberRegex =
+            new System.Text.RegularExpressions.Regex(@"\d+(?:\.\d+)?", System.Text.RegularExpressions.RegexOptions.Compiled);
+
+        private static string SubstituteFirstNumber(string text, int newValue)
+        {
+            var match = FirstNumberRegex.Match(text);
+            if (!match.Success) return text;
+            return text.Substring(0, match.Index) + newValue.ToString() + text.Substring(match.Index + match.Length);
+        }
 
         /// <summary>
         /// Collapses adjacent bullet markers ("•") separated only by whitespace

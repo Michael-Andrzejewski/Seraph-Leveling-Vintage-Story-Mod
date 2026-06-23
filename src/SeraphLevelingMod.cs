@@ -218,6 +218,7 @@ namespace SeraphLeveling
         public float COMacesProficiencyMax { get; set; } = 0.3f;
         public float COClubsProficiencyMax { get; set; } = 0.3f;
         public float COHalberdsProficiencyMax { get; set; } = 0.3f;
+        public float COPoleaxeProficiencyMax { get; set; } = 0.3f;
         public float COAxesProficiencyMax { get; set; } = 0.3f;
         public float COQuarterstaffProficiencyMax { get; set; } = 0.3f;
 
@@ -2227,6 +2228,12 @@ namespace SeraphLeveling
         /// <summary>Whether Combat Overhaul mod is loaded.</summary>
         public static bool IsCombatOverhaulLoaded { get; internal set; } = false;
 
+        /// <summary>Whether specifically the 1.22 Combat Overhaul FORK is loaded.
+        /// The fork adds a separate poleaxeProficiency stat the original mod lacks,
+        /// so poleaxe weapons route to that stat only when this is true (original
+        /// CO keeps lumping them with halberds).</summary>
+        public static bool IsCombatOverhaulForkLoaded { get; internal set; } = false;
+
         /// <summary>Whether CO compatibility is enabled (mod loaded AND config enabled).</summary>
         public static bool IsCOCompatEnabled => IsCombatOverhaulLoaded && COEnableCompat;
 
@@ -2268,6 +2275,7 @@ namespace SeraphLeveling
         public static float COMacesProficiencyMax = 0.3f;
         public static float COClubsProficiencyMax = 0.3f;
         public static float COHalberdsProficiencyMax = 0.3f;
+        public static float COPoleaxeProficiencyMax = 0.3f;
         public static float COAxesProficiencyMax = 0.3f;
         public static float COQuarterstaffProficiencyMax = 0.3f;
         public static float COSteadyAimMax = 0.5f;
@@ -2337,6 +2345,7 @@ namespace SeraphLeveling
         public const string CO_MACES_PROFICIENCY = "macesProficiency";
         public const string CO_CLUBS_PROFICIENCY = "clubsProficiency";
         public const string CO_HALBERDS_PROFICIENCY = "halberdsProficiency";
+        public const string CO_POLEAXE_PROFICIENCY = "poleaxeProficiency";
         public const string CO_AXES_PROFICIENCY = "axesProficiency";
         public const string CO_QUARTERSTAFF_PROFICIENCY = "quarterstaffProficiency";
         public const string CO_STEADY_AIM = "steadyAim";
@@ -2407,7 +2416,7 @@ namespace SeraphLeveling
             CO_BOWS_PROFICIENCY, CO_CROSSBOWS_PROFICIENCY, CO_FIREARMS_PROFICIENCY, CO_SLINGS_PROFICIENCY,
             CO_ONE_HANDED_SWORDS_PROFICIENCY, CO_TWO_HANDED_SWORDS_PROFICIENCY, CO_SPEARS_PROFICIENCY,
             CO_JAVELINS_PROFICIENCY, CO_MACES_PROFICIENCY, CO_CLUBS_PROFICIENCY, CO_HALBERDS_PROFICIENCY,
-            CO_AXES_PROFICIENCY, CO_QUARTERSTAFF_PROFICIENCY
+            CO_POLEAXE_PROFICIENCY, CO_AXES_PROFICIENCY, CO_QUARTERSTAFF_PROFICIENCY
         };
 
         /// <summary>
@@ -3079,6 +3088,13 @@ namespace SeraphLeveling
                     .RequiresPlayer()
                     .WithArgs(api.ChatCommands.Parsers.OptionalWord("action"), api.ChatCommands.Parsers.OptionalInt("value"))
                     .HandleWith(args => OnTraitCOProficiencyConfigCommand(args, CO_HALBERDS_PROFICIENCY))
+                .EndSubCommand()
+                .BeginSubCommand("poleaxe")
+                    .WithDescription("View or configure Poleaxe proficiency (Combat Overhaul fork). Usage: /trait poleaxe [base|increment|level|max] [value]")
+                    .RequiresPrivilege(Privilege.chat)
+                    .RequiresPlayer()
+                    .WithArgs(api.ChatCommands.Parsers.OptionalWord("action"), api.ChatCommands.Parsers.OptionalInt("value"))
+                    .HandleWith(args => OnTraitCOProficiencyConfigCommand(args, CO_POLEAXE_PROFICIENCY))
                 .EndSubCommand()
                 .BeginSubCommand("coaxes")
                     .WithDescription("View or configure Axes proficiency (CO). Usage: /trait coaxes [base|increment|level|max] [value]")
@@ -10011,6 +10027,7 @@ namespace SeraphLeveling
                 COMacesProficiencyMax = config.COMacesProficiencyMax;
                 COClubsProficiencyMax = config.COClubsProficiencyMax;
                 COHalberdsProficiencyMax = config.COHalberdsProficiencyMax;
+                COPoleaxeProficiencyMax = config.COPoleaxeProficiencyMax;
                 COAxesProficiencyMax = config.COAxesProficiencyMax;
                 COQuarterstaffProficiencyMax = config.COQuarterstaffProficiencyMax;
                 COSteadyAimMax = config.COSteadyAimMax;
@@ -11645,10 +11662,11 @@ namespace SeraphLeveling
             // detecting it re-enables proficiency progression, the bonus stat
             // application, and the /trait co* commands.
             IsCombatOverhaulLoaded = DetectAnyCombatOverhaul(api.ModLoader);
+            IsCombatOverhaulForkLoaded = api.ModLoader.IsModEnabled("combatoverhaulfork");
 
             if (IsCombatOverhaulLoaded)
             {
-                string which = api.ModLoader.IsModEnabled("combatoverhaulfork")
+                string which = IsCombatOverhaulForkLoaded
                     ? "Combat Overhaul (1.22 fork)" : "Combat Overhaul";
                 if (COEnableCompat)
                 {
@@ -11679,6 +11697,7 @@ namespace SeraphLeveling
                 case CO_MACES_PROFICIENCY: return COMacesProficiencyMax;
                 case CO_CLUBS_PROFICIENCY: return COClubsProficiencyMax;
                 case CO_HALBERDS_PROFICIENCY: return COHalberdsProficiencyMax;
+                case CO_POLEAXE_PROFICIENCY: return COPoleaxeProficiencyMax;
                 case CO_AXES_PROFICIENCY: return COAxesProficiencyMax;
                 case CO_QUARTERSTAFF_PROFICIENCY: return COQuarterstaffProficiencyMax;
                 case CO_STEADY_AIM: return COSteadyAimMax;
@@ -11823,9 +11842,15 @@ namespace SeraphLeveling
                 lowerCode.StartsWith("aa-knife-"))             // Ancient Armory knives (dagger, stiletto, khanjar, baselard)
                 return (CO_ONE_HANDED_SWORDS_PROFICIENCY, itemCode);
 
+            // Poleaxes: the CO fork tracks these under a separate poleaxeProficiency
+            // stat. The original CO has no such stat, so there we fall back to
+            // halberds, preserving the previous behavior.
+            if (lowerCode.StartsWith("poleaxe-"))
+                return (IsCombatOverhaulForkLoaded ? CO_POLEAXE_PROFICIENCY : CO_HALBERDS_PROFICIENCY, itemCode);
+
             // Halberds (polearms with axe heads)
             // Ancient Armory: aa-spear-voulge is a halberd-type weapon
-            if (lowerCode.StartsWith("halberd-") || lowerCode.StartsWith("poleaxe-") ||
+            if (lowerCode.StartsWith("halberd-") ||
                 lowerCode.StartsWith("glaive-") || lowerCode.StartsWith("bardiche-") ||
                 lowerCode.StartsWith("voulge-") || lowerCode.StartsWith("guisarme-") ||
                 lowerCode.StartsWith("aa-spear-voulge-"))  // Ancient Armory voulge
@@ -12225,7 +12250,7 @@ namespace SeraphLeveling
                 var meleeProficiencies = new[] {
                     CO_ONE_HANDED_SWORDS_PROFICIENCY, CO_TWO_HANDED_SWORDS_PROFICIENCY,
                     CO_SPEARS_PROFICIENCY, CO_JAVELINS_PROFICIENCY, CO_MACES_PROFICIENCY,
-                    CO_CLUBS_PROFICIENCY, CO_HALBERDS_PROFICIENCY, CO_AXES_PROFICIENCY,
+                    CO_CLUBS_PROFICIENCY, CO_HALBERDS_PROFICIENCY, CO_POLEAXE_PROFICIENCY, CO_AXES_PROFICIENCY,
                     CO_QUARTERSTAFF_PROFICIENCY
                 };
 
@@ -12438,6 +12463,7 @@ namespace SeraphLeveling
                 case CO_MACES_PROFICIENCY: return "Maces Proficiency";
                 case CO_CLUBS_PROFICIENCY: return "Clubs Proficiency";
                 case CO_HALBERDS_PROFICIENCY: return "Halberds Proficiency";
+                case CO_POLEAXE_PROFICIENCY: return "Poleaxe Proficiency";
                 case CO_AXES_PROFICIENCY: return "Axes Proficiency";
                 case CO_QUARTERSTAFF_PROFICIENCY: return "Quarterstaff Proficiency";
                 case CO_STEADY_AIM: return "Steady Aim";
@@ -16567,6 +16593,7 @@ namespace SeraphLeveling
             sb.AppendLine("\n--- Two-Handed Melee ---");
             ShowCOProficiencyStats(sb, playerProgress, playerUid, CO_TWO_HANDED_SWORDS_PROFICIENCY, "Two-Handed Swords");
             ShowCOProficiencyStats(sb, playerProgress, playerUid, CO_HALBERDS_PROFICIENCY, "Halberds");
+            ShowCOProficiencyStats(sb, playerProgress, playerUid, CO_POLEAXE_PROFICIENCY, "Poleaxe");
             ShowCOProficiencyStats(sb, playerProgress, playerUid, CO_QUARTERSTAFF_PROFICIENCY, "Quarterstaff");
 
             sb.AppendLine("\n--- Polearms ---");
@@ -16637,6 +16664,7 @@ namespace SeraphLeveling
                 "maces" or "mace" => CO_MACES_PROFICIENCY,
                 "clubs" or "club" => CO_CLUBS_PROFICIENCY,
                 "halberds" or "halberd" => CO_HALBERDS_PROFICIENCY,
+                "poleaxe" or "poleaxes" => CO_POLEAXE_PROFICIENCY,
                 "axes" or "axe" => CO_AXES_PROFICIENCY,
                 "quarterstaff" or "staff" or "staves" => CO_QUARTERSTAFF_PROFICIENCY,
                 "steadyaim" or "steady" or "aim" => CO_STEADY_AIM,
@@ -16645,7 +16673,7 @@ namespace SeraphLeveling
 
             if (proficiencyStat == null)
             {
-                return TextCommandResult.Error($"Unknown proficiency '{proficiencyArg}'. Valid options: bows, crossbows, firearms, slings, 1hswords, 2hswords, spears, javelins, maces, clubs, halberds, axes, quarterstaff, steadyaim");
+                return TextCommandResult.Error($"Unknown proficiency '{proficiencyArg}'. Valid options: bows, crossbows, firearms, slings, 1hswords, 2hswords, spears, javelins, maces, clubs, halberds, poleaxe, axes, quarterstaff, steadyaim");
             }
 
             return SetCOLevelForPlayer(player, proficiencyStat, credits, toolName);
@@ -16988,6 +17016,7 @@ namespace SeraphLeveling
                 case CO_MACES_PROFICIENCY: COMacesProficiencyMax = value; break;
                 case CO_CLUBS_PROFICIENCY: COClubsProficiencyMax = value; break;
                 case CO_HALBERDS_PROFICIENCY: COHalberdsProficiencyMax = value; break;
+                case CO_POLEAXE_PROFICIENCY: COPoleaxeProficiencyMax = value; break;
                 case CO_AXES_PROFICIENCY: COAxesProficiencyMax = value; break;
                 case CO_QUARTERSTAFF_PROFICIENCY: COQuarterstaffProficiencyMax = value; break;
                 case CO_STEADY_AIM: COSteadyAimMax = value; break;
@@ -19129,6 +19158,7 @@ namespace SeraphLeveling
             // even when CO is actually installed. Accepts the original mod and the 1.22 fork.
             SeraphLevelingModSystem.IsCombatOverhaulLoaded =
                 SeraphLevelingModSystem.DetectAnyCombatOverhaul(api.ModLoader);
+            SeraphLevelingModSystem.IsCombatOverhaulForkLoaded = api.ModLoader.IsModEnabled("combatoverhaulfork");
 
             // Register network channel for receiving level-up sounds from server
             api.Network.RegisterChannel("seraphleveling")
@@ -20464,6 +20494,7 @@ namespace SeraphLeveling
                 ("macesProficiency", "Maces Proficiency", 0.3f),
                 ("clubsProficiency", "Clubs Proficiency", 0.3f),
                 ("halberdsProficiency", "Halberds Proficiency", 0.3f),
+                ("poleaxeProficiency", "Poleaxe Proficiency", 0.3f),
                 ("axesProficiency", "Axes Proficiency", 0.3f),
                 ("quarterstaffProficiency", "Quarterstaff Proficiency", 0.3f),
             };
@@ -20658,7 +20689,7 @@ namespace SeraphLeveling
                     string[] proficiencyNames = new[] {
                         "bows proficiency", "crossbows proficiency", "firearms proficiency", "slings proficiency",
                         "one-handed swords", "two-handed swords", "spears proficiency", "javelins proficiency",
-                        "maces proficiency", "clubs proficiency", "halberds proficiency", "axes proficiency",
+                        "maces proficiency", "clubs proficiency", "halberds proficiency", "poleaxe proficiency", "axes proficiency",
                         "quarterstaff proficiency"
                     };
 

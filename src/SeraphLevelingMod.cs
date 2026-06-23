@@ -356,6 +356,15 @@ namespace SeraphLeveling
         /// </summary>
         public string LevelUpSoundName { get; set; } = "game:sounds/effect/receptionbell";
 
+        /// <summary>
+        /// How loud the level-up ding is, on a 0.0 to 1.0 scale. The default is 0.25.
+        /// The scale is exponential rather than linear, so the values do not feel evenly spaced.
+        /// Reference points: 1.0 is not particularly loud, 0.5 is hard to distinguish from 1.0,
+        /// 0.25 is a comfortable medium, 0.05 sounds roughly half as loud as 0.25, and 0.01 is still audible.
+        /// Set 0.0 to silence the ding without disabling the chat message.
+        /// </summary>
+        public float LevelUpSoundVolume { get; set; } = 0.25f;
+
         // =========================================================================
         // DEBUG SETTINGS
         // =========================================================================
@@ -1345,6 +1354,16 @@ namespace SeraphLeveling
     {
         [ProtoMember(1)]
         public string SoundName { get; set; }
+
+        [ProtoMember(2)]
+        public float Volume { get; set; }
+
+        /// <summary>
+        /// True when this packet originates from /trait testsound. The client logs and prints a chat
+        /// confirmation showing the volume it actually received, so we can verify the network path.
+        /// </summary>
+        [ProtoMember(3)]
+        public bool IsTest { get; set; }
     }
 
     /// <summary>
@@ -1543,6 +1562,43 @@ namespace SeraphLeveling
     /// Provides a progression system that improves player traits through gameplay.
     /// Currently implements mining speed progression based on blocks mined.
     /// </summary>
+    /// <summary>
+    /// A snapshot of one player's full progression across every system, used to
+    /// transfer progress between worlds/servers via /trait export and /trait
+    /// import. Each field is null when the player has no data for that system.
+    /// Plain public fields/auto-properties so it round-trips cleanly through
+    /// Newtonsoft JSON.
+    /// </summary>
+    public class PlayerProgressExport
+    {
+        public int FormatVersion = 1;
+        public string SourcePlayerName;
+        public string SourcePlayerUid;
+        public double ExportedGameDay;
+
+        public MiningProgressData Mining;
+        public MeleeProgressData Melee;
+        public RangedProgressData Ranged;
+        public WalkingProgressData Walking;
+        public HungerProgressData Hunger;
+        public ArmorProgressData Armor;
+        public ClothierProgressData Clothier;
+        public MenderProgressData Mender;
+        public PilfererProgressData Pilferer;
+        public ResourcefulProgressData Resourceful;
+        public ForagerProgressData Forager;
+        public FurtiveProgressData Furtive;
+        public PreciseProgressData Precise;
+        public TechnicalProgressData Technical;
+        public HardyHealthProgressData HardyHealth;
+        public BowyerProgressData Bowyer;
+        public ImproviserProgressData Improviser;
+        public TinkererProgressData Tinkerer;
+        public MercilessProgressData Merciless;
+        public ClaustrophobicRemovalProgressData ClaustrophobicRemoval;
+        public COPlayerProgressData CombatOverhaul;
+    }
+
     public class SeraphLevelingModSystem : ModSystem
     {
         public static ICoreServerAPI ServerApi { get; private set; }
@@ -2174,6 +2230,29 @@ namespace SeraphLeveling
         /// <summary>Whether CO compatibility is enabled (mod loaded AND config enabled).</summary>
         public static bool IsCOCompatEnabled => IsCombatOverhaulLoaded && COEnableCompat;
 
+        /// <summary>
+        /// Mod IDs recognized as "Combat Overhaul". The original mod is
+        /// "combatoverhaul"; the 1.22 community continuation is the fork
+        /// "combatoverhaulfork". The fork keeps CO's stat names and trait
+        /// codes (bowsProficiency, playerHeadDamageFactor, meleeDamageTierBonus*,
+        /// etc.) and ships its weapons in the game domain with the same code
+        /// suffixes (blade-, bow-, spear-, ...), and our weapon matching strips
+        /// the domain prefix, so all proficiency tracking and stat application
+        /// works for either one once it is detected here.
+        /// </summary>
+        public static readonly string[] CombatOverhaulModIds = { "combatoverhaul", "combatoverhaulfork" };
+
+        /// <summary>Returns true if Combat Overhaul or its 1.22 fork is enabled.</summary>
+        public static bool DetectAnyCombatOverhaul(IModLoader modLoader)
+        {
+            if (modLoader == null) return false;
+            foreach (string id in CombatOverhaulModIds)
+            {
+                if (modLoader.IsModEnabled(id)) return true;
+            }
+            return false;
+        }
+
         // CO configuration values (loaded from config)
         public static bool COEnableCompat = true;
         public static int COBaseDamagePerIncrement = 100;
@@ -2200,6 +2279,7 @@ namespace SeraphLeveling
         public static bool EnableLevelUpMessages = true;
         public static bool EnableLevelUpSound = true;
         public static string LevelUpSoundName = "game:sounds/effect/receptionbell";
+        public static float LevelUpSoundVolume = 0.25f;
 
         // Dispose guard to prevent OnGameWorldSave from persisting empty dictionaries after Dispose()
         private static volatile bool isDisposed = false;
@@ -2850,6 +2930,22 @@ namespace SeraphLeveling
                     .RequiresPlayer()
                     .HandleWith(OnTraitResetCommand)
                 .EndSubCommand()
+                // Export full progression to a JSON file for cross-world transfer (admin only)
+                .BeginSubCommand("export")
+                    .WithDescription("Export your (or a named player's) full progression to a JSON file you can carry to another world. Admin only.")
+                    .WithArgs(api.ChatCommands.Parsers.OptionalWord("playername"))
+                    .RequiresPrivilege(Privilege.controlserver)
+                    .RequiresPlayer()
+                    .HandleWith(OnTraitExportCommand)
+                .EndSubCommand()
+                // Import a progression JSON file onto a player, replacing current progress (admin only)
+                .BeginSubCommand("import")
+                    .WithDescription("Import a progression JSON file onto yourself (or a named player), replacing current progress. Admin only.")
+                    .WithArgs(api.ChatCommands.Parsers.Word("filename"), api.ChatCommands.Parsers.OptionalWord("playername"))
+                    .RequiresPrivilege(Privilege.controlserver)
+                    .RequiresPlayer()
+                    .HandleWith(OnTraitImportCommand)
+                .EndSubCommand()
                 // Reset all config values to defaults
                 .BeginSubCommand("resetconfig")
                     .WithDescription("Reset all trait config values (base, increment, max) to defaults (admin only)")
@@ -3024,6 +3120,19 @@ namespace SeraphLeveling
                     .RequiresPlayer()
                     .HandleWith(OnTraitAllCommand)
                 .EndSubCommand()
+                .BeginSubCommand("soundvolume")
+                    .WithDescription("Get or set the level-up ding volume, from 0.0 (silent) to 1.0 (full). Default 0.25. Scale is exponential, so 0.5 is close to 1.0 (admin)")
+                    .WithArgs(api.ChatCommands.Parsers.OptionalWord("volume"))
+                    .RequiresPrivilege(Privilege.controlserver)
+                    .HandleWith(OnTraitSoundVolumeCommand)
+                .EndSubCommand()
+                .BeginSubCommand("testsound")
+                    .WithDescription("Play the level-up ding once at a specified volume (0.0-1.0) for testing. Defaults to the current config volume (admin)")
+                    .WithArgs(api.ChatCommands.Parsers.OptionalWord("volume"))
+                    .RequiresPrivilege(Privilege.controlserver)
+                    .RequiresPlayer()
+                    .HandleWith(OnTraitTestSoundCommand)
+                .EndSubCommand()
                 .BeginSubCommand("setplayer")
                     .WithDescription("Set a trait level for another player. Usage: /trait setplayer &lt;playername&gt; &lt;trait&gt; &lt;level&gt; [toolname]")
                     .WithArgs(api.ChatCommands.Parsers.Word("playername"), api.ChatCommands.Parsers.Word("trait"), api.ChatCommands.Parsers.Int("level"), api.ChatCommands.Parsers.OptionalWord("toolname"))
@@ -3142,10 +3251,122 @@ namespace SeraphLeveling
                 "  /trait armordurabilitymax [percent] - Get or set max durability bonus (admin)\n" +
                 "  /trait armorwalkspeedmax [percent] - Get or set max walk speed reduction (admin)\n" +
                 "  /trait all - View all trait progression at once\n" +
+                "  /trait soundvolume [0.0-1.0] - Get or set the level-up ding volume (admin)\n" +
+                "  /trait testsound [0.0-1.0] - Play the level-up ding once for testing (admin)\n" +
                 "  /trait setplayer &lt;name&gt; &lt;trait&gt; &lt;level&gt; [toolname] - Set trait level for another player (admin)\n" +
                 "  /trait reset - Reset all trait progression to 0 (admin)\n" +
                 "  /trait resetconfig - Reset all config values to defaults (admin)\n" +
                 "  /trait maxall - Set all trait progression to maximum for testing (admin)");
+        }
+
+        /// <summary>
+        /// Handler for /trait soundvolume command.
+        /// Gets or sets the level-up ding volume (0.0 to 1.0) and persists it to the config file.
+        /// </summary>
+        private TextCommandResult OnTraitSoundVolumeCommand(TextCommandCallingArgs args)
+        {
+            string raw = args[0] as string;
+
+            if (string.IsNullOrWhiteSpace(raw))
+            {
+                return TextCommandResult.Success(
+                    $"Current level-up sound volume: {LevelUpSoundVolume.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture)} (0.0 silent, 1.0 full, default 0.25). The scale is exponential, so 0.5 is close to 1.0 and 0.05 is about half as loud as 0.25. Set it with /trait soundvolume 0.25");
+            }
+
+            if (!float.TryParse(raw, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out float newVolume))
+            {
+                return TextCommandResult.Error("Volume must be a number between 0.0 and 1.0. For example: /trait soundvolume 0.25");
+            }
+
+            if (newVolume < 0f || newVolume > 1f)
+            {
+                return TextCommandResult.Error("Volume must be between 0.0 and 1.0. The scale is exponential: 0.25 is a comfortable medium, 0.05 is quiet, 0.5 sounds close to 1.0.");
+            }
+
+            LevelUpSoundVolume = newVolume;
+            SaveLevelUpSoundVolumeToConfig();
+
+            return TextCommandResult.Success(
+                $"Level-up sound volume set to {LevelUpSoundVolume.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture)}. This has been saved to the config file.");
+        }
+
+        /// <summary>
+        /// Writes the current level-up sound volume back to the JSON config file so it survives a restart.
+        /// Loads the existing config first so other settings the user edited are preserved.
+        /// </summary>
+        private void SaveLevelUpSoundVolumeToConfig()
+        {
+            if (ServerApi == null) return;
+
+            try
+            {
+                SeraphLevelingConfig config = ServerApi.LoadModConfig<SeraphLevelingConfig>(CONFIG_FILE_NAME) ?? new SeraphLevelingConfig();
+                config.LevelUpSoundVolume = LevelUpSoundVolume;
+                ServerApi.StoreModConfig(config, CONFIG_FILE_NAME);
+            }
+            catch (Exception ex)
+            {
+                ServerApi?.Logger.Warning($"[SeraphLeveling] Failed to save level-up sound volume to config: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// Handler for /trait testsound command.
+        /// Sends a single level-up sound packet to the calling player at the requested volume
+        /// (or the currently configured volume if no value is given). Marks the packet as a test
+        /// so the client logs and prints what it actually received, isolating whether the volume
+        /// reached the audio engine intact.
+        /// </summary>
+        private TextCommandResult OnTraitTestSoundCommand(TextCommandCallingArgs args)
+        {
+            string raw = args[0] as string;
+            float volume = LevelUpSoundVolume;
+            bool overridden = false;
+
+            if (!string.IsNullOrWhiteSpace(raw))
+            {
+                if (!float.TryParse(raw, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out volume))
+                {
+                    return TextCommandResult.Error("Volume must be a number between 0.0 and 1.0. For example: /trait testsound 0.1");
+                }
+                if (volume < 0f || volume > 1f)
+                {
+                    return TextCommandResult.Error("Volume must be between 0.0 and 1.0. Use 0.0 for silent, 0.5 for half, 1.0 for full.");
+                }
+                overridden = true;
+            }
+
+            var caller = args.Caller.Player as IServerPlayer;
+            if (caller == null)
+            {
+                return TextCommandResult.Error("This command must be run by a player.");
+            }
+
+            if (serverSoundChannel == null)
+            {
+                return TextCommandResult.Error("Sound network channel not initialized. Cannot send test sound.");
+            }
+
+            string soundName = LevelUpSoundName;
+            try
+            {
+                serverSoundChannel.SendPacket(new LevelUpSoundMessage
+                {
+                    SoundName = soundName,
+                    Volume = volume,
+                    IsTest = true
+                }, caller);
+            }
+            catch (Exception ex)
+            {
+                return TextCommandResult.Error($"Failed to send test sound: {ex.Message}");
+            }
+
+            string volStr = volume.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture);
+            string source = overridden ? "supplied" : "current config";
+            ServerApi?.Logger.Notification($"[SeraphLeveling] /trait testsound by {caller.PlayerName}: sound={soundName}, volume={volStr} ({source})");
+            return TextCommandResult.Success(
+                $"Sent test sound '{soundName}' at volume {volStr} ({source}). Run /trait testsound 0.05 then /trait testsound 1.0 back to back to A/B test, and watch your chat for the volume the client reports receiving.");
         }
 
         /// <summary>
@@ -6782,7 +7003,7 @@ namespace SeraphLeveling
             {
                 try
                 {
-                    serverSoundChannel.SendPacket(new LevelUpSoundMessage { SoundName = LevelUpSoundName }, player);
+                    serverSoundChannel.SendPacket(new LevelUpSoundMessage { SoundName = LevelUpSoundName, Volume = LevelUpSoundVolume }, player);
                 }
                 catch (Exception ex)
                 {
@@ -9841,6 +10062,7 @@ namespace SeraphLeveling
                 EnableLevelUpMessages = config.EnableLevelUpMessages;
                 EnableLevelUpSound = config.EnableLevelUpSound;
                 LevelUpSoundName = config.LevelUpSoundName;
+                LevelUpSoundVolume = Math.Clamp(config.LevelUpSoundVolume, 0f, 1f);
 
                 // Debug settings
                 DebugLoggingEnabled = config.EnableDebugLogging;
@@ -11418,18 +11640,23 @@ namespace SeraphLeveling
         /// </summary>
         private void DetectCombatOverhaul(ICoreServerAPI api)
         {
-            // Check if Combat Overhaul is loaded using the mod ID
-            IsCombatOverhaulLoaded = api.ModLoader.IsModEnabled("combatoverhaul");
+            // Accept the original Combat Overhaul AND the 1.22 fork
+            // ("combatoverhaulfork"). The fork keeps CO's stat/trait names, so
+            // detecting it re-enables proficiency progression, the bonus stat
+            // application, and the /trait co* commands.
+            IsCombatOverhaulLoaded = DetectAnyCombatOverhaul(api.ModLoader);
 
             if (IsCombatOverhaulLoaded)
             {
+                string which = api.ModLoader.IsModEnabled("combatoverhaulfork")
+                    ? "Combat Overhaul (1.22 fork)" : "Combat Overhaul";
                 if (COEnableCompat)
                 {
-                    api.Logger.Notification("[SeraphLeveling] Combat Overhaul detected - proficiency progression enabled");
+                    api.Logger.Notification($"[SeraphLeveling] {which} detected - proficiency progression enabled");
                 }
                 else
                 {
-                    api.Logger.Notification("[SeraphLeveling] Combat Overhaul detected but compatibility disabled in config");
+                    api.Logger.Notification($"[SeraphLeveling] {which} detected but compatibility disabled in config");
                 }
             }
         }
@@ -15421,6 +15648,19 @@ namespace SeraphLeveling
             IServerPlayer player = args.Caller.Player as IServerPlayer;
             if (player?.Entity == null) return TextCommandResult.Error("Player not found.");
 
+            ResetProgressForPlayer(player);
+
+            string coNote = IsCombatOverhaulLoaded ? " (including Combat Overhaul proficiencies)" : "";
+            return TextCommandResult.Success($"All trait progression has been reset to 0{coNote}.");
+        }
+
+        /// <summary>
+        /// Clears every progression system back to class defaults for one player
+        /// and strips the applied stat/trait bonuses. Shared by /trait reset and
+        /// the pre-step of /trait import. Sends no chat message.
+        /// </summary>
+        private void ResetProgressForPlayer(IServerPlayer player)
+        {
             string playerUid = player.PlayerUID;
 
             // Reset Mining
@@ -15615,9 +15855,181 @@ namespace SeraphLeveling
             // Also reset Combat Overhaul proficiency progression so no stale per-weapon
             // bonuses linger after a full reset. No-op if CO isn't loaded.
             ResetCOProgressForPlayer(player);
+        }
 
-            string coNote = IsCombatOverhaulLoaded ? " (including Combat Overhaul proficiencies)" : "";
-            return TextCommandResult.Success($"All trait progression has been reset to 0{coNote}.");
+        // ============================================================
+        //  Cross-world progression transfer (/trait export, /trait import)
+        //  File-based JSON so a full character (which can be many KB) is not
+        //  limited by chat length, and the file persists outside any single
+        //  world save. Files live in a global data folder so a different world
+        //  can read them. Admin-only (single-player has this privilege).
+        // ============================================================
+
+        /// <summary>Reduce a player name to a safe, world-portable file stem.</summary>
+        private static string SanitizeExportName(string name)
+        {
+            if (string.IsNullOrWhiteSpace(name)) return "player";
+            var sb = new StringBuilder();
+            foreach (char c in name)
+            {
+                if (char.IsLetterOrDigit(c) || c == '-' || c == '_') sb.Append(c);
+                else sb.Append('_');
+            }
+            string s = sb.ToString().Trim('_');
+            return s.Length == 0 ? "player" : s;
+        }
+
+        /// <summary>Global (not per-world) folder where transfer files are stored.</summary>
+        private string GetTransferDirectory()
+        {
+            return ServerApi.GetOrCreateDataPath("SeraphLeveling");
+        }
+
+        /// <summary>Snapshot every progression system this player has into one container.</summary>
+        private PlayerProgressExport BuildProgressExport(IServerPlayer player)
+        {
+            string uid = player.PlayerUID;
+            var ex = new PlayerProgressExport
+            {
+                FormatVersion = 1,
+                SourcePlayerName = player.PlayerName,
+                SourcePlayerUid = uid,
+                ExportedGameDay = ServerApi.World.Calendar.TotalDays,
+            };
+
+            if (MiningProgress.TryGetValue(uid, out var mining)) ex.Mining = mining;
+            if (MeleeProgress.TryGetValue(uid, out var melee)) ex.Melee = melee;
+            if (RangedProgress.TryGetValue(uid, out var ranged)) ex.Ranged = ranged;
+            if (WalkingProgress.TryGetValue(uid, out var walking)) ex.Walking = walking;
+            if (HungerProgress.TryGetValue(uid, out var hunger)) ex.Hunger = hunger;
+            if (ArmorProgress.TryGetValue(uid, out var armor)) ex.Armor = armor;
+            if (ClothierProgress.TryGetValue(uid, out var clothier)) ex.Clothier = clothier;
+            if (MenderProgress.TryGetValue(uid, out var mender)) ex.Mender = mender;
+            if (PilfererProgress.TryGetValue(uid, out var pilferer)) ex.Pilferer = pilferer;
+            if (ResourcefulProgress.TryGetValue(uid, out var resourceful)) ex.Resourceful = resourceful;
+            if (ForagerProgress.TryGetValue(uid, out var forager)) ex.Forager = forager;
+            if (FurtiveProgress.TryGetValue(uid, out var furtive)) ex.Furtive = furtive;
+            if (PreciseProgress.TryGetValue(uid, out var precise)) ex.Precise = precise;
+            if (TechnicalProgress.TryGetValue(uid, out var technical)) ex.Technical = technical;
+            if (HardyHealthProgress.TryGetValue(uid, out var hardy)) ex.HardyHealth = hardy;
+            if (BowyerProgress.TryGetValue(uid, out var bowyer)) ex.Bowyer = bowyer;
+            if (ImproviserProgress.TryGetValue(uid, out var improviser)) ex.Improviser = improviser;
+            if (TinkererProgress.TryGetValue(uid, out var tinkerer)) ex.Tinkerer = tinkerer;
+            if (MercilessProgress.TryGetValue(uid, out var merciless)) ex.Merciless = merciless;
+            if (ClaustrophobicRemovalProgress.TryGetValue(uid, out var claustro)) ex.ClaustrophobicRemoval = claustro;
+            if (COProgress.TryGetValue(uid, out var co)) ex.CombatOverhaul = co;
+
+            return ex;
+        }
+
+        /// <summary>Install imported progression under a UID and flag each system for save.</summary>
+        private void ApplyImportedProgress(string uid, PlayerProgressExport ex)
+        {
+            if (ex.Mining != null) { MiningProgress[uid] = ex.Mining; pendingMiningProgressSave = true; }
+            if (ex.Melee != null) { MeleeProgress[uid] = ex.Melee; pendingMeleeProgressSave = true; }
+            if (ex.Ranged != null) { RangedProgress[uid] = ex.Ranged; pendingRangedProgressSave = true; }
+            if (ex.Walking != null) { WalkingProgress[uid] = ex.Walking; pendingWalkingProgressSave = true; }
+            if (ex.Hunger != null) { HungerProgress[uid] = ex.Hunger; pendingHungerProgressSave = true; }
+            if (ex.Armor != null) { ArmorProgress[uid] = ex.Armor; pendingArmorProgressSave = true; }
+            if (ex.Clothier != null) { ClothierProgress[uid] = ex.Clothier; pendingClothierProgressSave = true; }
+            if (ex.Mender != null) { MenderProgress[uid] = ex.Mender; pendingMenderProgressSave = true; }
+            if (ex.Pilferer != null) { PilfererProgress[uid] = ex.Pilferer; pendingPilfererProgressSave = true; }
+            if (ex.Resourceful != null) { ResourcefulProgress[uid] = ex.Resourceful; pendingResourcefulProgressSave = true; }
+            if (ex.Forager != null) { ForagerProgress[uid] = ex.Forager; pendingForagerProgressSave = true; }
+            if (ex.Furtive != null) { FurtiveProgress[uid] = ex.Furtive; pendingFurtiveProgressSave = true; }
+            if (ex.Precise != null) { PreciseProgress[uid] = ex.Precise; pendingPreciseProgressSave = true; }
+            if (ex.Technical != null) { TechnicalProgress[uid] = ex.Technical; pendingTechnicalProgressSave = true; }
+            if (ex.HardyHealth != null) { HardyHealthProgress[uid] = ex.HardyHealth; pendingHardyHealthProgressSave = true; }
+            if (ex.Bowyer != null) { BowyerProgress[uid] = ex.Bowyer; pendingBowyerProgressSave = true; }
+            if (ex.Improviser != null) { ImproviserProgress[uid] = ex.Improviser; pendingImproviserProgressSave = true; }
+            if (ex.Tinkerer != null) { TinkererProgress[uid] = ex.Tinkerer; pendingTinkererProgressSave = true; }
+            if (ex.Merciless != null) { MercilessProgress[uid] = ex.Merciless; pendingMercilessProgressSave = true; }
+            if (ex.ClaustrophobicRemoval != null) { ClaustrophobicRemovalProgress[uid] = ex.ClaustrophobicRemoval; pendingClaustrophobicRemovalProgressSave = true; }
+            if (ex.CombatOverhaul != null) { COProgress[uid] = ex.CombatOverhaul; pendingCOProgressSave = true; }
+        }
+
+        private TextCommandResult OnTraitExportCommand(TextCommandCallingArgs args)
+        {
+            IServerPlayer caller = args.Caller.Player as IServerPlayer;
+            if (caller?.Entity == null) return TextCommandResult.Error("Player not found.");
+
+            IServerPlayer target = caller;
+            string nameArg = args[0] as string;
+            if (!string.IsNullOrWhiteSpace(nameArg))
+            {
+                target = ResolvePlayerByName(nameArg);
+                if (target == null) return TextCommandResult.Error($"Could not find online player matching '{nameArg}'.");
+            }
+            if (target?.Entity == null) return TextCommandResult.Error("Target player not found.");
+
+            try
+            {
+                var ex = BuildProgressExport(target);
+                string json = Newtonsoft.Json.JsonConvert.SerializeObject(ex, Newtonsoft.Json.Formatting.Indented);
+                string stem = SanitizeExportName(target.PlayerName);
+                string dir = GetTransferDirectory();
+                string path = Path.Combine(dir, stem + ".json");
+                File.WriteAllText(path, json);
+
+                return TextCommandResult.Success(
+                    $"Exported {target.PlayerName}'s progression to:\n{path}\nIn another world, run: /trait import {stem}");
+            }
+            catch (Exception e)
+            {
+                ServerApi.Logger.Error($"[SeraphLeveling] Export failed: {e}");
+                return TextCommandResult.Error($"Export failed: {e.Message}");
+            }
+        }
+
+        private TextCommandResult OnTraitImportCommand(TextCommandCallingArgs args)
+        {
+            IServerPlayer caller = args.Caller.Player as IServerPlayer;
+            if (caller?.Entity == null) return TextCommandResult.Error("Player not found.");
+
+            string fileArg = args[0] as string;
+            if (string.IsNullOrWhiteSpace(fileArg))
+                return TextCommandResult.Error("Usage: /trait import &lt;filename&gt; [playername]");
+
+            IServerPlayer target = caller;
+            string nameArg = args[1] as string;
+            if (!string.IsNullOrWhiteSpace(nameArg))
+            {
+                target = ResolvePlayerByName(nameArg);
+                if (target == null) return TextCommandResult.Error($"Could not find online player matching '{nameArg}'.");
+            }
+            if (target?.Entity == null) return TextCommandResult.Error("Target player not found or not online.");
+
+            // Resolve the file strictly inside the transfer folder (no path traversal).
+            string stem = SanitizeExportName(Path.GetFileNameWithoutExtension(fileArg));
+            string dir = GetTransferDirectory();
+            string path = Path.Combine(dir, stem + ".json");
+            if (!File.Exists(path))
+                return TextCommandResult.Error($"No export file named '{stem}.json' in {dir}. Run /trait export first.");
+
+            PlayerProgressExport ex;
+            try
+            {
+                string json = File.ReadAllText(path);
+                ex = Newtonsoft.Json.JsonConvert.DeserializeObject<PlayerProgressExport>(json);
+            }
+            catch (Exception e)
+            {
+                return TextCommandResult.Error($"Failed to read or parse '{stem}.json': {e.Message}");
+            }
+            if (ex == null) return TextCommandResult.Error("Export file was empty or invalid.");
+
+            string uid = target.PlayerUID;
+
+            // 1. Strip the target's current progression and applied bonuses.
+            ResetProgressForPlayer(target);
+            // 2. Install the imported data under the target's UID, flag for save.
+            ApplyImportedProgress(uid, ex);
+            // 3. Re-apply all bonuses live (the same routine that runs on join).
+            OnPlayerJoin(target);
+
+            string origin = string.IsNullOrEmpty(ex.SourcePlayerName) ? "" : $" (originally {ex.SourcePlayerName})";
+            return TextCommandResult.Success(
+                $"Imported progression from '{stem}.json'{origin} onto {target.PlayerName}. Previous progress was replaced.");
         }
 
         /// <summary>
@@ -18714,8 +19126,9 @@ namespace SeraphLeveling
             // Mirror server's IsCombatOverhaulLoaded flag on the client. The server-side
             // assignment in StartServerSide doesn't run on a client-only instance, so without
             // this the postfix would think CO is never loaded and skip CO trait display
-            // even when CO is actually installed.
-            SeraphLevelingModSystem.IsCombatOverhaulLoaded = api.ModLoader.IsModEnabled("combatoverhaul");
+            // even when CO is actually installed. Accepts the original mod and the 1.22 fork.
+            SeraphLevelingModSystem.IsCombatOverhaulLoaded =
+                SeraphLevelingModSystem.DetectAnyCombatOverhaul(api.ModLoader);
 
             // Register network channel for receiving level-up sounds from server
             api.Network.RegisterChannel("seraphleveling")
@@ -18749,7 +19162,17 @@ namespace SeraphLeveling
                 var player = clientApi?.World?.Player?.Entity;
                 if (player != null && !string.IsNullOrEmpty(message?.SoundName))
                 {
-                    clientApi.World.PlaySoundAt(new AssetLocation(message.SoundName), player, null, true, 16f);
+                    float clamped = Math.Clamp(message.Volume, 0f, 1f);
+                    clientApi.World.PlaySoundAt(new AssetLocation(message.SoundName), player, null, true, 16f, clamped);
+
+                    if (message.IsTest)
+                    {
+                        string rawVolStr = message.Volume.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture);
+                        string playedVolStr = clamped.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture);
+                        string label = $"[SeraphLeveling] Test sound received. sound={message.SoundName}, volume sent={rawVolStr}, volume played={playedVolStr}";
+                        clientApi.Logger.Notification(label);
+                        clientApi.ShowChatMessage(label);
+                    }
                 }
             }
             catch (Exception ex)

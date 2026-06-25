@@ -40,22 +40,28 @@
       <ModInfoContent>$([System.IO.File]::ReadAllText('$(ProjectDir)modinfo.json'))</ModInfoContent>
       <ModVersion>$([System.Text.RegularExpressions.Regex]::Match($(ModInfoContent), '"version":\s*"([^"]+)"').Groups[1].Value)</ModVersion>
       <ModZipName>SeraphLeveling_$(ModVersion).zip</ModZipName>
+      <ModOutDir>$(ProjectDir)bin\$(Configuration)\$(TargetFramework)</ModOutDir>
     </PropertyGroup>
     <ItemGroup>
       <PackageFiles Include="$(TargetPath)" />
       <PackageFiles Include="modinfo.json" />
-    </ItemGroup>
-    <!-- Copy DLL and modinfo.json -->
-    <Copy SourceFiles="@(PackageFiles)" DestinationFolder="$(ProjectDir)bin\$(Configuration)\$(TargetFramework)\mod\" />
-    <!-- Copy assets folder recursively -->
-    <ItemGroup>
       <AssetFiles Include="$(ProjectDir)assets\**\*.*" />
+      <!-- Old versioned zips to clean so stale duplicates don't pile up and load
+           alongside the current one (same modid = the game loads an arbitrary one).
+           The trailing underscore means this does NOT match the separate
+           SeraphLevelingExperimental_*.zip mod. -->
+      <OldZipsBin Include="$(ModOutDir)\SeraphLeveling_*.zip" />
+      <OldZipsDeploy Include="$(APPDATA)\VintagestoryData\Mods\SeraphLeveling_*.zip" />
     </ItemGroup>
-    <Copy SourceFiles="@(AssetFiles)" DestinationFiles="@(AssetFiles->'$(ProjectDir)bin\$(Configuration)\$(TargetFramework)\mod\assets\%(RecursiveDir)%(Filename)%(Extension)')" />
-    <!-- Create zip with version in filename -->
-    <ZipDirectory SourceDirectory="$(ProjectDir)bin\$(Configuration)\$(TargetFramework)\mod\" DestinationFile="$(ProjectDir)bin\$(Configuration)\$(TargetFramework)\$(ModZipName)" Overwrite="true" />
-    <!-- Auto-deploy to Vintagestory Mods folder -->
-    <Copy SourceFiles="$(ProjectDir)bin\$(Configuration)\$(TargetFramework)\$(ModZipName)" DestinationFolder="$(APPDATA)\VintagestoryData\Mods\" />
+    <!-- 1. Clean old bin zips (bin is never locked) and build the new zip -->
+    <Delete Files="@(OldZipsBin)" />
+    <Copy SourceFiles="@(PackageFiles)" DestinationFolder="$(ModOutDir)\mod\" />
+    <Copy SourceFiles="@(AssetFiles)" DestinationFiles="@(AssetFiles->'$(ModOutDir)\mod\assets\%(RecursiveDir)%(Filename)%(Extension)')" />
+    <ZipDirectory SourceDirectory="$(ModOutDir)\mod\" DestinationFile="$(ModOutDir)\$(ModZipName)" Overwrite="true" />
+    <!-- 2. Remove stale deployed versions (best-effort; never fail the build if the
+         game is running and holds a lock), then deploy the freshly built zip. -->
+    <Delete Files="@(OldZipsDeploy)" ContinueOnError="true" />
+    <Copy SourceFiles="$(ModOutDir)\$(ModZipName)" DestinationFolder="$(APPDATA)\VintagestoryData\Mods\" />
     <Message Importance="high" Text="Deployed $(ModZipName) to $(APPDATA)\VintagestoryData\Mods\" />
   </Target>
 

@@ -14803,7 +14803,7 @@ namespace SeraphLeveling
             if (IsSkillDisabled("resourceful"))
             {
                 player.Entity.Stats.Set("animalLootDropRate", RESOURCEFUL_LOOT_STAT_CODE, 0f, false);
-                player.Entity.Stats.Set("harvestingSpeedMul", RESOURCEFUL_SPEED_STAT_CODE, 0f, false);
+                player.Entity.Stats.Set("animalHarvestingTime", RESOURCEFUL_SPEED_STAT_CODE, 0f, false);
                 return;
             }
 
@@ -14842,7 +14842,10 @@ namespace SeraphLeveling
             // Note: Stats use WeightedSum blending with a base of 1.0. Vanilla traits set values
             // like 0.1 for +10%. We set just the bonus value, not 1 + bonus.
             player.Entity.Stats.Set("animalLootDropRate", RESOURCEFUL_LOOT_STAT_CODE, lootBonus, false);
-            player.Entity.Stats.Set("harvestingSpeedMul", RESOURCEFUL_SPEED_STAT_CODE, speedBonus, false);
+            // The stat is animalHarvestingTime, which multiplies the harvest duration, so a
+            // faster harvest is a negative value. Vanilla Resourceful stores -0.25 for it.
+            // There is no stat called harvestingSpeedMul, so the old code went nowhere.
+            player.Entity.Stats.Set("animalHarvestingTime", RESOURCEFUL_SPEED_STAT_CODE, -speedBonus, false);
 
             // Counter-stats for Kind (Tailor): when each penalty is fully cancelled, apply a
             // counter on the same stat vanilla uses so functional matches displayed cap.

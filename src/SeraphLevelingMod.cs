@@ -7184,6 +7184,7 @@ namespace SeraphLeveling
                 // Add the trait
                 var newTraits = currentTraits.Append(traitCode).ToArray();
                 entity.WatchedAttributes.SetStringArray("extraTraits", newTraits);
+                entity.WatchedAttributes.MarkPathDirty("extraTraits");
                 ServerApi.Logger.Debug($"[SeraphLeveling] Added trait {traitCode} to player");
             }
             else if (!shouldHave && hasTrait)
@@ -7191,6 +7192,7 @@ namespace SeraphLeveling
                 // Remove the trait
                 var newTraits = currentTraits.Where(t => t != traitCode).ToArray();
                 entity.WatchedAttributes.SetStringArray("extraTraits", newTraits);
+                entity.WatchedAttributes.MarkPathDirty("extraTraits");
                 ServerApi.Logger.Debug($"[SeraphLeveling] Removed trait {traitCode} from player");
             }
         }

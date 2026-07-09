@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
@@ -23,6 +23,13 @@ namespace SeraphLeveling
     /// </summary>
     public class SeraphLevelingConfig
     {
+        /// <summary>
+        /// Bumped when the mod needs to know the file has been through a migration.
+        /// A file written before 1.19.0 has no such field and reads back as 0, which
+        /// tells LoadConfig to fold the old world-save settings in exactly once.
+        /// </summary>
+        public int ConfigVersion { get; set; } = 0;
+
         // Mining progression
         public int MiningBaseBlocksPerIncrement { get; set; } = 100;
         public int MiningIncrementStep { get; set; } = 100;
@@ -205,6 +212,20 @@ namespace SeraphLeveling
         /// Additional damage needed per subsequent credit (100, 200, 300...).
         /// </summary>
         public int COProficiencyIncrementStep { get; set; } = 100;
+
+        /// <summary>
+        /// Per-proficiency overrides for the first-credit damage requirement.
+        /// Keyed by stat name, for example "bowsProficiency". Anything absent
+        /// falls back to COProficiencyBaseDamagePerIncrement.
+        /// </summary>
+        public Dictionary<string, int> COProficiencyBaseOverrides { get; set; } = new Dictionary<string, int>();
+
+        /// <summary>
+        /// Per-proficiency overrides for the per-credit damage step.
+        /// Keyed by stat name, for example "bowsProficiency". Anything absent
+        /// falls back to COProficiencyIncrementStep.
+        /// </summary>
+        public Dictionary<string, int> COProficiencyIncrementOverrides { get; set; } = new Dictionary<string, int>();
 
         // Proficiency max values (matching CO trait defaults)
         public float COBowsProficiencyMax { get; set; } = 0.5f;
@@ -2199,6 +2220,12 @@ namespace SeraphLeveling
         private const string CONFIG_SAVE_KEY = "sitConfig";
         private const string CONFIG_FILE_NAME = "SeraphLeveling.json";
 
+        /// <summary>Version stamped into the config file. 1 means the world-save blob has been folded in.</summary>
+        private const int CURRENT_CONFIG_VERSION = 1;
+
+        /// <summary>ConfigVersion read from the file this run. Zero for files written before 1.19.0.</summary>
+        private static int LoadedConfigVersion = 0;
+
         // Vanilla Hardy trait mining speed bonus (used for cap calculations)
         public const int VANILLA_HARDY_MINING_BONUS = 10;
 
@@ -2961,6 +2988,12 @@ namespace SeraphLeveling
                     .RequiresPrivilege(Privilege.controlserver)
                     .HandleWith(OnTraitResetConfigCommand)
                 .EndSubCommand()
+                // Re-read ModConfig/SeraphLeveling.json without a restart
+                .BeginSubCommand("reloadconfig")
+                    .WithDescription("Re-read ModConfig/SeraphLeveling.json and apply it immediately (admin only)")
+                    .RequiresPrivilege(Privilege.controlserver)
+                    .HandleWith(OnTraitReloadConfigCommand)
+                .EndSubCommand()
                 // Max all traits for testing
                 .BeginSubCommand("maxall")
                     .WithDescription("Set all trait progression to maximum for testing (admin only)")
@@ -3272,6 +3305,7 @@ namespace SeraphLeveling
                 "  /trait setplayer &lt;name&gt; &lt;trait&gt; &lt;level&gt; [toolname] - Set trait level for another player (admin)\n" +
                 "  /trait reset - Reset all trait progression to 0 (admin)\n" +
                 "  /trait resetconfig - Reset all config values to defaults (admin)\n" +
+                "  /trait reloadconfig - Re-read ModConfig/SeraphLeveling.json without restarting (admin)\n" +
                 "  /trait maxall - Set all trait progression to maximum for testing (admin)");
         }
 
@@ -3308,22 +3342,10 @@ namespace SeraphLeveling
 
         /// <summary>
         /// Writes the current level-up sound volume back to the JSON config file so it survives a restart.
-        /// Loads the existing config first so other settings the user edited are preserved.
         /// </summary>
         private void SaveLevelUpSoundVolumeToConfig()
         {
-            if (ServerApi == null) return;
-
-            try
-            {
-                SeraphLevelingConfig config = ServerApi.LoadModConfig<SeraphLevelingConfig>(CONFIG_FILE_NAME) ?? new SeraphLevelingConfig();
-                config.LevelUpSoundVolume = LevelUpSoundVolume;
-                ServerApi.StoreModConfig(config, CONFIG_FILE_NAME);
-            }
-            catch (Exception ex)
-            {
-                ServerApi?.Logger.Warning($"[SeraphLeveling] Failed to save level-up sound volume to config: {ex.Message}");
-            }
+            SaveConfigFile();
         }
 
         /// <summary>
@@ -9899,12 +9921,16 @@ namespace SeraphLeveling
                 SeraphLevelingConfig config = api.LoadModConfig<SeraphLevelingConfig>(CONFIG_FILE_NAME);
                 if (config == null)
                 {
-                    config = new SeraphLevelingConfig();
+                    // A brand new install has no old world settings to fold in, so
+                    // stamp it as already migrated.
+                    config = new SeraphLevelingConfig { ConfigVersion = CURRENT_CONFIG_VERSION };
                     api.StoreModConfig(config, CONFIG_FILE_NAME);
                     api.Logger.Notification("[SeraphLeveling] Created default config file: ModConfig/" + CONFIG_FILE_NAME);
                 }
 
-                // Apply config values to static variables (these become defaults for new worlds)
+                LoadedConfigVersion = config.ConfigVersion;
+
+                // Apply config values to static variables
                 BaseBlocksPerIncrement = config.MiningBaseBlocksPerIncrement;
                 IncrementStep = config.MiningIncrementStep;
                 MaxMiningSpeedPercent = config.MiningMaxPercent;
@@ -10018,6 +10044,8 @@ namespace SeraphLeveling
                 COEnableCompat = config.EnableCombatOverhaulCompat;
                 COBaseDamagePerIncrement = config.COProficiencyBaseDamagePerIncrement;
                 COIncrementStep = config.COProficiencyIncrementStep;
+                COProficiencyBaseOverrides = config.COProficiencyBaseOverrides ?? new Dictionary<string, int>();
+                COProficiencyIncrementOverrides = config.COProficiencyIncrementOverrides ?? new Dictionary<string, int>();
                 COBowsProficiencyMax = config.COBowsProficiencyMax;
                 COCrossbowsProficiencyMax = config.COCrossbowsProficiencyMax;
                 COFirearmsProficiencyMax = config.COFirearmsProficiencyMax;
@@ -10111,6 +10139,173 @@ namespace SeraphLeveling
             catch (Exception ex)
             {
                 api.Logger.Error($"[SeraphLeveling] Failed to load config file: {ex.Message}. Using default values.");
+            }
+        }
+
+        /// <summary>
+        /// Writes the current settings back out to ModConfig/SeraphLeveling.json.
+        /// The file is the single source of truth: LoadConfigFile reads it at
+        /// startup, and every /trait command that changes a value ends up here on
+        /// the next world save. That way an edit made in the file and an edit made
+        /// in game can never disagree with each other.
+        ///
+        /// The existing file is loaded first rather than starting from a fresh
+        /// SeraphLevelingConfig, so any setting this method forgets to write keeps
+        /// the admin's value instead of quietly snapping back to its default.
+        /// This is the exact inverse of LoadConfigFile; the two must stay in step.
+        /// </summary>
+        private void SaveConfigFile()
+        {
+            if (ServerApi == null) return;
+
+            try
+            {
+                SeraphLevelingConfig config =
+                    ServerApi.LoadModConfig<SeraphLevelingConfig>(CONFIG_FILE_NAME) ?? new SeraphLevelingConfig();
+
+                config.ConfigVersion = CURRENT_CONFIG_VERSION;
+                LoadedConfigVersion = CURRENT_CONFIG_VERSION;
+
+                config.MiningBaseBlocksPerIncrement = BaseBlocksPerIncrement;
+                config.MiningIncrementStep = IncrementStep;
+                config.MiningMaxPercent = MaxMiningSpeedPercent;
+                config.MiningOreMultiplier = OreMultiplier;
+
+                config.MeleeBaseDamagePerIncrement = BaseDamagePerIncrement;
+                config.MeleeIncrementStep = MeleeIncrementStep;
+                config.MeleeMaxPercent = MaxMeleeDamagePercent;
+
+                config.RangedBaseDamagePerIncrement = BaseRangedDamagePerIncrement;
+                config.RangedIncrementStep = RangedIncrementStep;
+                config.RangedMaxDamagePercent = MaxRangedDamagePercent;
+                config.RangedMaxAccuracyPercent = MaxRangedAccuracyPercent;
+                config.RangedMaxDistancePercent = MaxRangedDistancePercent;
+
+                config.WalkingBaseBlocksPerIncrement = BaseBlocksWalkedPerIncrement;
+                config.WalkingIncrementStep = WalkingIncrementStep;
+                config.WalkingMaxPercent = MaxWalkingSpeedPercent;
+
+                config.HungerBaseSecondsPerIncrement = BaseSecondsPerIncrement;
+                config.HungerIncrementStep = HungerIncrementStep;
+                config.HungerMaxReductionPercent = MaxHungerReductionPercent;
+
+                config.ArmorBaseSecondsPerIncrement = BaseSecondsInArmorPerIncrement;
+                config.ArmorTimeIncrementStep = ArmorTimeIncrementStep;
+                config.ArmorBaseDamageBlockedPerIncrement = BaseDamageBlockedPerIncrement;
+                config.ArmorDamageIncrementStep = ArmorDamageIncrementStep;
+                config.ArmorBaseRepairsPerIncrement = BaseRepairsPerIncrement;
+                config.ArmorRepairIncrementStep = ArmorRepairIncrementStep;
+                config.ArmorMaxDurabilityPercent = MaxArmorDurabilityPercent;
+                config.ArmorMaxWalkSpeedPercent = MaxArmorWalkSpeedPercent;
+
+                config.ArmorFirstEquipLightDurability = FirstEquipLightBonus;
+                config.ArmorFirstEquipChainDurability = FirstEquipChainBonus;
+                config.ArmorFirstEquipBrigandineDurability = FirstEquipBrigandineBonus;
+                config.ArmorFirstEquipScaleDurability = FirstEquipScaleBonus;
+                config.ArmorFirstEquipPlateDurability = FirstEquipPlateBonus;
+
+                config.ArmorFirstEquipLightWalkSpeed = FirstEquipWalkSpeedLightBonus;
+                config.ArmorFirstEquipChainWalkSpeed = FirstEquipWalkSpeedChainBonus;
+                config.ArmorFirstEquipBrigandineWalkSpeed = FirstEquipWalkSpeedBrigandineBonus;
+                config.ArmorFirstEquipScaleWalkSpeed = FirstEquipWalkSpeedScaleBonus;
+                config.ArmorFirstEquipPlateWalkSpeed = FirstEquipWalkSpeedPlateBonus;
+
+                config.EnableArmorHungerReduction = EnableArmorHungerReduction;
+                config.ArmorMaxHungerReductionPercent = MaxArmorHungerReductionPercent;
+                config.EnableArmorHealingBonus = EnableArmorHealingBonus;
+                config.ArmorMaxHealingPercent = MaxArmorHealingPercent;
+
+                config.ClothierRequiredUniqueClothes = ClothierRequiredUniqueClothes;
+                config.ClothierBlacklistedItems = ClothierBlacklistedItems;
+
+                config.MenderBaseRepairsPerIncrement = BaseMenderRepairsPerIncrement;
+                config.MenderIncrementStep = MenderIncrementStep;
+                config.MenderMaxPercent = MaxMenderPercent;
+
+                config.PilfererBasePointsPerIncrement = BasePilfererPointsPerIncrement;
+                config.PilfererIncrementStep = PilfererIncrementStep;
+                config.PilfererMaxPercent = MaxPilfererPercent;
+
+                config.ResourcefulBaseAnimalsPerIncrement = BaseResourcefulAnimalsPerIncrement;
+                config.ResourcefulIncrementStep = ResourcefulIncrementStep;
+                config.ResourcefulMaxLootPercent = MaxResourcefulLootPercent;
+                config.ResourcefulMaxSpeedPercent = MaxResourcefulSpeedPercent;
+
+                config.ForagerBaseCropsPerIncrement = BaseForagerCropsPerIncrement;
+                config.ForagerIncrementStep = ForagerIncrementStep;
+                config.ForagerMaxLootPercent = MaxForagerLootPercent;
+                config.ForagerMaxWildCropPercent = MaxForagerWildCropPercent;
+
+                config.FurtiveBaseSneakBlocksPerIncrement = BaseFurtiveSneakBlocksPerIncrement;
+                config.FurtiveIncrementStep = FurtiveIncrementStep;
+                config.FurtiveMaxPercent = MaxFurtivePercent;
+
+                config.PreciseBaseDamagePerIncrement = BasePreciseDamagePerIncrement;
+                config.PreciseIncrementStep = PreciseIncrementStep;
+                config.PreciseMaxPercent = MaxPrecisePercent;
+
+                config.TechnicalRequiredTranslocatorRepairs = TechnicalRequiredTranslocatorRepairs;
+
+                config.HardyHealthMiningThreshold = HardyHealthMiningThreshold;
+                config.HardyHealthArmorDurabilityThreshold = HardyHealthArmorDurabilityThreshold;
+                config.HardyHealthBonus = HardyHealthBonus;
+
+                config.AutoSaveIntervalSeconds = AutoSaveIntervalSeconds;
+
+                config.DisabledSkills = DisabledSkills.ToArray();
+
+                config.EnableCombatOverhaulCompat = COEnableCompat;
+                config.COProficiencyBaseDamagePerIncrement = COBaseDamagePerIncrement;
+                config.COProficiencyIncrementStep = COIncrementStep;
+                config.COProficiencyBaseOverrides = new Dictionary<string, int>(COProficiencyBaseOverrides);
+                config.COProficiencyIncrementOverrides = new Dictionary<string, int>(COProficiencyIncrementOverrides);
+                config.COBowsProficiencyMax = COBowsProficiencyMax;
+                config.COCrossbowsProficiencyMax = COCrossbowsProficiencyMax;
+                config.COFirearmsProficiencyMax = COFirearmsProficiencyMax;
+                config.COSlingsProficiencyMax = COSlingsProficiencyMax;
+                config.COOneHandedSwordsProficiencyMax = COOneHandedSwordsProficiencyMax;
+                config.COTwoHandedSwordsProficiencyMax = COTwoHandedSwordsProficiencyMax;
+                config.COSpearsProficiencyMax = COSpearsProficiencyMax;
+                config.COJavelinsProficiencyMax = COJavelinsProficiencyMax;
+                config.COMacesProficiencyMax = COMacesProficiencyMax;
+                config.COClubsProficiencyMax = COClubsProficiencyMax;
+                config.COHalberdsProficiencyMax = COHalberdsProficiencyMax;
+                config.COPoleaxeProficiencyMax = COPoleaxeProficiencyMax;
+                config.COAxesProficiencyMax = COAxesProficiencyMax;
+                config.COQuarterstaffProficiencyMax = COQuarterstaffProficiencyMax;
+                config.COSteadyAimMax = COSteadyAimMax;
+
+                config.EnableSkillDecay = EnableSkillDecay;
+                config.DecayGracePeriodDays = DecayGracePeriodDays;
+                config.DecayBasePointsPerDay = DecayBasePointsPerDay;
+                config.DecayMaxPointsPerDay = DecayMaxPointsPerDay;
+                config.DecayExemptSkills = DecayExemptSkills.ToArray();
+                config.DecayGracePeriodOverrides = new Dictionary<string, double>(DecayGracePeriodOverrides);
+                config.DecayBasePointsOverrides = new Dictionary<string, int>(DecayBasePointsOverrides);
+                config.DecayMaxPointsOverrides = new Dictionary<string, int>(DecayMaxPointsOverrides);
+
+                config.EnableSleepBuff = EnableSleepBuff;
+                config.SleepBuffLinenBedMultiplier = SleepBuffLinenBedMultiplier;
+                config.SleepBuffHayBedMultiplier = SleepBuffHayBedMultiplier;
+                config.SleepBuffDurationDays = SleepBuffDurationDays;
+
+                config.EnableDeathPenalty = EnableDeathPenalty;
+                config.DeathPenaltyFraction = DeathPenaltyFraction;
+                config.DeathPenaltyExemptSkills = DeathPenaltyExemptSkills.ToArray();
+
+                config.EnableLevelUpMessages = EnableLevelUpMessages;
+                config.EnableLevelUpSound = EnableLevelUpSound;
+                config.LevelUpSoundName = LevelUpSoundName;
+                config.LevelUpSoundVolume = LevelUpSoundVolume;
+
+                config.EnableDebugLogging = DebugLoggingEnabled;
+                config.VerboseDecayLogging = VerboseDecayLogging;
+
+                ServerApi.StoreModConfig(config, CONFIG_FILE_NAME);
+            }
+            catch (Exception ex)
+            {
+                ServerApi.Logger.Error($"[SeraphLeveling] Failed to write config file: {ex.Message}");
             }
         }
 
@@ -12568,87 +12763,40 @@ namespace SeraphLeveling
                 }
             }
         }
-
         /// <summary>
-        /// Persist config to world save data.
-        /// Version 9 adds Combat Overhaul configuration.
+        /// Persist the current settings. Everything now lives in
+        /// ModConfig/SeraphLeveling.json, so this just writes that file.
+        ///
+        /// Settings used to be written into the world save under CONFIG_SAVE_KEY
+        /// instead, which had two problems. The blob was reloaded on every
+        /// SaveGameLoaded and overwrote whatever the admin had put in the config
+        /// file, so edits to the file appeared to do nothing on any world that had
+        /// ever run a /trait command. And the blob only ever stored the mining,
+        /// melee, ranged, walking, hunger, armor and Combat Overhaul values, so
+        /// in-game changes to the other systems, Clothier and Mender and the decay
+        /// settings among them, were silently dropped on restart.
+        ///
+        /// LoadConfig migrates any surviving blob into the file and then erases it.
         /// </summary>
         private void PersistConfig()
         {
             if (ServerApi == null) return;
 
-            try
-            {
-                byte[] data;
-                using (var ms = new MemoryStream())
-                {
-                    using (var writer = new BinaryWriter(ms))
-                    {
-                        writer.Write((byte)10); // Version 10: adds per-proficiency CO config
-                        writer.Write(BaseBlocksPerIncrement);
-                        writer.Write(IncrementStep);
-                        writer.Write(MaxMiningSpeedPercent);
-                        writer.Write(OreMultiplier);
-                        // Melee config
-                        writer.Write(BaseDamagePerIncrement);
-                        writer.Write(MeleeIncrementStep);
-                        writer.Write(MaxMeleeDamagePercent);
-                        // Ranged config
-                        writer.Write(BaseRangedDamagePerIncrement);
-                        writer.Write(RangedIncrementStep);
-                        writer.Write(MaxRangedDamagePercent);
-                        writer.Write(MaxRangedAccuracyPercent);
-                        writer.Write(MaxRangedDistancePercent);
-                        // Walking config
-                        writer.Write(BaseBlocksWalkedPerIncrement);
-                        writer.Write(WalkingIncrementStep);
-                        writer.Write(MaxWalkingSpeedPercent);
-                        // Hunger config
-                        writer.Write(BaseSecondsPerIncrement);
-                        writer.Write(HungerIncrementStep);
-                        writer.Write(MaxHungerReductionPercent);
-                        // Armor config
-                        writer.Write(BaseSecondsInArmorPerIncrement);
-                        writer.Write(ArmorTimeIncrementStep);
-                        writer.Write(BaseDamageBlockedPerIncrement);
-                        writer.Write(ArmorDamageIncrementStep);
-                        writer.Write(BaseRepairsPerIncrement);
-                        writer.Write(ArmorRepairIncrementStep);
-                        writer.Write(MaxArmorDurabilityPercent);
-                        writer.Write(MaxArmorWalkSpeedPercent);
-                        // Combat Overhaul global defaults
-                        writer.Write(COBaseDamagePerIncrement);
-                        writer.Write(COIncrementStep);
-                        // Per-proficiency base overrides
-                        writer.Write(COProficiencyBaseOverrides.Count);
-                        foreach (var kvp in COProficiencyBaseOverrides)
-                        {
-                            writer.Write(kvp.Key);
-                            writer.Write(kvp.Value);
-                        }
-                        // Per-proficiency increment overrides
-                        writer.Write(COProficiencyIncrementOverrides.Count);
-                        foreach (var kvp in COProficiencyIncrementOverrides)
-                        {
-                            writer.Write(kvp.Key);
-                            writer.Write(kvp.Value);
-                        }
-                    }
-                    data = ms.ToArray();
-                }
-
-                ServerApi.WorldManager.SaveGame.StoreData(CONFIG_SAVE_KEY, data);
-                ServerApi.Logger.Debug($"[SeraphLeveling] Config saved (Mining: Base={BaseBlocksPerIncrement}, Max={MaxMiningSpeedPercent}% | Melee: Base={BaseDamagePerIncrement}, Max={MaxMeleeDamagePercent}% | CO: {COProficiencyBaseOverrides.Count} base overrides, {COProficiencyIncrementOverrides.Count} increment overrides)");
-            }
-            catch (Exception ex)
-            {
-                ServerApi.Logger.Error($"[SeraphLeveling] Failed to persist config: {ex.Message}");
-            }
+            SaveConfigFile();
+            ServerApi.Logger.Debug($"[SeraphLeveling] Config saved to ModConfig/{CONFIG_FILE_NAME} (Mining: Base={BaseBlocksPerIncrement}, Max={MaxMiningSpeedPercent}% | Melee: Base={BaseDamagePerIncrement}, Max={MaxMeleeDamagePercent}% | CO: {COProficiencyBaseOverrides.Count} base overrides, {COProficiencyIncrementOverrides.Count} increment overrides)");
         }
 
         /// <summary>
-        /// Load config from world save data.
-        /// Supports versions 1-10 for backwards compatibility.
+        /// One-time migration of the old world-save config blob into
+        /// ModConfig/SeraphLeveling.json. Runs on SaveGameLoaded, after
+        /// LoadConfigFile has already applied the file.
+        ///
+        /// Worlds saved by 1.18.1 and earlier carry a binary snapshot of the
+        /// tuning values under CONFIG_SAVE_KEY, and that snapshot used to win over
+        /// the config file on every load. Read it one last time so the world keeps
+        /// playing exactly as it did, write those values into the file, then erase
+        /// the blob. From the next load on there is nothing here to read and the
+        /// file alone decides. Supports blob versions 1-10.
         /// </summary>
         private void LoadConfig()
         {
@@ -12659,7 +12807,18 @@ namespace SeraphLeveling
                 byte[] data = ServerApi.WorldManager.SaveGame.GetData(CONFIG_SAVE_KEY);
                 if (data == null || data.Length == 0)
                 {
-                    ServerApi.Logger.Debug("[SeraphLeveling] No config data found, using defaults");
+                    ServerApi.Logger.Debug("[SeraphLeveling] No legacy world config to migrate, using ModConfig/" + CONFIG_FILE_NAME);
+                    return;
+                }
+
+                if (LoadedConfigVersion >= CURRENT_CONFIG_VERSION)
+                {
+                    // Already migrated on an earlier run. The erase below only reaches
+                    // disk on the next world save, so a server that was killed before
+                    // saving still has the blob sitting there. Reapplying it would undo
+                    // whatever the admin has since put in the file, so just clear it.
+                    ServerApi.WorldManager.SaveGame.StoreData(CONFIG_SAVE_KEY, Array.Empty<byte>());
+                    ServerApi.Logger.Debug("[SeraphLeveling] Discarded a stale legacy world config; ModConfig/" + CONFIG_FILE_NAME + " already owns these settings");
                     return;
                 }
 
@@ -12905,6 +13064,18 @@ namespace SeraphLeveling
                 }
 
                 ServerApi.Logger.Notification($"[SeraphLeveling] Config loaded (Mining: Base={BaseBlocksPerIncrement}, Max={MaxMiningSpeedPercent}% | Melee: Base={BaseDamagePerIncrement}, Max={MaxMeleeDamagePercent}% | Ranged: Base={BaseRangedDamagePerIncrement}, MaxDmg={MaxRangedDamagePercent}% | Walking: Base={BaseBlocksWalkedPerIncrement}, Max={MaxWalkingSpeedPercent}% | Hunger: Base={BaseSecondsPerIncrement}, Max={MaxHungerReductionPercent}% | Armor: MaxDur={MaxArmorDurabilityPercent}%, MaxWalk={MaxArmorWalkSpeedPercent}%)");
+
+                // Fold the world's values into the config file and drop the blob, so
+                // this world never reads from the save game again. An empty array is
+                // what GetData returns for a missing key, so older builds of the mod
+                // would also treat this as "nothing stored" if the world is opened by
+                // one of them again.
+                SaveConfigFile();
+                ServerApi.WorldManager.SaveGame.StoreData(CONFIG_SAVE_KEY, Array.Empty<byte>());
+                pendingConfigSave = false;
+                ServerApi.Logger.Notification(
+                    $"[SeraphLeveling] Migrated this world's saved settings into ModConfig/{CONFIG_FILE_NAME}. " +
+                    "That file is now the only place settings are read from, so edits to it take effect on the next restart, or immediately with /trait reloadconfig.");
             }
             catch (Exception ex)
             {
@@ -16381,6 +16552,37 @@ namespace SeraphLeveling
             string result = TraitTestSuite.RunTests(category, player);
 
             return TextCommandResult.Success(result);
+        }
+
+        /// <summary>
+        /// Handler for /trait reloadconfig command.
+        /// Re-reads ModConfig/SeraphLeveling.json and reapplies every online
+        /// player's bonuses against the new caps, so an admin can edit the file on
+        /// a dedicated server and see it take hold without restarting.
+        /// </summary>
+        private TextCommandResult OnTraitReloadConfigCommand(TextCommandCallingArgs args)
+        {
+            if (ServerApi == null) return TextCommandResult.Error("Server API not available.");
+
+            LoadConfigFile(ServerApi);
+
+            int reapplied = 0;
+            foreach (var onlinePlayer in ServerApi.World.AllOnlinePlayers)
+            {
+                if (onlinePlayer is IServerPlayer player && player.Entity != null)
+                {
+                    ReapplyAllBonuses(player);
+                    reapplied++;
+                }
+            }
+
+            // The file we just read is already what is on disk, so nothing needs
+            // writing back. Drop any queued save so the next world save cannot
+            // overwrite the file with values from before the reload.
+            pendingConfigSave = false;
+
+            return TextCommandResult.Success(
+                $"Reloaded ModConfig/{CONFIG_FILE_NAME} and reapplied bonuses for {reapplied} online player(s).");
         }
 
         /// <summary>

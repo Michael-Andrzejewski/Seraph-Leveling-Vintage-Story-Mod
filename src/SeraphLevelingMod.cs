@@ -5921,9 +5921,11 @@ namespace SeraphLeveling
             int walkSpeedBonus = CalculateArmorWalkSpeedBonusPercent(walkSpeedCredits, player.Entity);
 
             // Always apply stats (they're not persistent and need to be set on every join)
-            // armorDurabilityLoss is a multiplier, lower = less durability lost
-            float durabilityMultiplier = 1f - (durabilityBonus * 0.01f);
-            player.Entity.Stats.Set("armorDurabilityLoss", ARMOR_DURABILITY_STAT_CODE, durabilityMultiplier, false);
+            // armorDurabilityLoss blends as WeightedSum over a base of 1, so this is
+            // a delta and not a multiplier: vanilla Soldier stores -0.15 and vanilla
+            // Mender -0.25. A negative value means less durability lost.
+            float durabilityReduction = -(durabilityBonus * 0.01f);
+            player.Entity.Stats.Set("armorDurabilityLoss", ARMOR_DURABILITY_STAT_CODE, durabilityReduction, false);
 
             // Reduce armor walk speed penalty using armorWalkSpeedAffectedness
             // Negative values reduce the penalty (e.g., -0.25 = 25% less armor penalty)
@@ -5946,9 +5948,12 @@ namespace SeraphLeveling
             {
                 int healingCredits = armorProgressData.TotalHealingCredits;
                 int healingBonus = Math.Min(healingCredits, MaxArmorHealingPercent);
-                // healingeffectivenesstypical is additive: +0.25 = +25% healing received
+                // The stat EntityPlayer registers is "healingeffectivness", missing an
+                // e. Poultices, healing items and the character sheet all read that
+                // spelling, so anything written to "healingeffectivenesstypical" is
+                // simply never looked at.
                 float healingModifier = healingBonus * 0.01f;
-                player.Entity.Stats.Set("healingeffectivenesstypical", "sitArmorHealing", healingModifier, false);
+                player.Entity.Stats.Set("healingeffectivness", "sitArmorHealing", healingModifier, false);
                 player.Entity.WatchedAttributes.SetInt(WATCHED_ARMOR_HEALING_BONUS, healingBonus);
             }
 
@@ -13532,11 +13537,14 @@ namespace SeraphLeveling
             // Calculate bonus percent (reduction in detection range)
             int bonusPercent = effectiveCredits;
 
-            // Apply the stat (negative value to reduce detection range)
-            // The animalSeekingRange stat is a multiplier, so 0.65 means 65% of original range (-35%)
+            // animalSeekingRange blends as WeightedSum over a base of 1, so each
+            // stat value is a delta, not a multiplier. Vanilla Furtive stores
+            // -0.35 and ends up at 0.65, meaning animals see you at 65% of the
+            // normal range. Writing 0.65 here would blend to 1.65 and let them
+            // see you 65% further away, so the bonus has to be negative.
             if (bonusPercent > 0)
             {
-                float statValue = 1f - (bonusPercent / 100f);
+                float statValue = -(bonusPercent / 100f);
                 player.Entity.Stats.Set("animalSeekingRange", FURTIVE_STAT_CODE, statValue, false);
             }
             else
@@ -13697,10 +13705,12 @@ namespace SeraphLeveling
             // Calculate bonus percent
             int bonusPercent = effectiveCredits;
 
-            // Apply the stat (mechanical damage is typically via mechanicalsDamage stat)
+            // mechanicalsDamage is a delta on a base of 1, the same as vanilla
+            // Precise's 0.4705. Writing 1 + bonus added a whole extra 100% on top
+            // of the bonus the character sheet advertises.
             if (bonusPercent > 0)
             {
-                float statValue = 1f + (bonusPercent / 100f);
+                float statValue = bonusPercent / 100f;
                 player.Entity.Stats.Set("mechanicalsDamage", PRECISE_STAT_CODE, statValue, false);
             }
             else
@@ -14238,8 +14248,9 @@ namespace SeraphLeveling
             int bonusPercent = CalculateMenderBonusPercent(level, player.Entity);
             float bonus = bonusPercent * 0.01f;
 
-            // Apply to armor durability loss stat (reduces durability damage taken)
-            player.Entity.Stats.Set("armorDurabilityLoss", MENDER_STAT_CODE, 1f - bonus, false);
+            // Apply to armor durability loss stat (reduces durability damage taken).
+            // Negative delta, same as vanilla Mender's -0.25. See ApplyArmorBonusesStatic.
+            player.Entity.Stats.Set("armorDurabilityLoss", MENDER_STAT_CODE, -bonus, false);
 
             // Sync to WatchedAttributes
             player.Entity.WatchedAttributes.SetInt(WATCHED_MENDER_LEVEL, level);

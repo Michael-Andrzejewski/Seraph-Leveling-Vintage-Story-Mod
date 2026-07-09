@@ -13368,7 +13368,7 @@ namespace SeraphLeveling
             }
             else
             {
-                player.Entity.Stats.Remove(FURTIVE_STAT_CODE, "animalSeekingRange");
+                player.Entity.Stats.Remove("animalSeekingRange", FURTIVE_STAT_CODE);
             }
 
             // Update WatchedAttributes for client sync
@@ -13532,7 +13532,7 @@ namespace SeraphLeveling
             }
             else
             {
-                player.Entity.Stats.Remove(PRECISE_STAT_CODE, "mechanicalsDamage");
+                player.Entity.Stats.Remove("mechanicalsDamage", PRECISE_STAT_CODE);
             }
 
             // Update WatchedAttributes for client sync
@@ -13616,7 +13616,7 @@ namespace SeraphLeveling
             }
             else
             {
-                player.Entity.Stats.Remove(HARDY_HEALTH_STAT_CODE, "maxhealthExtraPoints");
+                player.Entity.Stats.Remove("maxhealthExtraPoints", HARDY_HEALTH_STAT_CODE);
             }
 
             player.Entity.WatchedAttributes.SetBool(WATCHED_HARDY_HEALTH_UNLOCKED, unlocked);
@@ -13881,8 +13881,8 @@ namespace SeraphLeveling
             }
             else
             {
-                player.Entity.Stats.Remove("sitClaustrophobicRemoval", "oreDropRate");
-                player.Entity.Stats.Remove("sitClaustrophobicRemoval", "miningSpeedMul");
+                player.Entity.Stats.Remove("oreDropRate", "sitClaustrophobicRemoval");
+                player.Entity.Stats.Remove("miningSpeedMul", "sitClaustrophobicRemoval");
             }
 
             player.Entity.WatchedAttributes.SetBool(WATCHED_CLAUSTROPHOBIC_REMOVED, removed);

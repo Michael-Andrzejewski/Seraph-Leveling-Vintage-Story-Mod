@@ -3039,6 +3039,12 @@ namespace SeraphLeveling
                     .RequiresPrivilege(Privilege.controlserver)
                     .HandleWith(OnTraitReloadConfigCommand)
                 .EndSubCommand()
+                // Diagnostic: show what every stat this mod touches is actually made of
+                .BeginSubCommand("verify")
+                    .WithDescription("Show the blended value and each contributing stat code for the stats this mod writes (admin only)")
+                    .RequiresPrivilege(Privilege.controlserver)
+                    .HandleWith(OnTraitVerifyCommand)
+                .EndSubCommand()
                 // Max all traits for testing
                 .BeginSubCommand("maxall")
                     .WithDescription("Set all trait progression to maximum for testing (admin only)")
@@ -3351,6 +3357,7 @@ namespace SeraphLeveling
                 "  /trait reset - Reset all trait progression to 0 (admin)\n" +
                 "  /trait resetconfig - Reset all config values to defaults (admin)\n" +
                 "  /trait reloadconfig - Re-read ModConfig/SeraphLeveling.json without restarting (admin)\n" +
+                "  /trait verify - Show what each stat this mod writes is actually made of (admin)\n" +
                 "  /trait maxall - Set all trait progression to maximum for testing (admin)");
         }
 
@@ -16641,6 +16648,106 @@ namespace SeraphLeveling
             string result = TraitTestSuite.RunTests(category, player);
 
             return TextCommandResult.Success(result);
+        }
+
+        /// <summary>
+        /// Every stat category this mod writes to. Used by /trait verify.
+        /// </summary>
+        private static readonly string[] VerifyVanillaStats =
+        {
+            "miningSpeedMul", "oreDropRate", "meleeWeaponsDamage", "rangedWeaponsDamage",
+            "rangedWeaponsAcc", "bowDrawingStrength", "walkspeed", "hungerrate",
+            "healingeffectivness", "maxhealthExtraPoints", "armorDurabilityLoss",
+            "armorWalkSpeedAffectedness", "animalSeekingRange", "mechanicalsDamage",
+            "animalLootDropRate", "animalHarvestingTime", "forageDropRate", "wildCropDropRate",
+            "vesselContentsDropRate", "rustyGearDropRate", "wholeVesselLootChance",
+            "temporalGearTLRepairCost"
+        };
+
+        /// <summary>Combat Overhaul stat categories, only listed when Combat Overhaul is loaded.</summary>
+        private static readonly string[] VerifyCOStats =
+        {
+            CO_BOWS_PROFICIENCY, CO_CROSSBOWS_PROFICIENCY, CO_FIREARMS_PROFICIENCY, CO_SLINGS_PROFICIENCY,
+            CO_ONE_HANDED_SWORDS_PROFICIENCY, CO_TWO_HANDED_SWORDS_PROFICIENCY, CO_SPEARS_PROFICIENCY,
+            CO_JAVELINS_PROFICIENCY, CO_MACES_PROFICIENCY, CO_CLUBS_PROFICIENCY, CO_HALBERDS_PROFICIENCY,
+            CO_POLEAXE_PROFICIENCY, CO_AXES_PROFICIENCY, CO_QUARTERSTAFF_PROFICIENCY, CO_STEADY_AIM,
+            CO_MELEE_TIER_SLASHING, CO_RANGED_TIER_SLASHING, CO_HEAD_DAMAGE_FACTOR, CO_FACE_DAMAGE_FACTOR,
+            CO_LEGS_DAMAGE_FACTOR, CO_FEET_DAMAGE_FACTOR, CO_JUMP_HEIGHT
+        };
+
+        /// <summary>
+        /// Handler for /trait verify command.
+        ///
+        /// Prints, for each stat this mod writes, the value the game will actually use and
+        /// the individual contributions it is made of. A stat blends by summing its codes
+        /// onto a base of 1, so "base 1, trait 0.5, sitCOheadDamage 0.5" means the game sees
+        /// 2.0. That makes a trait being counted twice, or a bonus written to a stat nothing
+        /// reads, visible at a glance. Stats with nothing but their base are skipped.
+        /// </summary>
+        private TextCommandResult OnTraitVerifyCommand(TextCommandCallingArgs args)
+        {
+            IServerPlayer player = args.Caller.Player as IServerPlayer;
+            if (player?.Entity == null) return TextCommandResult.Error("Player not found.");
+
+            var sb = new StringBuilder();
+            sb.AppendLine($"Stat contributions for {player.PlayerName}.");
+            sb.AppendLine("Each stat sums its codes onto a base of 1. 'blended' is the number the game uses.");
+
+            int shown = 0;
+            foreach (string category in VerifyVanillaStats)
+            {
+                shown += AppendStatBreakdown(sb, player.Entity, category) ? 1 : 0;
+            }
+
+            if (IsCombatOverhaulLoaded)
+            {
+                sb.AppendLine("Combat Overhaul stats:");
+                foreach (string category in VerifyCOStats)
+                {
+                    shown += AppendStatBreakdown(sb, player.Entity, category) ? 1 : 0;
+                }
+            }
+
+            if (shown == 0)
+            {
+                return TextCommandResult.Success("No stat this mod writes has any contribution yet. Earn some progress first.");
+            }
+
+            return TextCommandResult.Success(sb.ToString());
+        }
+
+        /// <summary>
+        /// Appends one stat's blended value and per-code contributions. Returns false and
+        /// appends nothing when the stat is absent or holds nothing but its base of 1.
+        /// </summary>
+        private static bool AppendStatBreakdown(StringBuilder sb, EntityPlayer entity, string category)
+        {
+            EntityFloatStats stats = null;
+            foreach (KeyValuePair<string, EntityFloatStats> stat in entity.Stats)
+            {
+                if (stat.Key == category) { stats = stat.Value; break; }
+            }
+            if (stats?.ValuesByKey == null) return false;
+
+            bool hasContribution = false;
+            bool fromTrait = false;
+            bool fromThisMod = false;
+            foreach (KeyValuePair<string, EntityStat<float>> entry in stats.ValuesByKey)
+            {
+                if (entry.Key == "base") continue;
+                if (Math.Abs(entry.Value.Value) > 0.0001f) hasContribution = true;
+                if (entry.Key == "trait") fromTrait = true;
+                else if (entry.Key.StartsWith("sit", StringComparison.Ordinal)) fromThisMod = true;
+            }
+            if (!hasContribution) return false;
+
+            string overlap = fromTrait && fromThisMod ? "  (a trait and this mod both contribute)" : "";
+            sb.AppendLine($"{category}: blended {entity.Stats.GetBlended(category):0.###} [{stats.BlendType}]{overlap}");
+            foreach (KeyValuePair<string, EntityStat<float>> entry in stats.ValuesByKey)
+            {
+                sb.AppendLine($"   {entry.Key} = {entry.Value.Value:0.###}");
+            }
+            return true;
         }
 
         /// <summary>

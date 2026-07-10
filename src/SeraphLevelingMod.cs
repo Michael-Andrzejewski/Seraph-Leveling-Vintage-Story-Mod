@@ -8572,6 +8572,19 @@ namespace SeraphLeveling
                     PersistClaustrophobicRemovalProgress();
                 }
 
+                // These two are newer than the rest and were never added to the shutdown
+                // flush. OnGameWorldSave persists them, so they only went missing when
+                // Dispose ran without a world save first.
+                if (pendingCOProgressSave || !COProgress.IsEmpty)
+                {
+                    PersistCOProgress();
+                }
+
+                if (pendingSleepBuffSave || !SleepBuffExpiration.IsEmpty)
+                {
+                    PersistSleepBuffData();
+                }
+
                 ServerApi.Event.DidBreakBlock -= OnBlockBroken;
                 ServerApi.Event.PlayerJoin -= OnPlayerJoin;
                 ServerApi.Event.PlayerDisconnect -= OnPlayerDisconnect;
@@ -8597,6 +8610,8 @@ namespace SeraphLeveling
                 ServerApi.Event.SaveGameLoaded -= LoadTinkererProgress;
                 ServerApi.Event.SaveGameLoaded -= LoadMercilessProgress;
                 ServerApi.Event.SaveGameLoaded -= LoadClaustrophobicRemovalProgress;
+                ServerApi.Event.SaveGameLoaded -= LoadCOProgress;
+                ServerApi.Event.SaveGameLoaded -= LoadSleepBuffData;
             }
 
             // Mark as disposed BEFORE clearing dictionaries to prevent OnGameWorldSave

@@ -2426,6 +2426,51 @@ namespace SeraphLeveling
         // CO stat codes (prefixed to avoid collisions)
         public const string CO_STAT_PREFIX = "sitCO";
 
+        /// <summary>
+        /// How much the player's traits have already contributed to one stat.
+        ///
+        /// The game's CharacterSystem.applyTraitAttributes writes every trait attribute
+        /// into the player's stats under the single stat code "trait", and EntityStats
+        /// blends a category by summing all of its codes. Anything we write under our own
+        /// stat code therefore lands on top of the trait's value rather than replacing it.
+        /// Subtract this from the total we want the player to end up with, or the trait
+        /// gets counted twice.
+        ///
+        /// This reads the value the game actually applied instead of assuming one from
+        /// the character class, so it stays right whichever mod granted the trait, and it
+        /// returns zero when no trait touches the stat. CharacterSystem is part of the
+        /// survival mod, which loads before us, so its PlayerJoin handler has already run
+        /// by the time ours does and the value is there to read.
+        /// </summary>
+        private static float TraitStatValue(EntityPlayer entity, string statCategory)
+        {
+            if (entity?.Stats == null || string.IsNullOrEmpty(statCategory)) return 0f;
+
+            foreach (KeyValuePair<string, EntityFloatStats> stat in entity.Stats)
+            {
+                if (stat.Key != statCategory) continue;
+                if (stat.Value?.ValuesByKey == null) return 0f;
+                return stat.Value.ValuesByKey.TryGetValue("trait", out EntityStat<float> applied) ? applied.Value : 0f;
+            }
+
+            return 0f;
+        }
+
+        /// <summary>
+        /// The penalty part of a trait's contribution to a stat, as a negative number, or
+        /// zero if the trait helps rather than hurts.
+        ///
+        /// Used for the stats where our own value is an additive bonus rather than a total:
+        /// steadyAim and the weapon proficiencies. A class that grants one of those as a
+        /// perk should keep it and have our earned bonus stack on top, but a class that is
+        /// penalised there, by Trembling Aim or Clumsy Hands, should be able to buy the
+        /// penalty back off.
+        /// </summary>
+        private static float TraitStatPenalty(EntityPlayer entity, string statCategory)
+        {
+            return Math.Min(0f, TraitStatValue(entity, statCategory));
+        }
+
         // CO persistence
         private const string CO_PROGRESS_SAVE_KEY = "sitCOProgress";
 
@@ -12300,9 +12345,15 @@ namespace SeraphLeveling
                 netBonus = CalculateCOProficiencyBonus(credits, COSteadyAimMax);
             }
 
-            // Apply steadyAim stat
+            // Trembling Aim's penalty is already in this stat under the code "trait", and
+            // stat values sum, so withholding our own bonus for the first 30 credits never
+            // removed it. Those credits bought nothing. Cancel it explicitly instead: add
+            // back the part of the penalty the player has paid off, and keep our earned
+            // bonus on top. A class perk on steadyAim is positive and is left alone.
+            float steadyAimTraitPenalty = TraitStatPenalty(player.Entity, CO_STEADY_AIM);
+            float steadyAimRemaining = Math.Max(0f, -steadyAimTraitPenalty - credits * 0.01f);
             string statCode = CO_STAT_PREFIX + CO_STEADY_AIM;
-            player.Entity.Stats.Set(CO_STEADY_AIM, statCode, netBonus, false);
+            player.Entity.Stats.Set(CO_STEADY_AIM, statCode, netBonus - steadyAimRemaining - steadyAimTraitPenalty, false);
 
             // Sync to WatchedAttributes
             player.Entity.WatchedAttributes.SetInt(WATCHED_CO_STEADY_AIM_CREDITS, credits);
@@ -12371,9 +12422,19 @@ namespace SeraphLeveling
                 netBonus = CalculateCOProficiencyBonus(credits, maxBonus);
             }
 
+            // A trait penalty on this proficiency, Clumsy Hands being the one Combat Overhaul
+            // ships, is already in the stat under the code "trait", and stat values sum, so
+            // withholding our own bonus above never removed it. Cancel it explicitly: add back
+            // the part the player has paid off, then stack our earned bonus on top. Reading
+            // the applied value means this covers whichever proficiencies the penalty really
+            // touches, rather than every stat IsCORangedProficiency happens to return true for.
+            // A class perk on a proficiency is positive and is left alone to stack.
+            float profTraitPenalty = TraitStatPenalty(player.Entity, proficiencyStat);
+            float profPenaltyRemaining = Math.Max(0f, -profTraitPenalty - credits * 0.01f);
+
             // Apply stat using CO stat name with our prefix
             string statCode = CO_STAT_PREFIX + proficiencyStat;
-            player.Entity.Stats.Set(proficiencyStat, statCode, netBonus, false);
+            player.Entity.Stats.Set(proficiencyStat, statCode, netBonus - profPenaltyRemaining - profTraitPenalty, false);
 
             // Sync credits to WatchedAttributes
             string watchedKey = $"sitCO{proficiencyStat}Credits";
@@ -12543,9 +12604,14 @@ namespace SeraphLeveling
                 faceFactor = -bonus;
             }
 
-            // Apply stats
-            player.Entity.Stats.Set(CO_HEAD_DAMAGE_FACTOR, CO_STAT_PREFIX + "headDamage", headFactor, false);
-            player.Entity.Stats.Set(CO_FACE_DAMAGE_FACTOR, CO_STAT_PREFIX + "faceDamage", faceFactor, false);
+            // headFactor and faceFactor above are the totals we want the player to end up
+            // with. Big Head and Thick Skull have already put their own value into these
+            // stats under the code "trait", and stat values sum, so write the difference.
+            // See TraitStatValue.
+            player.Entity.Stats.Set(CO_HEAD_DAMAGE_FACTOR, CO_STAT_PREFIX + "headDamage",
+                headFactor - TraitStatValue(player.Entity, CO_HEAD_DAMAGE_FACTOR), false);
+            player.Entity.Stats.Set(CO_FACE_DAMAGE_FACTOR, CO_STAT_PREFIX + "faceDamage",
+                faceFactor - TraitStatValue(player.Entity, CO_FACE_DAMAGE_FACTOR), false);
 
             // Sync for UI
             player.Entity.WatchedAttributes.SetFloat(WATCHED_CO_BIG_HEAD_REMAINING, remainingPenalty);
@@ -12598,8 +12664,11 @@ namespace SeraphLeveling
                 netTier = Math.Min(meleeCredits / 100, 1);
             }
 
-            // Apply tier stat
-            player.Entity.Stats.Set(CO_MELEE_TIER_SLASHING, CO_STAT_PREFIX + "meleeTierSlashing", (float)netTier, false);
+            // netTier is the tier bonus we want in total. Melee Expert and Frightened of
+            // Melee have already put theirs into this stat under the code "trait", so
+            // subtract whatever is actually there. See TraitStatValue.
+            player.Entity.Stats.Set(CO_MELEE_TIER_SLASHING, CO_STAT_PREFIX + "meleeTierSlashing",
+                netTier - TraitStatValue(player.Entity, CO_MELEE_TIER_SLASHING), false);
 
             // Sync for UI
             player.Entity.WatchedAttributes.SetInt(WATCHED_CO_FRIGHTENED_REMAINING, remainingPenalty);
@@ -12628,11 +12697,17 @@ namespace SeraphLeveling
             // Leg damage penalty reduced by armor credits (100 credits = cancel)
             float remainingPenalty = Math.Max(0, CO_LEG_DAY_PENALTY - armorCredits * 0.01f);
 
-            // Apply stats
-            player.Entity.Stats.Set(CO_LEGS_DAMAGE_FACTOR, CO_STAT_PREFIX + "legsDamage", remainingPenalty, false);
-            player.Entity.Stats.Set(CO_FEET_DAMAGE_FACTOR, CO_STAT_PREFIX + "feetDamage", remainingPenalty, false);
-            // Jump bonus is always applied (benefit, not penalty)
-            player.Entity.Stats.Set(CO_JUMP_HEIGHT, CO_STAT_PREFIX + "jumpHeight", CO_LEG_DAY_JUMP_BONUS, false);
+            // The Leg Day trait has already applied its own values under the stat code
+            // "trait", so write the difference between what we want and what it gave.
+            // See TraitStatValue.
+            player.Entity.Stats.Set(CO_LEGS_DAMAGE_FACTOR, CO_STAT_PREFIX + "legsDamage",
+                remainingPenalty - TraitStatValue(player.Entity, CO_LEGS_DAMAGE_FACTOR), false);
+            player.Entity.Stats.Set(CO_FEET_DAMAGE_FACTOR, CO_STAT_PREFIX + "feetDamage",
+                remainingPenalty - TraitStatValue(player.Entity, CO_FEET_DAMAGE_FACTOR), false);
+            // The jump bonus is a benefit the player keeps in full, so we only top up
+            // whatever the trait did not already provide.
+            player.Entity.Stats.Set(CO_JUMP_HEIGHT, CO_STAT_PREFIX + "jumpHeight",
+                CO_LEG_DAY_JUMP_BONUS - TraitStatValue(player.Entity, CO_JUMP_HEIGHT), false);
 
             // Sync for UI
             player.Entity.WatchedAttributes.SetFloat(WATCHED_CO_LEG_DAY_REMAINING, remainingPenalty);

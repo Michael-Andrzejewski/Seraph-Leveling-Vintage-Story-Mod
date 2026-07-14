@@ -5,6 +5,21 @@
 This guide explains how to improve each trait, including stat limits, required
 actions, base values, and scaling increments.
 
+Every positive trait can be obtained; every negative trait can be removed.
+
+Progression traits earn a percentage bonus that grows the more you use them:
+- mining, melee, ranged, walking, hunger, armor
+- mender, pilferer, resourceful, forager, furtive, precise
+
+Unlock traits are one-time unlocks with no percentage to grind:
+- clothier, technical, hardyhealth
+- bowyer, improviser, tinkerer, merciless
+
+Hunter-only: the Claustrophobic penalty can be overcome (see its section).
+
+Use '/trait [name]' to see more info about leveling it up and your progress so
+far in-game. You can also read this (mostly complete) document.
+
 ================================================================================
                               MINING - HARDY TRAIT
 ================================================================================
@@ -267,6 +282,51 @@ VANILLA INTERACTION:
 - Commoners can earn the full 20% for both
 
 ================================================================================
+                              FURTIVE TRAIT
+================================================================================
+
+Max Bonus: 35% animal detection range reduction
+Base Increment: 100 blocks sneaked for first 1%
+Scaling: Each additional 1% requires +100 more blocks (100, 200, 300, 400...)
+
+HOW TO IMPROVE:
+- Move while sneaking (hold the sneak key and walk)
+
+SPECIAL MECHANICS:
+- Only horizontal sneaking distance counts (X/Z axis)
+- Single tracker (not per-tool)
+- Lowers the range at which animals notice you (animalSeekingRange)
+
+VANILLA INTERACTION:
+- Vanilla Furtive (Malefactor) already gives the full -35% (at cap)
+- Malefactor players cannot earn more
+- Every other class can earn the full 35%
+
+================================================================================
+                              PRECISE TRAIT
+================================================================================
+
+Max Bonus: 30% damage against mechanical creatures
+Base Increment: 100 damage for first 1%
+Scaling: Each additional 1% requires +100 more damage (100, 200, 300, 400...)
+
+HOW TO IMPROVE:
+- Deal damage to mechanical creatures
+
+QUALIFYING TARGETS:
+- Locusts and bells
+- Any entity whose code contains mechanical, automaton, or construct
+
+SPECIAL MECHANICS:
+- Per-weapon tracking: Each weapon tracks progress independently
+- Only damage dealt to mechanicals counts
+
+VANILLA INTERACTION:
+- Vanilla Precise (Clockmaker) gives +25% already
+- Clockmaker players can earn up to 5% more (to reach the 30% cap)
+- Commoners can earn the full 30%
+
+================================================================================
                             TECHNICAL TRAIT
 ================================================================================
 
@@ -280,6 +340,101 @@ HOW TO IMPROVE:
 SPECIAL MECHANICS:
 - Technical is a prerequisite for Tinkerer trait
 - Tinkerer requires: Technical unlocked + 10% Precise damage bonus
+
+================================================================================
+                          HARDY HEALTH TRAIT
+================================================================================
+
+Unlock Requirement: 10% mining speed bonus AND 10% armor durability bonus
+Effect: +5 maximum health
+
+HOW TO IMPROVE:
+- Reach mining level 10 (10% mining speed)
+- Reach armor durability level 10 (10% armor durability)
+- Both requirements must be met before it unlocks
+
+SPECIAL MECHANICS:
+- Shares the "Hardy" trait name with mining
+- The character sheet shows them together, for example
+  "+10% mining speed, +5 health points"
+
+================================================================================
+                              BOWYER TRAIT
+================================================================================
+
+Unlock Requirement: 10% ranged damage bonus AND 300 total bow damage
+Effect: Unlocks crafting the crude bow and arrows
+
+HOW TO IMPROVE:
+- Reach ranged level 10 (10% ranged damage)
+- Deal 300 total damage with bows
+
+SPECIAL MECHANICS:
+- Only bow damage counts toward the 300 (thrown weapons do not)
+- The crude bow and arrows are otherwise exclusive to the Hunter class
+
+================================================================================
+                            IMPROVISER TRAIT
+================================================================================
+
+Unlock Requirement: 300 total thrown-rock damage
+Effect: Unlocks crafting the sling
+
+HOW TO IMPROVE:
+- Deal 300 total damage by throwing rocks (stones)
+
+SPECIAL MECHANICS:
+- The sling is otherwise exclusive to the Malefactor class
+
+================================================================================
+                             TINKERER TRAIT
+================================================================================
+
+Unlock Requirement: Technical unlocked AND 10% Precise damage bonus
+Effect: Unlocks crafting the tuning spear, used to tame locusts
+
+HOW TO IMPROVE:
+- Unlock Technical first (repair 5 translocators)
+- Reach Precise level 10 (10% mechanical damage)
+
+SPECIAL MECHANICS:
+- Two-step chain: Technical is itself a prerequisite
+- The tuning spear is otherwise exclusive to the Clockmaker class
+
+================================================================================
+                            MERCILESS TRAIT
+================================================================================
+
+Unlock Requirement: 10% armor durability bonus AND 15% melee damage bonus
+Effect: Unlocks crafting the Blackguard shortsword and Blackguard shield
+
+HOW TO IMPROVE:
+- Reach armor durability level 10 (10% armor durability)
+- Reach melee level 15 (15% melee damage)
+
+SPECIAL MECHANICS:
+- The Blackguard shortsword and shield are otherwise exclusive to the
+  Blackguard class
+
+================================================================================
+                   CLAUSTROPHOBIC OVERCOME - HUNTER ONLY
+================================================================================
+
+The Hunter's Claustrophobic penalty (-15% ore drops, -10% mining speed) is
+handled in two stages, both driven by your mining level.
+
+STAGE 1 - PENALTY REMOVED (mining level 10):
+- The mining and ore penalties are fully cancelled by mining level 10
+- This is the same proportional system as the Negative Trait Cancellation
+  table below
+
+STAGE 2 - OVERCOME BADGE (mining level 100):
+- At mining level 100 the Hunter earns the "Claustrophobic Overcome" badge
+- This is a display milestone on the character sheet
+- The penalty itself is already gone long before this point
+
+HOW TO IMPROVE:
+- Keep mining; both stages advance with your mining level
 
 ================================================================================
                     NEGATIVE TRAIT CANCELLATION SYSTEM
@@ -318,12 +473,99 @@ EXAMPLE:
 - At Forager level 15: Shows "Forager (+5% foraging loot)"
 
 ================================================================================
+                 COMBAT OVERHAUL COMPATIBILITY (APPENDIX)
+================================================================================
+
+When the Combat Overhaul mod (or its fork) is installed, Seraph Leveling feeds
+its bonuses into Combat Overhaul's own combat stats. This is turned on
+automatically and can be disabled with EnableCombatOverhaulCompat in the config.
+
+--- WEAPON PROFICIENCIES ---
+
+Each weapon category has its own proficiency that you raise by dealing damage
+with that kind of weapon. The curve matches the melee and ranged traits: 100
+damage for the first 1%, then +100 more per 1%, tracked per weapon.
+
+Proficiency          | Max Bonus | Raised By
+---------------------|-----------|--------------------------------
+Bows                 | +50%      | Dealing damage with bows
+Crossbows            | +50%      | Dealing damage with crossbows
+Firearms             | +50%      | Dealing damage with firearms
+Slings               | +30%      | Dealing damage with slings
+One-Handed Swords    | +30%      | One-handed sword melee
+Two-Handed Swords    | +30%      | Two-handed sword melee
+Spears               | +30%      | Spear melee
+Javelins             | +30%      | Javelin throws
+Maces                | +30%      | Mace melee
+Clubs                | +30%      | Club melee
+Halberds             | +30%      | Halberd melee
+Poleaxes*            | +30%      | Poleaxe melee
+Axes                 | +30%      | Combat axe melee
+Quarterstaff         | +30%      | Quarterstaff melee
+Steady Aim           | +50%      | Any ranged damage (accuracy)
+
+* Poleaxes are a separate proficiency only in the Combat Overhaul fork.
+
+--- DAMAGE TIERS (ARMOR PENETRATION) ---
+
+Your ranged and melee leveling also raises Combat Overhaul's damage-tier
+bonuses, which improve how well your attacks punch through armor.
+
+--- BODY DAMAGE FACTORS ---
+
+Some Combat Overhaul classes take extra damage to certain body parts, or come
+with a perk. Seraph lets you earn these down or up:
+- Big Head / Thick Skull: head and face damage taken (Clockmaker starts at +50%)
+- Leg Day: leg and feet damage taken (Blackguard starts at +100%, plus +25% jump)
+
+--- BUYING BACK NEGATIVE COMBAT TRAITS ---
+
+Combat Overhaul classes that start with a combat penalty can earn it back:
+- Clumsy Hands / Weak Hand: reduced weapon proficiency
+- Trembling Aim: reduced steady aim
+- Nervous / Frightened / Fear of Melee: reduced melee damage tier
+
+Class-granted proficiencies that are perks are kept, and your earned bonus
+stacks on top of them.
+
+================================================================================
+                                SLEEP BUFF
+================================================================================
+
+Sleeping in a bed can grant a temporary XP multiplier that speeds up ALL trait
+gains. This is DISABLED by default; a server admin turns it on in the config.
+
+MULTIPLIERS:
+- Linen and old beds: 2x XP
+- Hay beds: 1.5x XP
+
+HOW IT WORKS:
+- Sleep in a bed to receive the buff
+- The buff lasts 1 in-game day by default (SleepBuffDurationDays)
+- It applies to every trait's XP, including sneaking distance for Furtive
+- It does NOT persist across server restarts; only in-game time matters
+
+CONFIGURATION (in ModConfig/SeraphLeveling.json):
+- EnableSleepBuff (default false)
+- SleepBuffLinenBedMultiplier (default 2.0)
+- SleepBuffHayBedMultiplier (default 1.5)
+- SleepBuffDurationDays (default 1.0)
+
+Use '/trait sleepbuff' to see your current buff status.
+
+================================================================================
                            ADMIN COMMANDS REFERENCE
 ================================================================================
 
 GENERAL:
 /trait reset                      - Reset all trait progression to 0
 /trait resetconfig                - Reset all config values to defaults
+/trait reloadconfig               - Reload settings from the config file (no restart)
+/trait verify                     - Show what each stat is actually made of (diagnostic)
+/trait maxall                     - Max out every trait
+/trait export [player]            - Export a player's progress to a JSON file
+/trait import <file> [player]     - Import progress from a JSON file
+/trait sleepbuff                  - View your current sleep buff status
 
 MINING:
 /trait mining                     - View personal mining stats
@@ -398,8 +640,48 @@ FORAGER:
 /trait foragerlevel <level>       - Set credits directly
 /trait foragermax [percent]       - Get/set max loot bonus (default 20)
 
+FURTIVE:
+/trait furtive                    - View furtive (sneaking) progression
+/trait furtivelevel <level>       - Set credits directly
+
+PRECISE:
+/trait precise                    - View precise (mechanical damage) progression
+/trait preciselevel <level> [tool] - Set credits directly (optional per-weapon)
+
 TECHNICAL:
 /trait technical                  - View technical trait progress
 /trait technicalunlock <true/false> - Manually unlock/lock the trait
+
+HARDY HEALTH:
+/trait hardyhealth                - View hardy health unlock progress
+/trait hardyhealthunlock <true/false> - Manually unlock/lock the trait
+
+BOWYER:
+/trait bowyer                     - View bowyer unlock progress
+/trait bowyerunlock <true/false>  - Manually unlock/lock the trait
+
+IMPROVISER:
+/trait improviser                 - View improviser unlock progress
+/trait improviserunlock <true/false> - Manually unlock/lock the trait
+
+TINKERER:
+/trait tinkerer                   - View tinkerer unlock progress
+/trait tinkererunlock <true/false> - Manually unlock/lock the trait
+
+MERCILESS:
+/trait merciless                  - View merciless unlock progress
+/trait mercilessunlock <true/false> - Manually unlock/lock the trait
+
+CLAUSTROPHOBIC (HUNTER):
+/trait claustrophobic             - View claustrophobic removal progress
+/trait claustrophobicunlock <true/false> - Manually set removed status
+
+COMBAT OVERHAUL (only when Combat Overhaul is installed):
+/trait coproficiency              - View all Combat Overhaul progression
+/trait colevel <stat> <level>     - Set a proficiency's credits directly
+/trait coreset                    - Reset all Combat Overhaul progression
+/trait comaxall                   - Max out every Combat Overhaul proficiency
+(Per-weapon subcommands also exist, e.g. /trait bows, /trait slings,
+ /trait steadyaim.)
 
 ================================================================================

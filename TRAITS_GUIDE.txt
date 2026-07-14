@@ -15,7 +15,8 @@ Unlock traits are one-time unlocks with no percentage to grind:
 - clothier, technical, hardyhealth
 - bowyer, improviser, tinkerer, merciless
 
-Hunter-only: the Claustrophobic penalty can be overcome (see its section).
+Negative traits from your starting class can be removed by leveling the matching
+positive trait. See "Negative Traits - How To Remove Them" below.
 
 Use '/trait [name]' to see more info about leveling it up and your progress so
 far in-game. You can also read this (mostly complete) document.
@@ -417,60 +418,65 @@ SPECIAL MECHANICS:
   Blackguard class
 
 ================================================================================
-                   CLAUSTROPHOBIC OVERCOME - HUNTER ONLY
+                  NEGATIVE TRAITS - HOW TO REMOVE THEM
 ================================================================================
 
-The Hunter's Claustrophobic penalty (-15% ore drops, -10% mining speed) is
-handled in two stages, both driven by your mining level.
+Several starting classes come with a negative trait. NONE of them are stuck with
+it. Every negative can be worn away by leveling the matching positive trait. This
+is not Hunter-specific: Tailor, Hunter, Malefactor, Clockmaker, and Blackguard
+all have negatives, and they all come off the same way. A Blackguard's
+Nearsighted (-15% ranged damage with bows) is removed exactly like a Tailor's
+Civil or a Hunter's Claustrophobic.
 
-STAGE 1 - PENALTY REMOVED (mining level 10):
-- The mining and ore penalties are fully cancelled by mining level 10
-- This is the same proportional system as the Negative Trait Cancellation
-  table below
+HOW REMOVAL WORKS:
+1. Each negative trait is tied to one positive trait.
+2. Every level you earn in that positive trait removes 1 point of the penalty.
+   A -15% penalty is fully gone after 15 levels of the matching positive trait.
+3. The penalty shrinks in your character sheet as you level. When it reaches 0,
+   the negative trait disappears from the display.
+4. Only levels earned PAST the penalty start building a positive bonus. Until the
+   negative is paid off, you are climbing back to zero, not above it.
+5. A penalised class can earn EXTRA levels beyond the normal cap, so that after
+   clearing the penalty it can still reach the full positive bonus. Example: a
+   Blackguard clears -15% Nearsighted over 15 ranged levels, then earns the full
+   +50% on top, for 65 ranged levels in total.
+6. Some negatives cover two things at once (Weak, Frail, Kind, Heavyhanded,
+   Claustrophobic). Each part has its own threshold. The health penalties on Weak
+   (-2 HP) and Frail (-2.5 HP) are restored automatically when their paired
+   percentage penalty is cleared.
 
-STAGE 2 - OVERCOME BADGE (mining level 100):
-- At mining level 100 the Hunter earns the "Claustrophobic Overcome" badge
-- This is a display milestone on the character sheet
-- The penalty itself is already gone long before this point
+REMOVAL TABLE:
 
-HOW TO IMPROVE:
-- Keep mining; both stages advance with your mining level
+Negative Trait | Class       | Penalty                  | Level This Positive | To
+---------------|-------------|--------------------------|---------------------|----
+Civil          | Tailor      | -10% foraging loot       | Forager             | 10
+Weak           | Tailor      | -2 HP and -10% mining    | Hardy (mining)      | 10
+Kind           | Tailor      | -10% animal loot         | Resourceful         | 10
+Kind           | Tailor      | -25% harvest speed       | Resourceful         | 25
+Farsighted     | Hunter      | -15% melee damage        | Soldier (melee)     | 15
+Claustrophobic | Hunter      | -15% ore and -10% mining | Hardy (mining)      | 10
+Nervous        | Malef/Clock | -15% melee damage        | Soldier (melee)     | 15
+Frail          | Malef/Clock | -2.5 HP and -25% range   | Focused (ranged)    | 25
+Nearsighted    | Blackguard  | -15% ranged damage       | Focused (ranged)    | 15
+Heavyhanded    | Blackguard  | -10% cracked vessel loot | Pilferer            | 10
+Heavyhanded    | Blackguard  | -15% foraging loot       | Forager             | 15
+Heavyhanded    | Blackguard  | -20% wild crop drop      | Forager             | 20
+Ravenous       | Blackguard  | +30% hunger rate         | Hunger              | 30
 
-================================================================================
-                    NEGATIVE TRAIT CANCELLATION SYSTEM
-================================================================================
+("Malef/Clock" means the trait appears on the Malefactor and/or Clockmaker.)
 
-Negative traits from vanilla classes can be progressively cancelled by earning
-levels in the corresponding positive trait.
+EXAMPLE (Blackguard removing Nearsighted, then earning the bonus):
+- Start:            "Nearsighted (-15% ranged damage)"
+- Focused level 6:  "Nearsighted (-9% ranged damage)"
+- Focused level 15: Nearsighted removed from display
+- Focused level 25: "Focused (+10% ranged damage)"
+- Focused level 65: "Focused (+50% ranged damage)" (the full cap)
 
-CANCELLATION TABLE:
-
-Negative Trait    | Class              | Effect                  | Cancelled By      | Levels
-------------------|--------------------|-------------------------|-------------------|--------
-Civil             | Tailor             | -10% foraging loot      | Forager           | 10
-Weak              | Tailor             | -2 HP, -10% mining      | Hardy (mining)    | 10
-Kind (loot)       | Tailor             | -10% animal loot        | Resourceful       | 10
-Kind (speed)      | Tailor             | -25% harvest speed      | Resourceful       | 25
-Farsighted        | Hunter             | -15% melee damage       | Soldier (melee)   | 15
-Claustrophobic    | Hunter             | -15% ore, -10% mining   | Hardy (mining)    | 10
-Nervous           | Malef/Clock        | -15% melee damage       | Soldier (melee)   | 15
-Frail             | Malef/Clock        | -2.5 HP, -25% range     | Focused           | 25
-Nearsighted       | Blackguard         | -15% ranged damage      | Focused           | 15
-Heavyhanded       | Blackguard         | -10% vessel loot        | Pilferer          | 10
-Heavyhanded       | Blackguard         | -15% foraging loot      | Forager           | 15
-Heavyhanded       | Blackguard         | -20% wild crop drop     | Forager           | 20
-Ravenous          | Blackguard         | +30% hunger rate        | Hunger            | 30
-
-HOW IT WORKS:
-1. As you earn levels, the negative penalty decreases proportionally
-2. When penalty reaches 0, negative trait is removed from UI
-3. Positive bonus only shows AFTER negative is fully cancelled
-
-EXAMPLE:
-- Tailor starts with Civil (-10% foraging loot)
-- At Forager level 3: Shows "Civil (-7% foraging loot)"
-- At Forager level 10: Civil trait removed from display
-- At Forager level 15: Shows "Forager (+5% foraging loot)"
+HUNTER BONUS - CLAUSTROPHOBIC OVERCOME:
+The Hunter's Claustrophobic penalty is gone by mining level 10, like any other
+negative. As an extra milestone, at mining level 100 the Hunter earns a cosmetic
+"Claustrophobic Overcome" badge on the character sheet. The penalty is long gone
+before that point; the badge is just recognition for going the distance.
 
 ================================================================================
                  COMBAT OVERHAUL COMPATIBILITY (APPENDIX)
@@ -520,13 +526,14 @@ with a perk. Seraph lets you earn these down or up:
 
 --- BUYING BACK NEGATIVE COMBAT TRAITS ---
 
-Combat Overhaul classes that start with a combat penalty can earn it back:
+Combat Overhaul classes that start with a combat penalty can earn it back, the
+same idea as the vanilla negative traits above:
 - Clumsy Hands / Weak Hand: reduced weapon proficiency
 - Trembling Aim: reduced steady aim
 - Nervous / Frightened / Fear of Melee: reduced melee damage tier
 
-Class-granted proficiencies that are perks are kept, and your earned bonus
-stacks on top of them.
+Class-granted proficiencies that are perks are kept, and your earned bonus stacks
+on top of them.
 
 ================================================================================
                                 SLEEP BUFF
@@ -554,34 +561,78 @@ CONFIGURATION (in ModConfig/SeraphLeveling.json):
 Use '/trait sleepbuff' to see your current buff status.
 
 ================================================================================
-                           ADMIN COMMANDS REFERENCE
+                            COMMANDS REFERENCE
 ================================================================================
+
+There are two kinds of commands:
+
+PERSONAL COMMANDS - any player can run these on themselves. They only VIEW your
+own progress and never change anything.
+
+ADMIN COMMANDS - require server-operator permission (controlserver). They change
+values, unlock traits, or reset progress. In a single-player world you are the
+operator, so you can use these too.
+
+--------------------------------------------------------------------------------
+PERSONAL COMMANDS (any player)
+--------------------------------------------------------------------------------
+
+/trait all             - View all of your trait progression at once
+/trait mining          - View your mining progress
+/trait melee           - View your melee progress
+/trait ranged          - View your ranged progress
+/trait walking         - View your walking progress
+/trait hunger          - View your hunger progress
+/trait armor           - View your armor progress
+/trait clothier        - View your clothier progress
+/trait mender          - View your mender progress
+/trait pilferer        - View your pilferer progress
+/trait resourceful     - View your resourceful progress
+/trait forager         - View your forager progress
+/trait furtive         - View your furtive progress
+/trait precise         - View your precise progress
+/trait technical       - View your technical progress
+/trait hardyhealth     - View your hardy health progress
+/trait bowyer          - View your bowyer progress
+/trait improviser      - View your improviser progress
+/trait tinkerer        - View your tinkerer progress
+/trait merciless       - View your merciless progress
+/trait claustrophobic  - View your claustrophobic removal progress (Hunter)
+/trait sleepbuff       - View your current sleep buff status
+/trait decay           - View your current skill decay status
+/trait coproficiency   - View all Combat Overhaul progression (if installed)
+
+Combat Overhaul also has a personal view per weapon type, for example
+/trait bows, /trait slings, and /trait steadyaim.
+
+--------------------------------------------------------------------------------
+ADMIN COMMANDS (server operators)
+--------------------------------------------------------------------------------
 
 GENERAL:
 /trait reset                      - Reset all trait progression to 0
+/trait maxall                     - Max out every trait
 /trait resetconfig                - Reset all config values to defaults
 /trait reloadconfig               - Reload settings from the config file (no restart)
 /trait verify                     - Show what each stat is actually made of (diagnostic)
-/trait maxall                     - Max out every trait
 /trait export [player]            - Export a player's progress to a JSON file
 /trait import <file> [player]     - Import progress from a JSON file
-/trait sleepbuff                  - View your current sleep buff status
+/trait soundvolume [0.0-1.0]      - Get/set the level-up ding volume (default 0.25)
+/trait testsound [0.0-1.0]        - Play the level-up ding once for testing
 
 MINING:
-/trait mining                     - View personal mining stats
 /trait miningbase [value]         - Get/set base points per increment
 /trait mininglevel <level>        - Set credits directly
 /trait miningmax [percent]        - Get/set max bonus (default 50)
+/trait miningincrement [value]    - Get/set increment step per credit
 
 MELEE:
-/trait melee                      - View personal melee stats
 /trait meleebase [value]          - Get/set base damage per increment
 /trait meleelevel <level>         - Set credits directly
 /trait meleemax [percent]         - Get/set max bonus (default 50)
 /trait meleeincrement [value]     - Get/set increment step per credit
 
 RANGED:
-/trait ranged                     - View personal ranged stats
 /trait rangedbase [value]         - Get/set base damage per increment
 /trait rangedlevel <level>        - Set credits directly
 /trait rangedmax [percent]        - Get/set max damage bonus (default 50)
@@ -590,21 +641,18 @@ RANGED:
 /trait rangedincrement [value]    - Get/set increment step per credit
 
 WALKING:
-/trait walking                    - View personal walking stats
 /trait walkingbase [value]        - Get/set base blocks per increment
 /trait walkinglevel <level>       - Set credits directly
 /trait walkingmax [percent]       - Get/set max bonus (default 15)
 /trait walkingincrement [value]   - Get/set increment step per credit
 
 HUNGER:
-/trait hunger                     - View personal hunger stats
 /trait hungerbase [value]         - Get/set base seconds per increment (default 300)
 /trait hungerlevel <level>        - Set credits directly
 /trait hungermax [percent]        - Get/set target reduction (default 25)
 /trait hungerincrement [value]    - Get/set increment step per credit (default 60)
 
 ARMOR:
-/trait armor                      - View personal armor stats
 /trait armorlevel <level>         - Set durability credits directly
 /trait armorwalkspeedlevel <lvl>  - Set walk speed credits directly
 /trait armordurabilitymax [%]     - Get/set max durability bonus (default 50)
@@ -613,75 +661,47 @@ ARMOR:
 /trait armorrepairbase [repairs]  - Get/set base repairs per increment (default 1)
 
 CLOTHIER:
-/trait clothier                   - View clothier progression
 /trait clothierrequired [count]   - Get/set required unique clothes (default 20)
+/trait clothierlevel <count>      - Set clothier progress directly
 
 MENDER:
-/trait mender                     - View mender progression
 /trait menderbase [value]         - Get/set base repairs per increment (default 5)
 /trait menderlevel <level>        - Set credits directly
 /trait mendermax [percent]        - Get/set max bonus (default 20)
 
 PILFERER:
-/trait pilferer                   - View pilferer progression
 /trait pilfererbase [value]       - Get/set base points per increment (default 10)
 /trait pilfererlevel <level>      - Set credits directly
 /trait pilferermax [percent]      - Get/set max bonus (default 20)
 
 RESOURCEFUL:
-/trait resourceful                - View resourceful progression
 /trait resourcefulbase [value]    - Get/set base animals per increment (default 10)
 /trait resourcefullevel <level>   - Set credits directly
 /trait resourcefulmax [percent]   - Get/set max loot bonus (default 20)
 
 FORAGER:
-/trait forager                    - View forager progression
 /trait foragerbase [value]        - Get/set base crops per increment (default 10)
 /trait foragerlevel <level>       - Set credits directly
 /trait foragermax [percent]       - Get/set max loot bonus (default 20)
 
 FURTIVE:
-/trait furtive                    - View furtive (sneaking) progression
 /trait furtivelevel <level>       - Set credits directly
 
 PRECISE:
-/trait precise                    - View precise (mechanical damage) progression
 /trait preciselevel <level> [tool] - Set credits directly (optional per-weapon)
 
-TECHNICAL:
-/trait technical                  - View technical trait progress
-/trait technicalunlock <true/false> - Manually unlock/lock the trait
+UNLOCK TRAITS (toggle the unlocked state):
+/trait technicalunlock <true/false>
+/trait hardyhealthunlock <true/false>
+/trait bowyerunlock <true/false>
+/trait improviserunlock <true/false>
+/trait tinkererunlock <true/false>
+/trait mercilessunlock <true/false>
+/trait claustrophobicunlock <true/false>
 
-HARDY HEALTH:
-/trait hardyhealth                - View hardy health unlock progress
-/trait hardyhealthunlock <true/false> - Manually unlock/lock the trait
-
-BOWYER:
-/trait bowyer                     - View bowyer unlock progress
-/trait bowyerunlock <true/false>  - Manually unlock/lock the trait
-
-IMPROVISER:
-/trait improviser                 - View improviser unlock progress
-/trait improviserunlock <true/false> - Manually unlock/lock the trait
-
-TINKERER:
-/trait tinkerer                   - View tinkerer unlock progress
-/trait tinkererunlock <true/false> - Manually unlock/lock the trait
-
-MERCILESS:
-/trait merciless                  - View merciless unlock progress
-/trait mercilessunlock <true/false> - Manually unlock/lock the trait
-
-CLAUSTROPHOBIC (HUNTER):
-/trait claustrophobic             - View claustrophobic removal progress
-/trait claustrophobicunlock <true/false> - Manually set removed status
-
-COMBAT OVERHAUL (only when Combat Overhaul is installed):
-/trait coproficiency              - View all Combat Overhaul progression
+COMBAT OVERHAUL:
 /trait colevel <stat> <level>     - Set a proficiency's credits directly
 /trait coreset                    - Reset all Combat Overhaul progression
 /trait comaxall                   - Max out every Combat Overhaul proficiency
-(Per-weapon subcommands also exist, e.g. /trait bows, /trait slings,
- /trait steadyaim.)
 
 ================================================================================

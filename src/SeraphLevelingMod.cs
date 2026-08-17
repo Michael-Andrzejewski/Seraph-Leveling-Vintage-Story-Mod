@@ -355,6 +355,13 @@ namespace SeraphLeveling
         public double DeathPenaltyFraction { get; set; } = 0.5;
 
         /// <summary>
+        /// When true (and EnableDeathPenalty is true), dying wipes ALL trait progression
+        /// back to zero instead of applying the fractional penalty. Skills listed in
+        /// DeathPenaltyExemptSkills or DisabledSkills keep their progress. Off by default.
+        /// </summary>
+        public bool DeathPenaltyFullReset { get; set; } = false;
+
+        /// <summary>
         /// Skills exempt from death penalty. Use lowercase skill names (e.g. "mining", "melee", "armor").
         /// </summary>
         public string[] DeathPenaltyExemptSkills { get; set; } = Array.Empty<string>();
@@ -2354,6 +2361,7 @@ namespace SeraphLeveling
         // Death penalty settings
         public static bool EnableDeathPenalty = false;
         public static double DeathPenaltyFraction = 0.5;
+        public static bool DeathPenaltyFullReset = false;
         public static HashSet<string> DeathPenaltyExemptSkills = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         // Per-proficiency base and increment overrides (optional, falls back to global values)
@@ -10074,36 +10082,48 @@ namespace SeraphLeveling
 
                 LoadedConfigVersion = config.ConfigVersion;
 
+                // Progression bases and increment steps must be at least 1. Zero or
+                // negative values freeze already-leveled players at their current
+                // per-level cost, break credit derivation ((size - base) / step) in
+                // /trait set and the death penalty, and a zero base can hang the
+                // absolute-position math. Clamp with a warning instead of obeying.
+                int AtLeastOne(int value, string name)
+                {
+                    if (value >= 1) return value;
+                    api.Logger.Warning($"[SeraphLeveling] Config value {name} must be at least 1 but is {value}. Using 1 instead. To make leveling flat, set the increment step to 1, not 0.");
+                    return 1;
+                }
+
                 // Apply config values to static variables
-                BaseBlocksPerIncrement = config.MiningBaseBlocksPerIncrement;
-                IncrementStep = config.MiningIncrementStep;
+                BaseBlocksPerIncrement = AtLeastOne(config.MiningBaseBlocksPerIncrement, "MiningBaseBlocksPerIncrement");
+                IncrementStep = AtLeastOne(config.MiningIncrementStep, "MiningIncrementStep");
                 MaxMiningSpeedPercent = config.MiningMaxPercent;
                 OreMultiplier = config.MiningOreMultiplier;
 
-                BaseDamagePerIncrement = config.MeleeBaseDamagePerIncrement;
-                MeleeIncrementStep = config.MeleeIncrementStep;
+                BaseDamagePerIncrement = AtLeastOne(config.MeleeBaseDamagePerIncrement, "MeleeBaseDamagePerIncrement");
+                MeleeIncrementStep = AtLeastOne(config.MeleeIncrementStep, "MeleeIncrementStep");
                 MaxMeleeDamagePercent = config.MeleeMaxPercent;
 
-                BaseRangedDamagePerIncrement = config.RangedBaseDamagePerIncrement;
-                RangedIncrementStep = config.RangedIncrementStep;
+                BaseRangedDamagePerIncrement = AtLeastOne(config.RangedBaseDamagePerIncrement, "RangedBaseDamagePerIncrement");
+                RangedIncrementStep = AtLeastOne(config.RangedIncrementStep, "RangedIncrementStep");
                 MaxRangedDamagePercent = config.RangedMaxDamagePercent;
                 MaxRangedAccuracyPercent = config.RangedMaxAccuracyPercent;
                 MaxRangedDistancePercent = config.RangedMaxDistancePercent;
 
-                BaseBlocksWalkedPerIncrement = config.WalkingBaseBlocksPerIncrement;
-                WalkingIncrementStep = config.WalkingIncrementStep;
+                BaseBlocksWalkedPerIncrement = AtLeastOne(config.WalkingBaseBlocksPerIncrement, "WalkingBaseBlocksPerIncrement");
+                WalkingIncrementStep = AtLeastOne(config.WalkingIncrementStep, "WalkingIncrementStep");
                 MaxWalkingSpeedPercent = config.WalkingMaxPercent;
 
-                BaseSecondsPerIncrement = config.HungerBaseSecondsPerIncrement;
-                HungerIncrementStep = config.HungerIncrementStep;
+                BaseSecondsPerIncrement = AtLeastOne(config.HungerBaseSecondsPerIncrement, "HungerBaseSecondsPerIncrement");
+                HungerIncrementStep = AtLeastOne(config.HungerIncrementStep, "HungerIncrementStep");
                 MaxHungerReductionPercent = config.HungerMaxReductionPercent;
 
-                BaseSecondsInArmorPerIncrement = config.ArmorBaseSecondsPerIncrement;
-                ArmorTimeIncrementStep = config.ArmorTimeIncrementStep;
-                BaseDamageBlockedPerIncrement = config.ArmorBaseDamageBlockedPerIncrement;
-                ArmorDamageIncrementStep = config.ArmorDamageIncrementStep;
-                BaseRepairsPerIncrement = config.ArmorBaseRepairsPerIncrement;
-                ArmorRepairIncrementStep = config.ArmorRepairIncrementStep;
+                BaseSecondsInArmorPerIncrement = AtLeastOne(config.ArmorBaseSecondsPerIncrement, "ArmorBaseSecondsPerIncrement");
+                ArmorTimeIncrementStep = AtLeastOne(config.ArmorTimeIncrementStep, "ArmorTimeIncrementStep");
+                BaseDamageBlockedPerIncrement = AtLeastOne(config.ArmorBaseDamageBlockedPerIncrement, "ArmorBaseDamageBlockedPerIncrement");
+                ArmorDamageIncrementStep = AtLeastOne(config.ArmorDamageIncrementStep, "ArmorDamageIncrementStep");
+                BaseRepairsPerIncrement = AtLeastOne(config.ArmorBaseRepairsPerIncrement, "ArmorBaseRepairsPerIncrement");
+                ArmorRepairIncrementStep = AtLeastOne(config.ArmorRepairIncrementStep, "ArmorRepairIncrementStep");
                 MaxArmorDurabilityPercent = config.ArmorMaxDurabilityPercent;
                 MaxArmorWalkSpeedPercent = config.ArmorMaxWalkSpeedPercent;
 
@@ -10132,30 +10152,30 @@ namespace SeraphLeveling
                     ClothierBlacklistedItems = config.ClothierBlacklistedItems;
                 }
 
-                BaseMenderRepairsPerIncrement = config.MenderBaseRepairsPerIncrement;
-                MenderIncrementStep = config.MenderIncrementStep;
+                BaseMenderRepairsPerIncrement = AtLeastOne(config.MenderBaseRepairsPerIncrement, "MenderBaseRepairsPerIncrement");
+                MenderIncrementStep = AtLeastOne(config.MenderIncrementStep, "MenderIncrementStep");
                 MaxMenderPercent = config.MenderMaxPercent;
 
-                BasePilfererPointsPerIncrement = config.PilfererBasePointsPerIncrement;
-                PilfererIncrementStep = config.PilfererIncrementStep;
+                BasePilfererPointsPerIncrement = AtLeastOne(config.PilfererBasePointsPerIncrement, "PilfererBasePointsPerIncrement");
+                PilfererIncrementStep = AtLeastOne(config.PilfererIncrementStep, "PilfererIncrementStep");
                 MaxPilfererPercent = config.PilfererMaxPercent;
 
-                BaseResourcefulAnimalsPerIncrement = config.ResourcefulBaseAnimalsPerIncrement;
-                ResourcefulIncrementStep = config.ResourcefulIncrementStep;
+                BaseResourcefulAnimalsPerIncrement = AtLeastOne(config.ResourcefulBaseAnimalsPerIncrement, "ResourcefulBaseAnimalsPerIncrement");
+                ResourcefulIncrementStep = AtLeastOne(config.ResourcefulIncrementStep, "ResourcefulIncrementStep");
                 MaxResourcefulLootPercent = config.ResourcefulMaxLootPercent;
                 MaxResourcefulSpeedPercent = config.ResourcefulMaxSpeedPercent;
 
-                BaseForagerCropsPerIncrement = config.ForagerBaseCropsPerIncrement;
-                ForagerIncrementStep = config.ForagerIncrementStep;
+                BaseForagerCropsPerIncrement = AtLeastOne(config.ForagerBaseCropsPerIncrement, "ForagerBaseCropsPerIncrement");
+                ForagerIncrementStep = AtLeastOne(config.ForagerIncrementStep, "ForagerIncrementStep");
                 MaxForagerLootPercent = config.ForagerMaxLootPercent;
                 MaxForagerWildCropPercent = config.ForagerMaxWildCropPercent;
 
-                BaseFurtiveSneakBlocksPerIncrement = config.FurtiveBaseSneakBlocksPerIncrement;
-                FurtiveIncrementStep = config.FurtiveIncrementStep;
+                BaseFurtiveSneakBlocksPerIncrement = AtLeastOne(config.FurtiveBaseSneakBlocksPerIncrement, "FurtiveBaseSneakBlocksPerIncrement");
+                FurtiveIncrementStep = AtLeastOne(config.FurtiveIncrementStep, "FurtiveIncrementStep");
                 MaxFurtivePercent = config.FurtiveMaxPercent;
 
-                BasePreciseDamagePerIncrement = config.PreciseBaseDamagePerIncrement;
-                PreciseIncrementStep = config.PreciseIncrementStep;
+                BasePreciseDamagePerIncrement = AtLeastOne(config.PreciseBaseDamagePerIncrement, "PreciseBaseDamagePerIncrement");
+                PreciseIncrementStep = AtLeastOne(config.PreciseIncrementStep, "PreciseIncrementStep");
                 MaxPrecisePercent = config.PreciseMaxPercent;
 
                 TechnicalRequiredTranslocatorRepairs = config.TechnicalRequiredTranslocatorRepairs;
@@ -10186,8 +10206,8 @@ namespace SeraphLeveling
 
                 // Combat Overhaul compatibility configuration
                 COEnableCompat = config.EnableCombatOverhaulCompat;
-                COBaseDamagePerIncrement = config.COProficiencyBaseDamagePerIncrement;
-                COIncrementStep = config.COProficiencyIncrementStep;
+                COBaseDamagePerIncrement = AtLeastOne(config.COProficiencyBaseDamagePerIncrement, "COProficiencyBaseDamagePerIncrement");
+                COIncrementStep = AtLeastOne(config.COProficiencyIncrementStep, "COProficiencyIncrementStep");
                 COProficiencyBaseOverrides = config.COProficiencyBaseOverrides ?? new Dictionary<string, int>();
                 COProficiencyIncrementOverrides = config.COProficiencyIncrementOverrides ?? new Dictionary<string, int>();
                 COBowsProficiencyMax = config.COBowsProficiencyMax;
@@ -10237,6 +10257,7 @@ namespace SeraphLeveling
                 // Death penalty settings
                 EnableDeathPenalty = config.EnableDeathPenalty;
                 DeathPenaltyFraction = config.DeathPenaltyFraction;
+                DeathPenaltyFullReset = config.DeathPenaltyFullReset;
                 DeathPenaltyExemptSkills.Clear();
                 if (config.DeathPenaltyExemptSkills != null)
                 {
@@ -10275,7 +10296,7 @@ namespace SeraphLeveling
 
                 if (EnableDeathPenalty)
                 {
-                    api.Logger.Notification($"[SeraphLeveling] Death penalty ENABLED: fraction={DeathPenaltyFraction}, exempt skills: {(DeathPenaltyExemptSkills.Count > 0 ? string.Join(", ", DeathPenaltyExemptSkills) : "none")}");
+                    api.Logger.Notification($"[SeraphLeveling] Death penalty ENABLED: {(DeathPenaltyFullReset ? "FULL RESET on death" : $"fraction={DeathPenaltyFraction}")}, exempt skills: {(DeathPenaltyExemptSkills.Count > 0 ? string.Join(", ", DeathPenaltyExemptSkills) : "none")}");
                 }
 
                 api.Logger.Notification("[SeraphLeveling] Config loaded from ModConfig/" + CONFIG_FILE_NAME);
@@ -10435,6 +10456,7 @@ namespace SeraphLeveling
 
                 config.EnableDeathPenalty = EnableDeathPenalty;
                 config.DeathPenaltyFraction = DeathPenaltyFraction;
+                config.DeathPenaltyFullReset = DeathPenaltyFullReset;
                 config.DeathPenaltyExemptSkills = DeathPenaltyExemptSkills.ToArray();
 
                 config.EnableLevelUpMessages = EnableLevelUpMessages;
@@ -11406,6 +11428,66 @@ namespace SeraphLeveling
         }
 
         /// <summary>
+        /// DeathPenaltyFullReset: wipe every progression system back to zero, keeping
+        /// only the systems the admin listed in DeathPenaltyExemptSkills (or disabled
+        /// outright). Implemented as snapshot, full reset via the same routine
+        /// /trait reset uses, restore, reapply, so it cannot drift from the reset logic.
+        /// </summary>
+        public static void ApplyFullDeathReset(IServerPlayer player)
+        {
+            if (Instance == null || player?.Entity == null) return;
+
+            string uid = player.PlayerUID;
+            var restores = new List<Action>();
+            var keptSkills = new List<string>();
+
+            void Keep<T>(string skill, ConcurrentDictionary<string, T> dict) where T : class
+            {
+                if (!DeathPenaltyExemptSkills.Contains(skill) && !DisabledSkills.Contains(skill)) return;
+                if (dict.TryGetValue(uid, out var data))
+                {
+                    restores.Add(() => dict[uid] = data);
+                    keptSkills.Add(skill);
+                }
+            }
+
+            Keep("mining", MiningProgress);
+            Keep("melee", MeleeProgress);
+            Keep("ranged", RangedProgress);
+            Keep("precise", PreciseProgress);
+            Keep("walking", WalkingProgress);
+            Keep("hunger", HungerProgress);
+            Keep("armor", ArmorProgress);
+            Keep("clothier", ClothierProgress);
+            Keep("mender", MenderProgress);
+            Keep("pilferer", PilfererProgress);
+            Keep("resourceful", ResourcefulProgress);
+            Keep("forager", ForagerProgress);
+            Keep("furtive", FurtiveProgress);
+            Keep("technical", TechnicalProgress);
+            Keep("hardyhealth", HardyHealthProgress);
+            Keep("bowyer", BowyerProgress);
+            Keep("improviser", ImproviserProgress);
+            Keep("tinkerer", TinkererProgress);
+            Keep("merciless", MercilessProgress);
+            Keep("claustrophobicremoval", ClaustrophobicRemovalProgress);
+            Keep("coproficiency", COProgress);
+
+            Instance.ResetProgressForPlayer(player);
+
+            foreach (var restore in restores) restore();
+
+            // Reapply bonuses for whatever was restored (the same routine that runs on join).
+            Instance.OnPlayerJoin(player);
+
+            string keptNote = keptSkills.Count > 0 ? $" Kept: {string.Join(", ", keptSkills)}." : "";
+            player.SendMessage(GlobalConstants.GeneralChatGroup,
+                $"Death penalty: all trait progression has been reset.{keptNote}",
+                EnumChatType.Notification);
+            ServerApi?.Logger.Debug($"[SeraphLeveling] Full death reset applied to {player.PlayerName}.{keptNote}");
+        }
+
+        /// <summary>
         /// Apply death penalty to all skills for a player.
         /// Uses binary-search to guarantee credit loss for per-tool dictionary skills.
         /// </summary>
@@ -11413,6 +11495,12 @@ namespace SeraphLeveling
         {
             if (!EnableDeathPenalty) return;
             if (player?.Entity == null) return;
+
+            if (DeathPenaltyFullReset)
+            {
+                ApplyFullDeathReset(player);
+                return;
+            }
 
             string playerUid = player.PlayerUID;
             var sb = new StringBuilder();
@@ -17004,6 +17092,7 @@ namespace SeraphLeveling
             // Death penalty defaults
             EnableDeathPenalty = false;
             DeathPenaltyFraction = 0.5;
+            DeathPenaltyFullReset = false;
             DeathPenaltyExemptSkills.Clear();
             VerboseDecayLogging = false;
 

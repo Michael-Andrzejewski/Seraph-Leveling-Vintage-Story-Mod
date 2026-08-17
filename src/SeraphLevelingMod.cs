@@ -395,6 +395,87 @@ namespace SeraphLeveling
         public float LevelUpSoundVolume { get; set; } = 0.25f;
 
         // =========================================================================
+        // EXPERIMENTAL FEATURES (ported from Seraph Leveling Experimental)
+        // Everything here is OFF by default. Flip the *Enabled switches to try them.
+        // =========================================================================
+
+        /// <summary>Enable the Temporal Resistance trait: time spent at low temporal stability slows your stability drain permanently. Experimental, off by default.</summary>
+        public bool TemporalResistanceEnabled { get; set; } = false;
+
+        /// <summary>Maximum Temporal Resistance in percent. At 75 the drain is 75% slower.</summary>
+        public int TemporalResistanceMaxPercent { get; set; } = 75;
+
+        /// <summary>
+        /// Whether Temporal Resistance applies during temporal storms. Default false, so during a
+        /// storm your stability drops at the normal storm rate regardless of resistance.
+        /// </summary>
+        public bool TemporalResistanceWorksDuringStorms { get; set; } = false;
+
+        /// <summary>
+        /// Stability value (0.0 to 1.0) below which the temporal traits gain progress.
+        /// Shared by both Resistance and Recharge. Default 0.5.
+        /// </summary>
+        public float TemporalLowStabilityThreshold { get; set; } = 0.5f;
+
+        /// <summary>Enable the Temporal Recharge trait: speeds temporal stability recovery; also leveled by the knife + temporal gear gesture. Experimental, off by default.</summary>
+        public bool TemporalRechargeEnabled { get; set; } = false;
+
+        /// <summary>Maximum Temporal Recharge in percent. At 200 recovery is 3x as fast as normal.</summary>
+        public int TemporalRechargeMaxPercent { get; set; } = 200;
+
+        /// <summary>Temporal Recharge percent gained per knife + temporal gear gesture.</summary>
+        public int TemporalRechargeGearTrickPercent { get; set; } = 5;
+
+        /// <summary>
+        /// Temporal Recharge percent at or above which the player becomes immune to low-grade
+        /// (non-storm) temporal decay. Default 200 (only at max).
+        /// </summary>
+        public int TemporalRechargePassiveImmunityAtPercent { get; set; } = 200;
+
+        /// <summary>Enable shortening bow draw time based on the Ranged trait level. Experimental, off by default.</summary>
+        public bool RangedDrawSpeedEnabled { get; set; } = false;
+
+        /// <summary>
+        /// Maximum bow draw-time reduction in percent, reached at RangedDrawSpeedAtLevel.
+        /// At 50 the draw is 2x faster (half the draw time). Internally capped at 99%.
+        /// </summary>
+        public int RangedDrawSpeedMaxReductionPercent { get; set; } = 50;
+
+        /// <summary>
+        /// Ranged trait level (raw credits) at which bow draw reduction reaches its maximum.
+        /// Reduction scales linearly from 0 at level 0 to the max at this level. Default 50.
+        /// Also used as the level at which bow aim-assist accuracy reaches its maximum.
+        /// </summary>
+        public int RangedDrawSpeedAtLevel { get; set; } = 50;
+
+        /// <summary>
+        /// Enable bow aim-assist: a high Ranged level converges accuracy instantly so you can
+        /// spam fire without waiting for the reticle to settle. Experimental, off by default.
+        /// </summary>
+        public bool RangedAimAssistEnabled { get; set; } = false;
+
+        /// <summary>
+        /// Maximum bow accuracy floor in percent, reached at RangedDrawSpeedAtLevel. At 99 a maxed
+        /// Ranged player fires at near-perfect accuracy regardless of how long the bow was drawn.
+        /// </summary>
+        public int RangedAccuracyMaxPercent { get; set; } = 99;
+
+        /// <summary>Enable speeding up melee swings based on the Melee trait level. Experimental, off by default.</summary>
+        public bool MeleeAttackSpeedEnabled { get; set; } = false;
+
+        /// <summary>
+        /// Maximum melee swing speed-up, expressed as a reduction percent reached at
+        /// MeleeAttackSpeedAtLevel. At 50 the swing plays 2x faster (duration halved). Capped at 90%.
+        /// </summary>
+        public int MeleeAttackSpeedMaxReductionPercent { get; set; } = 50;
+
+        /// <summary>
+        /// Melee trait level (raw credits) at which the swing speed-up reaches its maximum.
+        /// Scales linearly from 1x at level 0 to the max at this level. Default 50.
+        /// </summary>
+        public int MeleeAttackSpeedAtLevel { get; set; } = 50;
+
+        // =========================================================================
         // GLOBAL XP RATE
         // =========================================================================
 
@@ -1650,9 +1731,13 @@ namespace SeraphLeveling
         public MercilessProgressData Merciless;
         public ClaustrophobicRemovalProgressData ClaustrophobicRemoval;
         public COPlayerProgressData CombatOverhaul;
+
+        // Experimental temporal traits. Null in files exported before 1.20.0.
+        public TemporalProgressData TemporalResistance;
+        public TemporalProgressData TemporalRecharge;
     }
 
-    public class SeraphLevelingModSystem : ModSystem
+    public partial class SeraphLevelingModSystem : ModSystem
     {
         public static ICoreServerAPI ServerApi { get; private set; }
         public static SeraphLevelingModSystem Instance { get; private set; }
@@ -2558,9 +2643,10 @@ namespace SeraphLeveling
             Instance = this;
             isDisposed = false;
 
-            // Register network channel for level-up sound
+            // Register network channel for level-up sound and experimental-feature config sync
             serverSoundChannel = api.Network.RegisterChannel("seraphleveling")
-                .RegisterMessageType<LevelUpSoundMessage>();
+                .RegisterMessageType<LevelUpSoundMessage>()
+                .RegisterMessageType<ExperimentalFeatureConfigMessage>();
 
             // Load config file (sets defaults for new worlds)
             LoadConfigFile(api);
@@ -3277,6 +3363,39 @@ namespace SeraphLeveling
                     .RequiresPlayer()
                     .HandleWith(OnTraitTestSoundCommand)
                 .EndSubCommand()
+                .BeginSubCommand("tempresist")
+                    .WithDescription("View your Temporal Resistance progression (slower temporal drain; experimental, needs TemporalResistanceEnabled)")
+                    .RequiresPrivilege(Privilege.chat)
+                    .RequiresPlayer()
+                    .HandleWith(OnTraitTempResistCommand)
+                .EndSubCommand()
+                .BeginSubCommand("temprecharge")
+                    .WithDescription("View your Temporal Recharge progression (faster stability recovery; experimental, needs TemporalRechargeEnabled)")
+                    .RequiresPrivilege(Privilege.chat)
+                    .RequiresPlayer()
+                    .HandleWith(OnTraitTempRechargeCommand)
+                .EndSubCommand()
+                .BeginSubCommand("tempstability")
+                    .WithDescription("Get or set your temporal stability (0.0-1.0) for testing (admin)")
+                    .WithArgs(api.ChatCommands.Parsers.OptionalWord("value"))
+                    .RequiresPrivilege(Privilege.controlserver)
+                    .RequiresPlayer()
+                    .HandleWith(OnTraitTempStabilityCommand)
+                .EndSubCommand()
+                .BeginSubCommand("tempresistlevel")
+                    .WithDescription("Set your Temporal Resistance level (admin)")
+                    .WithArgs(api.ChatCommands.Parsers.OptionalInt("level"))
+                    .RequiresPrivilege(Privilege.controlserver)
+                    .RequiresPlayer()
+                    .HandleWith(OnTraitSetTempResistCommand)
+                .EndSubCommand()
+                .BeginSubCommand("temprechargelevel")
+                    .WithDescription("Set your Temporal Recharge level (admin)")
+                    .WithArgs(api.ChatCommands.Parsers.OptionalInt("level"))
+                    .RequiresPrivilege(Privilege.controlserver)
+                    .RequiresPlayer()
+                    .HandleWith(OnTraitSetTempRechargeCommand)
+                .EndSubCommand()
                 .BeginSubCommand("setplayer")
                     .WithDescription("Set a trait level for another player. Usage: /trait setplayer &lt;playername&gt; &lt;trait&gt; &lt;level&gt; [toolname]")
                     .WithArgs(api.ChatCommands.Parsers.Word("playername"), api.ChatCommands.Parsers.Word("trait"), api.ChatCommands.Parsers.Int("level"), api.ChatCommands.Parsers.OptionalWord("toolname"))
@@ -3323,6 +3442,9 @@ namespace SeraphLeveling
 
             // Register game tick listener for walking distance tracking (every 500ms)
             api.Event.RegisterGameTickListener(OnWalkingTick, 500);
+
+            // Experimental temporal traits: registers their save/load, world-save, and 1s leveling tick
+            InitTemporalTraits(api);
 
             // Register game tick listener for hunger tracking (every 1000ms / 1 second)
             api.Event.RegisterGameTickListener(OnHungerTick, 1000);
@@ -3395,6 +3517,9 @@ namespace SeraphLeveling
                 "  /trait armordurabilitymax [percent] - Get or set max durability bonus (admin)\n" +
                 "  /trait armorwalkspeedmax [percent] - Get or set max walk speed reduction (admin)\n" +
                 "  /trait all - View all trait progression at once\n" +
+                "  /trait tempresist - View Temporal Resistance (experimental, config-gated)\n" +
+                "  /trait temprecharge - View Temporal Recharge (experimental, config-gated)\n" +
+                "  /trait tempstability [0.0-1.0] - Get or set your temporal stability for testing (admin)\n" +
                 "  /trait soundvolume [0.0-1.0] - Get or set the level-up ding volume (admin)\n" +
                 "  /trait testsound [0.0-1.0] - Play the level-up ding once for testing (admin)\n" +
                 "  /trait setplayer &lt;name&gt; &lt;trait&gt; &lt;level&gt; [toolname] - Set trait level for another player (admin)\n" +
@@ -3666,6 +3791,26 @@ namespace SeraphLeveling
                     ApplyWalkingBonusStatic(targetPlayer, level);
                     UpdateSkillActivityDay(targetUid, "walking");
                     result = $"Walking level set to {level} (+{level}% speed) for {targetPlayer.PlayerName}.";
+                    break;
+                }
+                case "tempresist":
+                case "temporalresistance":
+                {
+                    if (level > TemporalResistanceMaxPercent) return TextCommandResult.Error($"Level cannot exceed max ({TemporalResistanceMaxPercent}).");
+                    var progress = TemporalResistanceProgress.GetOrAdd(targetUid, _ => new TemporalProgressData());
+                    progress.PermanentPercent = level;
+                    pendingTemporalResistanceSave = true;
+                    result = $"Temporal Resistance set to {level}% (drain {level}% slower) for {targetPlayer.PlayerName}.";
+                    break;
+                }
+                case "temprecharge":
+                case "temporalrecharge":
+                {
+                    if (level > TemporalRechargeMaxPercent) return TextCommandResult.Error($"Level cannot exceed max ({TemporalRechargeMaxPercent}).");
+                    var progress = TemporalRechargeProgress.GetOrAdd(targetUid, _ => new TemporalProgressData());
+                    progress.PermanentPercent = level;
+                    pendingTemporalRechargeSave = true;
+                    result = $"Temporal Recharge set to {level}% (recovery {(1.0 + level / 100.0):F2}x) for {targetPlayer.PlayerName}.";
                     break;
                 }
                 case "hunger":
@@ -6983,6 +7128,11 @@ namespace SeraphLeveling
             // class's negative traits only take hold after a death or relog.
             RegisterClassChangeListener(byPlayer);
 
+            // Sync the experimental feature settings to this client. Their bow/melee
+            // patches also run client-side for prediction, and a dedicated server's
+            // clients never see the server's config file.
+            try { serverSoundChannel?.SendPacket(BuildFeatureConfigMessage(), byPlayer); } catch { }
+
             // Initialize decay check day for this player (online-only decay)
             if (EnableSkillDecay)
             {
@@ -7515,6 +7665,14 @@ namespace SeraphLeveling
 
                 // Patch Entity.Die for death penalty system
                 PatchEntityDeath(api);
+
+                // Experimental (config-gated, off by default): temporal traits effect,
+                // bow draw speed, knife gear-trick recharge, melee swing speed. The
+                // patches are always installed but no-op while their switch is off.
+                PatchTemporalStability(api);
+                PatchBowDrawSpeed(api);
+                PatchKnifeGearTrick(api);
+                MeleeAttackSpeedPatches.Apply(serverHarmony, api, "server");
             }
             catch (Exception ex)
             {
@@ -8712,6 +8870,16 @@ namespace SeraphLeveling
                     PersistSleepBuffData();
                 }
 
+                if (pendingTemporalResistanceSave || !TemporalResistanceProgress.IsEmpty)
+                {
+                    PersistTemporalResistanceProgress();
+                }
+
+                if (pendingTemporalRechargeSave || !TemporalRechargeProgress.IsEmpty)
+                {
+                    PersistTemporalRechargeProgress();
+                }
+
                 ServerApi.Event.DidBreakBlock -= OnBlockBroken;
                 ServerApi.Event.PlayerJoin -= OnPlayerJoin;
                 ServerApi.Event.PlayerDisconnect -= OnPlayerDisconnect;
@@ -8739,6 +8907,9 @@ namespace SeraphLeveling
                 ServerApi.Event.SaveGameLoaded -= LoadClaustrophobicRemovalProgress;
                 ServerApi.Event.SaveGameLoaded -= LoadCOProgress;
                 ServerApi.Event.SaveGameLoaded -= LoadSleepBuffData;
+                ServerApi.Event.SaveGameLoaded -= LoadTemporalResistanceProgress;
+                ServerApi.Event.SaveGameLoaded -= LoadTemporalRechargeProgress;
+                ServerApi.Event.GameWorldSave -= SaveTemporalProgressOnWorldSave;
             }
 
             // Mark as disposed BEFORE clearing dictionaries to prevent OnGameWorldSave
@@ -10323,6 +10494,36 @@ namespace SeraphLeveling
                 LevelUpSoundName = config.LevelUpSoundName;
                 LevelUpSoundVolume = Math.Clamp(config.LevelUpSoundVolume, 0f, 1f);
 
+                // Experimental features (all off by default)
+                TemporalResistanceEnabled = config.TemporalResistanceEnabled;
+                TemporalResistanceMaxPercent = config.TemporalResistanceMaxPercent;
+                TemporalResistanceWorksDuringStorms = config.TemporalResistanceWorksDuringStorms;
+                TemporalLowStabilityThreshold = Math.Clamp(config.TemporalLowStabilityThreshold, 0f, 1f);
+                TemporalRechargeEnabled = config.TemporalRechargeEnabled;
+                TemporalRechargeMaxPercent = config.TemporalRechargeMaxPercent;
+                TemporalRechargeGearTrickPercent = config.TemporalRechargeGearTrickPercent;
+                TemporalRechargePassiveImmunityAtPercent = config.TemporalRechargePassiveImmunityAtPercent;
+                RangedDrawSpeedEnabled = config.RangedDrawSpeedEnabled;
+                RangedDrawSpeedMaxReductionPercent = config.RangedDrawSpeedMaxReductionPercent;
+                RangedDrawSpeedAtLevel = config.RangedDrawSpeedAtLevel;
+                RangedAimAssistEnabled = config.RangedAimAssistEnabled;
+                RangedAccuracyMaxPercent = config.RangedAccuracyMaxPercent;
+                MeleeAttackSpeedEnabled = config.MeleeAttackSpeedEnabled;
+                MeleeAttackSpeedMaxReductionPercent = config.MeleeAttackSpeedMaxReductionPercent;
+                MeleeAttackSpeedAtLevel = config.MeleeAttackSpeedAtLevel;
+                {
+                    var enabledExperiments = new List<string>();
+                    if (TemporalResistanceEnabled) enabledExperiments.Add("TemporalResistance");
+                    if (TemporalRechargeEnabled) enabledExperiments.Add("TemporalRecharge");
+                    if (RangedDrawSpeedEnabled) enabledExperiments.Add("RangedDrawSpeed");
+                    if (RangedAimAssistEnabled) enabledExperiments.Add("RangedAimAssist");
+                    if (MeleeAttackSpeedEnabled) enabledExperiments.Add("MeleeAttackSpeed");
+                    if (enabledExperiments.Count > 0)
+                    {
+                        api.Logger.Notification($"[SeraphLeveling] Experimental features enabled: {string.Join(", ", enabledExperiments)}");
+                    }
+                }
+
                 EnableClassCapOffsets = config.EnableClassCapOffsets;
                 if (EnableClassCapOffsets)
                 {
@@ -10530,6 +10731,23 @@ namespace SeraphLeveling
 
                 config.GlobalXPRateMultiplier = GlobalXPRateMultiplier;
                 config.EnableClassCapOffsets = EnableClassCapOffsets;
+
+                config.TemporalResistanceEnabled = TemporalResistanceEnabled;
+                config.TemporalResistanceMaxPercent = TemporalResistanceMaxPercent;
+                config.TemporalResistanceWorksDuringStorms = TemporalResistanceWorksDuringStorms;
+                config.TemporalLowStabilityThreshold = TemporalLowStabilityThreshold;
+                config.TemporalRechargeEnabled = TemporalRechargeEnabled;
+                config.TemporalRechargeMaxPercent = TemporalRechargeMaxPercent;
+                config.TemporalRechargeGearTrickPercent = TemporalRechargeGearTrickPercent;
+                config.TemporalRechargePassiveImmunityAtPercent = TemporalRechargePassiveImmunityAtPercent;
+                config.RangedDrawSpeedEnabled = RangedDrawSpeedEnabled;
+                config.RangedDrawSpeedMaxReductionPercent = RangedDrawSpeedMaxReductionPercent;
+                config.RangedDrawSpeedAtLevel = RangedDrawSpeedAtLevel;
+                config.RangedAimAssistEnabled = RangedAimAssistEnabled;
+                config.RangedAccuracyMaxPercent = RangedAccuracyMaxPercent;
+                config.MeleeAttackSpeedEnabled = MeleeAttackSpeedEnabled;
+                config.MeleeAttackSpeedMaxReductionPercent = MeleeAttackSpeedMaxReductionPercent;
+                config.MeleeAttackSpeedAtLevel = MeleeAttackSpeedAtLevel;
 
                 config.EnableDebugLogging = DebugLoggingEnabled;
                 config.VerboseDecayLogging = VerboseDecayLogging;
@@ -11551,6 +11769,8 @@ namespace SeraphLeveling
             Keep("merciless", MercilessProgress);
             Keep("claustrophobicremoval", ClaustrophobicRemovalProgress);
             Keep("coproficiency", COProgress);
+            Keep("tempresist", TemporalResistanceProgress);
+            Keep("temprecharge", TemporalRechargeProgress);
 
             Instance.ResetProgressForPlayer(player);
 
@@ -16414,6 +16634,12 @@ namespace SeraphLeveling
             // Also reset Combat Overhaul proficiency progression so no stale per-weapon
             // bonuses linger after a full reset. No-op if CO isn't loaded.
             ResetCOProgressForPlayer(player);
+
+            // Reset the experimental temporal traits too
+            TemporalResistanceProgress.TryRemove(playerUid, out _);
+            TemporalRechargeProgress.TryRemove(playerUid, out _);
+            pendingTemporalResistanceSave = true;
+            pendingTemporalRechargeSave = true;
         }
 
         // ============================================================
@@ -16477,6 +16703,8 @@ namespace SeraphLeveling
             if (MercilessProgress.TryGetValue(uid, out var merciless)) ex.Merciless = merciless;
             if (ClaustrophobicRemovalProgress.TryGetValue(uid, out var claustro)) ex.ClaustrophobicRemoval = claustro;
             if (COProgress.TryGetValue(uid, out var co)) ex.CombatOverhaul = co;
+            if (TemporalResistanceProgress.TryGetValue(uid, out var tempResist)) ex.TemporalResistance = tempResist;
+            if (TemporalRechargeProgress.TryGetValue(uid, out var tempRecharge)) ex.TemporalRecharge = tempRecharge;
 
             return ex;
         }
@@ -16505,6 +16733,8 @@ namespace SeraphLeveling
             if (ex.Merciless != null) { MercilessProgress[uid] = ex.Merciless; pendingMercilessProgressSave = true; }
             if (ex.ClaustrophobicRemoval != null) { ClaustrophobicRemovalProgress[uid] = ex.ClaustrophobicRemoval; pendingClaustrophobicRemovalProgressSave = true; }
             if (ex.CombatOverhaul != null) { COProgress[uid] = ex.CombatOverhaul; pendingCOProgressSave = true; }
+            if (ex.TemporalResistance != null) { TemporalResistanceProgress[uid] = ex.TemporalResistance; pendingTemporalResistanceSave = true; }
+            if (ex.TemporalRecharge != null) { TemporalRechargeProgress[uid] = ex.TemporalRecharge; pendingTemporalRechargeSave = true; }
         }
 
         private TextCommandResult OnTraitExportCommand(TextCommandCallingArgs args)
@@ -17186,6 +17416,23 @@ namespace SeraphLeveling
             GlobalXPRateMultiplier = 1.0f;
             EnableClassCapOffsets = false;
             VerboseDecayLogging = false;
+
+            TemporalResistanceEnabled = false;
+            TemporalResistanceMaxPercent = 75;
+            TemporalResistanceWorksDuringStorms = false;
+            TemporalLowStabilityThreshold = 0.5f;
+            TemporalRechargeEnabled = false;
+            TemporalRechargeMaxPercent = 200;
+            TemporalRechargeGearTrickPercent = 5;
+            TemporalRechargePassiveImmunityAtPercent = 200;
+            RangedDrawSpeedEnabled = false;
+            RangedDrawSpeedMaxReductionPercent = 50;
+            RangedDrawSpeedAtLevel = 50;
+            RangedAimAssistEnabled = false;
+            RangedAccuracyMaxPercent = 99;
+            MeleeAttackSpeedEnabled = false;
+            MeleeAttackSpeedMaxReductionPercent = 50;
+            MeleeAttackSpeedAtLevel = 50;
 
             // Save config
             pendingConfigSave = true;
@@ -19833,10 +20080,13 @@ namespace SeraphLeveling
                 SeraphLevelingModSystem.DetectAnyCombatOverhaul(api.ModLoader);
             SeraphLevelingModSystem.IsCombatOverhaulForkLoaded = api.ModLoader.IsModEnabled("combatoverhaulfork");
 
-            // Register network channel for receiving level-up sounds from server
+            // Register network channel for receiving level-up sounds and the
+            // experimental-feature config sync from the server
             api.Network.RegisterChannel("seraphleveling")
                 .RegisterMessageType<LevelUpSoundMessage>()
-                .SetMessageHandler<LevelUpSoundMessage>(OnLevelUpSoundReceived);
+                .RegisterMessageType<ExperimentalFeatureConfigMessage>()
+                .SetMessageHandler<LevelUpSoundMessage>(OnLevelUpSoundReceived)
+                .SetMessageHandler<ExperimentalFeatureConfigMessage>(SeraphLevelingModSystem.ApplyFeatureConfigMessage);
 
             // Apply Harmony patches manually for better control
             harmony = new Harmony("seraphleveling");
@@ -20081,6 +20331,14 @@ namespace SeraphLeveling
         {
             // Set the API reference for the patch to use
             CharacterSystemPatches.ClientApi = api;
+
+            // Experimental (config-gated, off by default): mirror the server-side bow
+            // draw-speed patch so draw prediction matches, converge the aim reticle by
+            // ranged level, and speed melee swings by melee level. Applied before the
+            // trait-text patch so they land even if that one bails.
+            BowDrawSpeedPatches.ApplyClient(harmony, api);
+            AimReticlePatches.Apply(harmony, api);
+            MeleeAttackSpeedPatches.Apply(harmony, api, "client");
 
             // Find the CharacterSystem type
             var characterSystemType = AccessTools.TypeByName("Vintagestory.GameContent.CharacterSystem");

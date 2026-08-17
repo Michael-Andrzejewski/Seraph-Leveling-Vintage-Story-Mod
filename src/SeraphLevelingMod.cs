@@ -406,6 +406,18 @@ namespace SeraphLeveling
         /// </summary>
         public float GlobalXPRateMultiplier { get; set; } = 1.0f;
 
+        /// <summary>
+        /// When true, a class's starting traits shift that skill's endgame ceiling
+        /// instead of every class converging to the same total. Positive starting
+        /// traits (Hardy, Soldier, Focused, Fleetfooted, ...) stack on top of the
+        /// earned cap, so those classes end the game higher. Classes with negative
+        /// starting traits no longer get extra credits to fully catch up: the trait
+        /// can still be leveled away, but the levels spent doing it count against
+        /// the cap, so those classes end lower. Off by default (classic behavior:
+        /// everyone converges to the same endgame totals).
+        /// </summary>
+        public bool EnableClassCapOffsets { get; set; } = false;
+
         // =========================================================================
         // DEBUG SETTINGS
         // =========================================================================
@@ -2331,6 +2343,17 @@ namespace SeraphLeveling
 
         // Notification settings
         public static float GlobalXPRateMultiplier = 1.0f;
+        public static bool EnableClassCapOffsets = false;
+
+        /// <summary>
+        /// The part of a vanilla class-trait bonus that counts against the earnable
+        /// cap. Normally all of it counts, so every class converges to the same
+        /// endgame total. With EnableClassCapOffsets the class bonus stops counting:
+        /// it stacks on top of the earned cap and classes stay ahead at endgame.
+        /// </summary>
+        private static int CapCounted(int vanillaBonus) => EnableClassCapOffsets ? 0 : vanillaBonus;
+        private static float CapCounted(float vanillaBonus) => EnableClassCapOffsets ? 0f : vanillaBonus;
+
         public static bool EnableLevelUpMessages = true;
         public static bool EnableLevelUpSound = true;
         public static string LevelUpSoundName = "game:sounds/effect/receptionbell";
@@ -5599,7 +5622,7 @@ namespace SeraphLeveling
         {
             bool hasFleetfooted = entity != null && PlayerHasVanillaFleetfootedStatic(entity);
             int vanillaBonus = hasFleetfooted ? VANILLA_FLEETFOOTED_WALK_BONUS : 0;
-            int earnableBonus = Math.Max(0, MaxWalkingSpeedPercent - vanillaBonus);
+            int earnableBonus = Math.Max(0, MaxWalkingSpeedPercent - CapCounted(vanillaBonus));
             return Math.Min(credits, earnableBonus);
         }
 
@@ -5620,6 +5643,9 @@ namespace SeraphLeveling
         public static int GetMaxMeleeCredits(EntityPlayer entity)
         {
             if (entity == null) return MaxMeleeDamagePercent;
+
+            // Class cap offsets: no extra credits to pay off starting penalties.
+            if (EnableClassCapOffsets) return MaxMeleeDamagePercent;
 
             bool hasFarsighted = PlayerHasVanillaFarsighted(entity);
             bool hasNervous = PlayerHasVanillaNervous(entity);
@@ -5651,9 +5677,9 @@ namespace SeraphLeveling
             int vanillaDistance = hasFocused ? VANILLA_FOCUSED_DISTANCE_BONUS : 0;
 
             // Each stat is capped individually
-            int earnableDamage = Math.Max(0, MaxRangedDamagePercent - vanillaDamage);
-            int earnableAccuracy = Math.Max(0, MaxRangedAccuracyPercent - vanillaAccuracy);
-            int earnableDistance = Math.Max(0, MaxRangedDistancePercent - vanillaDistance);
+            int earnableDamage = Math.Max(0, MaxRangedDamagePercent - CapCounted(vanillaDamage));
+            int earnableAccuracy = Math.Max(0, MaxRangedAccuracyPercent - CapCounted(vanillaAccuracy));
+            int earnableDistance = Math.Max(0, MaxRangedDistancePercent - CapCounted(vanillaDistance));
 
             int damageBonus = Math.Min(credits, earnableDamage);
             int accuracyBonus = Math.Min(credits, earnableAccuracy);
@@ -5670,6 +5696,9 @@ namespace SeraphLeveling
         public static int GetMaxRangedCredits(EntityPlayer entity)
         {
             if (entity == null) return MaxRangedDamagePercent;
+
+            // Class cap offsets: no extra credits to pay off starting penalties.
+            if (EnableClassCapOffsets) return MaxRangedDamagePercent;
 
             bool hasNearsighted = PlayerHasVanillaNearsighted(entity);
             bool hasFrail = PlayerHasVanillaFrail(entity);
@@ -5956,7 +5985,7 @@ namespace SeraphLeveling
         {
             bool hasSoldier = entity != null && PlayerHasVanillaSoldierForArmor(entity);
             int vanillaBonus = hasSoldier ? VANILLA_SOLDIER_ARMOR_DURABILITY_BONUS : 0;
-            int earnableBonus = Math.Max(0, MaxArmorDurabilityPercent - vanillaBonus);
+            int earnableBonus = Math.Max(0, MaxArmorDurabilityPercent - CapCounted(vanillaBonus));
             return Math.Min(credits, earnableBonus);
         }
 
@@ -5968,7 +5997,7 @@ namespace SeraphLeveling
         {
             bool hasSoldier = entity != null && PlayerHasVanillaSoldierForArmor(entity);
             int vanillaBonus = hasSoldier ? VANILLA_SOLDIER_ARMOR_WALKSPEED_BONUS : 0;
-            int earnableBonus = Math.Max(0, MaxArmorWalkSpeedPercent - vanillaBonus);
+            int earnableBonus = Math.Max(0, MaxArmorWalkSpeedPercent - CapCounted(vanillaBonus));
             return Math.Min(credits, earnableBonus);
         }
 
@@ -6474,7 +6503,7 @@ namespace SeraphLeveling
             float rawBonus = level * 0.01f;
 
             // Cap earned bonus so total (vanilla + earned) doesn't exceed MaxWalkingSpeedPercent
-            float maxEarnableBonus = (MaxWalkingSpeedPercent - vanillaFleetfootedBonus) / 100f;
+            float maxEarnableBonus = (MaxWalkingSpeedPercent - CapCounted(vanillaFleetfootedBonus)) / 100f;
             float bonus = Math.Min(rawBonus, Math.Max(0, maxEarnableBonus));
             int bonusPercent = (int)(bonus * 100);
 
@@ -7234,7 +7263,7 @@ namespace SeraphLeveling
             int netLevel = Math.Max(0, level - totalNegativePenalty);
 
             // Cap earned bonus so total (vanilla + earned) doesn't exceed MaxMiningSpeedPercent
-            int maxEarnableBonus = MaxMiningSpeedPercent - vanillaHardyBonus;
+            int maxEarnableBonus = MaxMiningSpeedPercent - CapCounted(vanillaHardyBonus);
             int bonusPercent = Math.Min(netLevel, Math.Max(0, maxEarnableBonus));
 
             float bonus = bonusPercent * 0.01f;
@@ -7404,6 +7433,10 @@ namespace SeraphLeveling
         public static int GetMaxMiningCredits(EntityPlayer entity)
         {
             if (entity == null) return MaxMiningSpeedPercent;
+
+            // Class cap offsets: no extra credits to pay off starting penalties, so
+            // penalized classes end lower instead of catching up.
+            if (EnableClassCapOffsets) return MaxMiningSpeedPercent;
 
             bool hasWeak = PlayerHasVanillaWeak(entity);
             bool hasClaustrophobic = PlayerHasVanillaClaustrophobic(entity);
@@ -7814,7 +7847,7 @@ namespace SeraphLeveling
             }
 
             // Cap earned bonus so total (vanilla + earned) doesn't exceed MaxMeleeDamagePercent
-            int maxEarnableBonus = MaxMeleeDamagePercent - vanillaSoldierBonus;
+            int maxEarnableBonus = MaxMeleeDamagePercent - CapCounted(vanillaSoldierBonus);
             netBonusPercent = Math.Min(netBonusPercent, Math.Max(0, maxEarnableBonus));
 
             float bonus = netBonusPercent * 0.01f;
@@ -8309,9 +8342,9 @@ namespace SeraphLeveling
             }
 
             // Calculate earnable bonuses (each stat capped individually)
-            int earnableDamage = Math.Max(0, MaxRangedDamagePercent - vanillaDamage);
-            int earnableAccuracy = Math.Max(0, MaxRangedAccuracyPercent - vanillaAccuracy);
-            int earnableDistance = Math.Max(0, MaxRangedDistancePercent - vanillaDistance);
+            int earnableDamage = Math.Max(0, MaxRangedDamagePercent - CapCounted(vanillaDamage));
+            int earnableAccuracy = Math.Max(0, MaxRangedAccuracyPercent - CapCounted(vanillaAccuracy));
+            int earnableDistance = Math.Max(0, MaxRangedDistancePercent - CapCounted(vanillaDistance));
 
             // Calculate actual bonuses from level (using net level after penalty cancellation)
             int damagePct = Math.Min(netDamageLevel, earnableDamage);
@@ -8402,10 +8435,11 @@ namespace SeraphLeveling
             int vanillaTier = hasVanillaFocused ? 1 : 0;
             int maxEarnableTier = 1; // Cap at 1 tier total for all classes
 
-            // 100 credits = 1 tier
+            // 100 credits = 1 tier. With class cap offsets the vanilla tier stops
+            // counting against the cap, so Focused classes end one tier ahead.
             int earnedTier = level / 100;
-            int totalTier = Math.Min(vanillaTier + earnedTier, maxEarnableTier);
-            int netEarnedTier = Math.Max(0, totalTier - vanillaTier);
+            int totalTier = Math.Min(CapCounted(vanillaTier) + earnedTier, maxEarnableTier);
+            int netEarnedTier = Math.Max(0, totalTier - CapCounted(vanillaTier));
 
             // Apply tier stat (integer, stored as float for Stats.Set compatibility)
             player.Entity.Stats.Set(CO_RANGED_TIER_SLASHING, RANGED_DAMAGE_STAT_CODE, (float)netEarnedTier, false);
@@ -10289,6 +10323,12 @@ namespace SeraphLeveling
                 LevelUpSoundName = config.LevelUpSoundName;
                 LevelUpSoundVolume = Math.Clamp(config.LevelUpSoundVolume, 0f, 1f);
 
+                EnableClassCapOffsets = config.EnableClassCapOffsets;
+                if (EnableClassCapOffsets)
+                {
+                    api.Logger.Notification("[SeraphLeveling] Class cap offsets ENABLED: starting class traits shift each skill's endgame ceiling.");
+                }
+
                 GlobalXPRateMultiplier = config.GlobalXPRateMultiplier;
                 if (GlobalXPRateMultiplier < 0f)
                 {
@@ -10489,6 +10529,7 @@ namespace SeraphLeveling
                 config.LevelUpSoundVolume = LevelUpSoundVolume;
 
                 config.GlobalXPRateMultiplier = GlobalXPRateMultiplier;
+                config.EnableClassCapOffsets = EnableClassCapOffsets;
 
                 config.EnableDebugLogging = DebugLoggingEnabled;
                 config.VerboseDecayLogging = VerboseDecayLogging;
@@ -12875,8 +12916,9 @@ namespace SeraphLeveling
             }
             else if (hasMeleeExpert)
             {
-                // Blackguard has +1 tier from Melee Expert, can't earn more
-                netTier = CO_MELEE_EXPERT_TIER_BONUS;
+                // Blackguard has +1 tier from Melee Expert. Classic behavior: that IS
+                // the cap. With class cap offsets they can earn one more on top.
+                netTier = CO_MELEE_EXPERT_TIER_BONUS + (EnableClassCapOffsets ? Math.Min(meleeCredits / 100, 1) : 0);
             }
             else
             {
@@ -14505,7 +14547,7 @@ namespace SeraphLeveling
         {
             bool hasVanillaMender = entity != null && PlayerHasVanillaMenderStatic(entity);
             int vanillaBonus = hasVanillaMender ? VANILLA_MENDER_ARMOR_DURABILITY_BONUS : 0;
-            int earnableBonus = Math.Max(0, MaxMenderPercent - vanillaBonus);
+            int earnableBonus = Math.Max(0, MaxMenderPercent - CapCounted(vanillaBonus));
             return Math.Min(credits, earnableBonus);
         }
 
@@ -14728,7 +14770,7 @@ namespace SeraphLeveling
         {
             bool hasVanillaPilferer = entity != null && PlayerHasVanillaPilfererStatic(entity);
             int vanillaBonus = hasVanillaPilferer ? VANILLA_PILFERER_RUSTY_GEAR_BONUS : 0;
-            int earnableBonus = Math.Max(0, MaxPilfererPercent - vanillaBonus);
+            int earnableBonus = Math.Max(0, MaxPilfererPercent - CapCounted(vanillaBonus));
             return Math.Min(credits, earnableBonus);
         }
 
@@ -14739,6 +14781,9 @@ namespace SeraphLeveling
         public static int GetMaxPilfererCredits(EntityPlayer entity)
         {
             if (entity == null) return MaxPilfererPercent;
+
+            // Class cap offsets: no extra credits to pay off starting penalties.
+            if (EnableClassCapOffsets) return MaxPilfererPercent;
 
             bool hasHeavyhanded = PlayerHasVanillaHeavyhanded(entity);
 
@@ -14803,9 +14848,9 @@ namespace SeraphLeveling
             int vanillaRusty = hasVanillaPilferer ? VANILLA_PILFERER_RUSTY_GEAR_BONUS : 0;
             int vanillaWhole = hasVanillaPilferer ? VANILLA_PILFERER_WHOLE_VESSEL_BONUS : 0;
 
-            int earnableVessel = Math.Max(0, MaxPilfererPercent - vanillaVessel);
-            int earnableRusty = Math.Max(0, MaxPilfererPercent - vanillaRusty);
-            int earnableWhole = Math.Max(0, MaxPilfererPercent - vanillaWhole);
+            int earnableVessel = Math.Max(0, MaxPilfererPercent - CapCounted(vanillaVessel));
+            int earnableRusty = Math.Max(0, MaxPilfererPercent - CapCounted(vanillaRusty));
+            int earnableWhole = Math.Max(0, MaxPilfererPercent - CapCounted(vanillaWhole));
 
             int vesselBonus = Math.Min(netLevel, earnableVessel);
             int rustyBonus = Math.Min(level, earnableRusty);  // rusty/whole aren't affected by Heavyhanded
@@ -15020,7 +15065,7 @@ namespace SeraphLeveling
         {
             bool hasVanillaResourceful = entity != null && PlayerHasVanillaResourcefulStatic(entity);
             int vanillaBonus = hasVanillaResourceful ? VANILLA_RESOURCEFUL_LOOT_BONUS : 0;
-            int earnableBonus = Math.Max(0, MaxResourcefulLootPercent - vanillaBonus);
+            int earnableBonus = Math.Max(0, MaxResourcefulLootPercent - CapCounted(vanillaBonus));
             return Math.Min(credits, earnableBonus);
         }
 
@@ -15049,6 +15094,9 @@ namespace SeraphLeveling
             // too low — Tailor would land at +20% speed instead of the +25% cap.
             int baseMax = Math.Max(MaxResourcefulLootPercent, MaxResourcefulSpeedPercent);
             if (entity == null) return baseMax;
+
+            // Class cap offsets: no extra credits to pay off starting penalties.
+            if (EnableClassCapOffsets) return baseMax;
 
             bool hasKind = PlayerHasVanillaKind(entity);
             if (hasKind)
@@ -15124,8 +15172,8 @@ namespace SeraphLeveling
             int vanillaLootBonus = hasVanillaResourceful ? VANILLA_RESOURCEFUL_LOOT_BONUS : 0;
             int vanillaSpeedBonus = hasVanillaResourceful ? VANILLA_RESOURCEFUL_SPEED_BONUS : 0;
 
-            int maxEarnableLoot = Math.Max(0, MaxResourcefulLootPercent - vanillaLootBonus);
-            int maxEarnableSpeed = Math.Max(0, MaxResourcefulSpeedPercent - vanillaSpeedBonus);
+            int maxEarnableLoot = Math.Max(0, MaxResourcefulLootPercent - CapCounted(vanillaLootBonus));
+            int maxEarnableSpeed = Math.Max(0, MaxResourcefulSpeedPercent - CapCounted(vanillaSpeedBonus));
 
             int lootBonusPercent = Math.Min(netLootLevel, maxEarnableLoot);
             int speedBonusPercent = Math.Min(netSpeedLevel, maxEarnableSpeed);
@@ -15371,7 +15419,7 @@ namespace SeraphLeveling
         {
             bool hasVanillaForager = entity != null && PlayerHasVanillaForagerStatic(entity);
             int vanillaBonus = hasVanillaForager ? VANILLA_FORAGER_LOOT_BONUS : 0;
-            int earnableBonus = Math.Max(0, MaxForagerLootPercent - vanillaBonus);
+            int earnableBonus = Math.Max(0, MaxForagerLootPercent - CapCounted(vanillaBonus));
             return Math.Min(credits, earnableBonus);
         }
 
@@ -15382,7 +15430,7 @@ namespace SeraphLeveling
         {
             bool hasVanillaForager = entity != null && PlayerHasVanillaForagerStatic(entity);
             int vanillaBonus = hasVanillaForager ? VANILLA_FORAGER_WILD_CROP_BONUS : 0;
-            int earnableBonus = Math.Max(0, MaxForagerWildCropPercent - vanillaBonus);
+            int earnableBonus = Math.Max(0, MaxForagerWildCropPercent - CapCounted(vanillaBonus));
             return Math.Min(credits, earnableBonus);
         }
 
@@ -15416,6 +15464,9 @@ namespace SeraphLeveling
         public static int GetMaxForagerCredits(EntityPlayer entity)
         {
             if (entity == null) return MaxForagerLootPercent;
+
+            // Class cap offsets: no extra credits to pay off starting penalties.
+            if (EnableClassCapOffsets) return MaxForagerLootPercent;
 
             bool hasCivil = PlayerHasVanillaCivil(entity);
             bool hasHeavyhanded = PlayerHasVanillaHeavyhanded(entity);
@@ -17133,6 +17184,7 @@ namespace SeraphLeveling
             DeathPenaltyFullReset = false;
             DeathPenaltyExemptSkills.Clear();
             GlobalXPRateMultiplier = 1.0f;
+            EnableClassCapOffsets = false;
             VerboseDecayLogging = false;
 
             // Save config

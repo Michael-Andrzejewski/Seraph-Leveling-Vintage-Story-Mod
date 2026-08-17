@@ -6732,6 +6732,67 @@ namespace SeraphLeveling
         /// Called when a player disconnects. Cleans up their position, armor tracking, and cached data.
         /// Also triggers a save of all progress data to prevent data loss.
         /// </summary>
+        /// <summary>
+        /// Per-UID listener we registered on the entity's "characterClass" watched
+        /// attribute, kept so it can be unregistered on disconnect and replaced on rejoin.
+        /// </summary>
+        private static readonly ConcurrentDictionary<string, Action> classChangeListeners = new ConcurrentDictionary<string, Action>();
+
+        /// <summary>UIDs with a class-change reapply already scheduled, so bursts collapse into one run.</summary>
+        private static readonly ConcurrentDictionary<string, bool> pendingClassChangeReapply = new ConcurrentDictionary<string, bool>();
+
+        /// <summary>
+        /// Registers (or replaces) the "characterClass" modified listener for one player.
+        /// Idempotent: any previously registered listener is unregistered first, so the
+        /// OnPlayerJoin call inside the class-change reapply cannot stack duplicates.
+        /// </summary>
+        private void RegisterClassChangeListener(IServerPlayer player)
+        {
+            if (player?.Entity == null) return;
+            string uid = player.PlayerUID;
+
+            if (classChangeListeners.TryRemove(uid, out var oldListener))
+            {
+                try { player.Entity.WatchedAttributes.UnregisterListener(oldListener); } catch { }
+            }
+
+            Action listener = () => OnCharacterClassChanged(player);
+            classChangeListeners[uid] = listener;
+            player.Entity.WatchedAttributes.RegisterModifiedListener("characterClass", listener);
+        }
+
+        /// <summary>
+        /// Fires when the player's "characterClass" watched attribute changes. The vanilla
+        /// CharacterSystem sets that attribute first and applies the class's traits, stats
+        /// and gear afterwards, so defer our reapply until that has finished, then rerun
+        /// the full join path: repopulate the vanilla-traits cache and reapply every bonus.
+        /// </summary>
+        private void OnCharacterClassChanged(IServerPlayer player)
+        {
+            if (ServerApi == null || isDisposed || player?.Entity == null) return;
+
+            string uid = player.PlayerUID;
+            if (!pendingClassChangeReapply.TryAdd(uid, true)) return;
+
+            ServerApi.Event.RegisterCallback(dt =>
+            {
+                pendingClassChangeReapply.TryRemove(uid, out _);
+                if (isDisposed || player?.Entity == null) return;
+                if (player.ConnectionState == EnumClientState.Offline) return;
+
+                try
+                {
+                    string newClass = player.Entity.WatchedAttributes.GetString("characterClass", "");
+                    ServerApi.Logger.Notification($"[SeraphLeveling] Class change detected for {player.PlayerName} (now '{newClass}'); reapplying trait bonuses");
+                    OnPlayerJoin(player);
+                }
+                catch (Exception ex)
+                {
+                    ServerApi.Logger.Error($"[SeraphLeveling] Failed to reapply bonuses after class change for {player.PlayerName}: {ex.Message}");
+                }
+            }, 500);
+        }
+
         private void OnPlayerDisconnect(IServerPlayer byPlayer)
         {
             if (byPlayer == null) return;
@@ -6741,6 +6802,11 @@ namespace SeraphLeveling
             playerEquippedArmor.TryRemove(playerUid, out _);
             VanillaTraitsCache.TryRemove(playerUid, out _);
             LastDecayCheckDay.TryRemove(playerUid, out _);
+            pendingClassChangeReapply.TryRemove(playerUid, out _);
+            if (classChangeListeners.TryRemove(playerUid, out var classListener))
+            {
+                try { byPlayer.Entity?.WatchedAttributes.UnregisterListener(classListener); } catch { }
+            }
 
             // Save all pending progress data to prevent data loss on disconnect
             SaveAllPendingProgress();
@@ -6860,6 +6926,12 @@ namespace SeraphLeveling
 
             // Populate vanilla traits cache first (before applying any bonuses)
             PopulateVanillaTraitsCache(byPlayer);
+
+            // Watch for a mid-session class change (.charsel with allowcharselonce).
+            // Without this the vanilla-traits cache built above goes stale and every
+            // stat we write afterwards is computed against the old class, so the new
+            // class's negative traits only take hold after a death or relog.
+            RegisterClassChangeListener(byPlayer);
 
             // Initialize decay check day for this player (online-only decay)
             if (EnableSkillDecay)

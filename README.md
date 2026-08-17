@@ -10,6 +10,8 @@ Download it from the [Vintage Story mod DB](https://mods.vintagestory.at/show/mo
 - Progress notifications and trait info integrated into the character screen
 - Compatibility with Combat Overhaul and its community fork, including bow and poleaxe proficiency tracking
 - Server config via `ModConfig/SeraphLeveling.json`, reloadable in-game with `/trait reloadconfig`
+- Optional rulesets: `GlobalXPRateMultiplier` for overall progression speed, `DeathPenaltyFullReset` for full level loss on death, `EnableClassCapOffsets` so starting class traits shift each skill's endgame ceiling
+- Experimental features, each off by default: Temporal Resistance and Temporal Recharge traits, bow draw speed and aim-assist by Ranged level, melee swing speed by Melee level
 - Admin commands: `/trait` for progress management, `/trait export` and `/trait import` for cross-world transfers
 - Works in singleplayer and on dedicated servers
 

@@ -19551,6 +19551,12 @@ namespace SeraphLeveling
 
         // Scroll-related fields for traits UI
         private GuiDialogCharacterBase charDlg;
+
+        /// <summary>The vanilla trait tab handler we swapped out, kept so Dispose can put it back.</summary>
+        private Action<GuiComposer> replacedVanillaTraitsHandler;
+
+        /// <summary>How many times TryHookCharacterDialog has looked for the vanilla handler and not found it.</summary>
+        private int hookAttempts = 0;
         private ElementBounds clippingBounds;
         private ElementBounds scrollbarBounds;
         private GuiElementRichtext richtextElem;
@@ -19656,30 +19662,50 @@ namespace SeraphLeveling
                     characterSystemInstance = clientApi.ModLoader.GetModSystem(characterSystemType.FullName);
                 }
 
-                // Remove the vanilla CharacterSystem's trait tab handler and track its position
-                Action<GuiComposer> handlerToRemove = null;
+                // Find the vanilla CharacterSystem's trait tab handler. Each tab in the
+                // dialog renders RenderTabHandlers[tab.DataInt], so the handler list and
+                // the tab list must keep the same positions. Other mods (the Combat
+                // Overhaul fork's armor tab among them) append their own handlers, so we
+                // must never remove or insert entries: that shifts every later handler
+                // one position and their tabs start rendering the wrong content. Replace
+                // the vanilla handler IN PLACE instead; positions cannot move.
                 int handlerIndex = -1;
                 for (int i = 0; i < charDlg.RenderTabHandlers.Count; i++)
                 {
                     var handler = charDlg.RenderTabHandlers[i];
-                    if (handler.Target?.ToString()?.Contains("CharacterSystem") == true)
+                    if (handler?.Target == null) continue;
+                    // The vanilla handler is an instance method on the CharacterSystem mod
+                    // system. Match the instance we already looked up; fall back to the
+                    // type name for unexpected builds.
+                    if (ReferenceEquals(handler.Target, characterSystemInstance) ||
+                        handler.Target.GetType().FullName?.Contains("CharacterSystem") == true)
                     {
-                        handlerToRemove = handler;
                         handlerIndex = i;
                         break;
                     }
                 }
 
-                if (handlerToRemove != null)
+                if (handlerIndex < 0)
                 {
-                    charDlg.RenderTabHandlers.Remove(handlerToRemove);
-                    clientApi.Logger.Debug("[SeraphLeveling] Removed vanilla CharacterSystem trait tab handler at index {0}", handlerIndex);
+                    // The vanilla handler is not registered yet (mod load order and timing
+                    // vary). Retry for a while, then leave the dialog alone: the vanilla
+                    // trait tab keeps working, only our scrollbar is lost. Never insert at
+                    // a guessed position; a wrong guess breaks every mod-added tab.
+                    hookAttempts++;
+                    if (hookAttempts < 20)
+                    {
+                        clientApi.Event.RegisterCallback(TryHookCharacterDialog, 1000);
+                    }
+                    else
+                    {
+                        clientApi.Logger.Warning("[SeraphLeveling] Gave up hooking the character dialog trait tab: vanilla handler never appeared. Trait tab stays vanilla (not scrollable).");
+                    }
+                    return;
                 }
 
-                // Insert our scrollable trait tab handler at the same position (or at index 1 if not found)
-                int insertIndex = handlerIndex >= 0 ? handlerIndex : Math.Min(1, charDlg.RenderTabHandlers.Count);
-                charDlg.RenderTabHandlers.Insert(insertIndex, ComposeTraitsTab);
-                clientApi.Logger.Debug("[SeraphLeveling] Inserted our trait tab handler at index {0}", insertIndex);
+                replacedVanillaTraitsHandler = charDlg.RenderTabHandlers[handlerIndex];
+                charDlg.RenderTabHandlers[handlerIndex] = ComposeTraitsTab;
+                clientApi.Logger.Debug("[SeraphLeveling] Replaced vanilla trait tab handler in place at index {0}", handlerIndex);
                 hasHookedDialog = true;
 
                 clientApi.Logger.Notification("[SeraphLeveling] Successfully hooked into character dialog for scrollable traits");
@@ -19848,12 +19874,22 @@ namespace SeraphLeveling
         {
             harmony?.UnpatchAll("seraphleveling");
 
-            // Unhook from character dialog
+            // Unhook from character dialog: put the vanilla handler back in the same
+            // slot. Removing our entry instead would shift every later handler and
+            // misalign other mods' tabs (see TryHookCharacterDialog).
             if (charDlg != null && hasHookedDialog)
             {
                 try
                 {
-                    charDlg.RenderTabHandlers.Remove(ComposeTraitsTab);
+                    int idx = charDlg.RenderTabHandlers.IndexOf(ComposeTraitsTab);
+                    if (idx >= 0 && replacedVanillaTraitsHandler != null)
+                    {
+                        charDlg.RenderTabHandlers[idx] = replacedVanillaTraitsHandler;
+                    }
+                    else if (idx >= 0)
+                    {
+                        charDlg.RenderTabHandlers.RemoveAt(idx);
+                    }
                 }
                 catch { }
             }

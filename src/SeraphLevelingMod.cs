@@ -395,6 +395,18 @@ namespace SeraphLeveling
         public float LevelUpSoundVolume { get; set; } = 0.25f;
 
         // =========================================================================
+        // GLOBAL XP RATE
+        // =========================================================================
+
+        /// <summary>
+        /// Global rate multiplier applied to ALL trait progression. 1.0 is normal
+        /// speed, 0.5 is half speed, 2.0 is double. Stacks multiplicatively with the
+        /// sleep buff. Applies to every skill without touching the per-skill
+        /// base/increment values.
+        /// </summary>
+        public float GlobalXPRateMultiplier { get; set; } = 1.0f;
+
+        // =========================================================================
         // DEBUG SETTINGS
         // =========================================================================
 
@@ -2318,6 +2330,7 @@ namespace SeraphLeveling
         public static bool DebugLoggingEnabled = false;
 
         // Notification settings
+        public static float GlobalXPRateMultiplier = 1.0f;
         public static bool EnableLevelUpMessages = true;
         public static bool EnableLevelUpSound = true;
         public static string LevelUpSoundName = "game:sounds/effect/receptionbell";
@@ -10276,6 +10289,17 @@ namespace SeraphLeveling
                 LevelUpSoundName = config.LevelUpSoundName;
                 LevelUpSoundVolume = Math.Clamp(config.LevelUpSoundVolume, 0f, 1f);
 
+                GlobalXPRateMultiplier = config.GlobalXPRateMultiplier;
+                if (GlobalXPRateMultiplier < 0f)
+                {
+                    api.Logger.Warning($"[SeraphLeveling] GlobalXPRateMultiplier cannot be negative (got {GlobalXPRateMultiplier}). Using 1.0.");
+                    GlobalXPRateMultiplier = 1.0f;
+                }
+                if (GlobalXPRateMultiplier != 1.0f)
+                {
+                    api.Logger.Notification($"[SeraphLeveling] Global XP rate multiplier: {GlobalXPRateMultiplier}x");
+                }
+
                 // Debug settings
                 DebugLoggingEnabled = config.EnableDebugLogging;
                 VerboseDecayLogging = config.VerboseDecayLogging;
@@ -10463,6 +10487,8 @@ namespace SeraphLeveling
                 config.EnableLevelUpSound = EnableLevelUpSound;
                 config.LevelUpSoundName = LevelUpSoundName;
                 config.LevelUpSoundVolume = LevelUpSoundVolume;
+
+                config.GlobalXPRateMultiplier = GlobalXPRateMultiplier;
 
                 config.EnableDebugLogging = DebugLoggingEnabled;
                 config.VerboseDecayLogging = VerboseDecayLogging;
@@ -11115,13 +11141,16 @@ namespace SeraphLeveling
         /// </summary>
         public static float GetXPMultiplier(string playerUid)
         {
-            if (!EnableSleepBuff) return 1.0f;
-            if (string.IsNullOrEmpty(playerUid)) return 1.0f;
-            if (ServerApi == null) return 1.0f;
+            // The global rate applies to everything; the sleep buff stacks on top.
+            float global = GlobalXPRateMultiplier;
+
+            if (!EnableSleepBuff) return global;
+            if (string.IsNullOrEmpty(playerUid)) return global;
+            if (ServerApi == null) return global;
 
             // Check if player has an active sleep buff
-            if (!SleepBuffExpiration.TryGetValue(playerUid, out double expiration)) return 1.0f;
-            if (!SleepBuffMultiplier.TryGetValue(playerUid, out float multiplier)) return 1.0f;
+            if (!SleepBuffExpiration.TryGetValue(playerUid, out double expiration)) return global;
+            if (!SleepBuffMultiplier.TryGetValue(playerUid, out float multiplier)) return global;
 
             double currentDay = ServerApi.World?.Calendar?.TotalDays ?? 0;
 
@@ -11132,10 +11161,10 @@ namespace SeraphLeveling
                 SleepBuffExpiration.TryRemove(playerUid, out _);
                 SleepBuffMultiplier.TryRemove(playerUid, out _);
                 pendingSleepBuffSave = true;
-                return 1.0f;
+                return global;
             }
 
-            return multiplier;
+            return global * multiplier;
         }
 
         /// <summary>
@@ -11147,13 +11176,22 @@ namespace SeraphLeveling
             return baseValue * multiplier;
         }
 
+        /// <summary>Shared RNG for the fractional-gain dice roll below.</summary>
+        private static readonly Random xpRoundingRandom = new Random();
+
         /// <summary>
         /// Apply the XP multiplier to an integer value (for progress tracking).
+        /// The fractional part is granted probabilistically so sub-1x rates still
+        /// work on 1-point gains: 1 point at 0.5x used to truncate to 0 forever,
+        /// now it is 0 or 1 with the right long-run average.
         /// </summary>
         public static int ApplyXPMultiplier(string playerUid, int baseValue)
         {
-            float multiplier = GetXPMultiplier(playerUid);
-            return (int)(baseValue * multiplier);
+            float scaled = baseValue * GetXPMultiplier(playerUid);
+            int whole = (int)scaled;
+            double fraction = scaled - whole;
+            if (fraction > 0 && xpRoundingRandom.NextDouble() < fraction) whole++;
+            return whole;
         }
 
         // =========================================================================
@@ -17094,6 +17132,7 @@ namespace SeraphLeveling
             DeathPenaltyFraction = 0.5;
             DeathPenaltyFullReset = false;
             DeathPenaltyExemptSkills.Clear();
+            GlobalXPRateMultiplier = 1.0f;
             VerboseDecayLogging = false;
 
             // Save config

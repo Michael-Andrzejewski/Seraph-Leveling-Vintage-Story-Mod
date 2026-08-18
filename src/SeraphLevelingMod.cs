@@ -3411,7 +3411,7 @@ namespace SeraphLeveling
                     .HandleWith(OnTraitSetTempRechargeCommand)
                 .EndSubCommand()
                 .BeginSubCommand("setplayer")
-                    .WithDescription("Set a trait level for another player. Usage: /trait setplayer &lt;playername&gt; &lt;trait&gt; &lt;level&gt; [toolname]")
+                    .WithDescription("Set a trait level for another player, online or offline (offline players match by exact full name). Usage: /trait setplayer &lt;playername&gt; &lt;trait&gt; &lt;level&gt; [toolname]")
                     .WithArgs(api.ChatCommands.Parsers.Word("playername"), api.ChatCommands.Parsers.Word("trait"), api.ChatCommands.Parsers.Int("level"), api.ChatCommands.Parsers.OptionalWord("toolname"))
                     .RequiresPrivilege(Privilege.controlserver)
                     .HandleWith(OnTraitSetPlayerCommand)
@@ -3769,25 +3769,40 @@ namespace SeraphLeveling
             if (level < 0)
                 return TextCommandResult.Error("Level cannot be negative.");
 
+            // Online first (partial name match allowed). Offline players are matched
+            // by their exact last known name only, so a typo cannot edit the wrong
+            // player; their stored progress is edited directly and the live stats
+            // catch up when they next join.
             var targetPlayer = ResolvePlayerByName(playerName);
-            if (targetPlayer == null)
-                return TextCommandResult.Error($"Could not find online player matching '{playerName}'.");
-
-            string targetUid = targetPlayer.PlayerUID;
+            string targetUid;
+            string targetName;
+            if (targetPlayer != null)
+            {
+                targetUid = targetPlayer.PlayerUID;
+                targetName = targetPlayer.PlayerName;
+            }
+            else
+            {
+                var offlineData = ServerApi?.PlayerData?.GetPlayerDataByLastKnownName(playerName);
+                if (offlineData == null || string.IsNullOrEmpty(offlineData.PlayerUID))
+                    return TextCommandResult.Error($"No online player matches '{playerName}' and no offline player has that exact name. Offline players must be matched by their full name.");
+                targetUid = offlineData.PlayerUID;
+                targetName = offlineData.LastKnownPlayername;
+            }
 
             // Traits with per-tool support delegate to shared helpers
             switch (traitName)
             {
                 case "mining":
-                    return SetMiningLevelForPlayer(targetPlayer, level, toolName);
+                    return SetMiningLevelForPlayer(targetPlayer, targetUid, level, toolName);
                 case "melee":
-                    return SetMeleeLevelForPlayer(targetPlayer, level, toolName);
+                    return SetMeleeLevelForPlayer(targetPlayer, targetUid, level, toolName);
                 case "ranged":
-                    return SetRangedLevelForPlayer(targetPlayer, level, toolName);
+                    return SetRangedLevelForPlayer(targetPlayer, targetUid, level, toolName);
                 case "precise":
-                    return SetPreciseLevelForPlayer(targetPlayer, level, toolName);
+                    return SetPreciseLevelForPlayer(targetPlayer, targetUid, level, toolName);
                 case "armor":
-                    return SetArmorLevelForPlayer(targetPlayer, level, toolName);
+                    return SetArmorLevelForPlayer(targetPlayer, targetUid, level, toolName);
             }
 
             // Traits without per-tool support — reject toolName if provided
@@ -3806,7 +3821,7 @@ namespace SeraphLeveling
                     pendingWalkingProgressSave = true;
                     ApplyWalkingBonusStatic(targetPlayer, level);
                     UpdateSkillActivityDay(targetUid, "walking");
-                    result = $"Walking level set to {level} (+{level}% speed) for {targetPlayer.PlayerName}.";
+                    result = $"Walking level set to {level} (+{level}% speed) for {targetName}.";
                     break;
                 }
                 case "tempresist":
@@ -3816,7 +3831,7 @@ namespace SeraphLeveling
                     var progress = TemporalResistanceProgress.GetOrAdd(targetUid, _ => new TemporalProgressData());
                     progress.PermanentPercent = level;
                     pendingTemporalResistanceSave = true;
-                    result = $"Temporal Resistance set to {level}% (drain {level}% slower) for {targetPlayer.PlayerName}.";
+                    result = $"Temporal Resistance set to {level}% (drain {level}% slower) for {targetName}.";
                     break;
                 }
                 case "temprecharge":
@@ -3826,7 +3841,7 @@ namespace SeraphLeveling
                     var progress = TemporalRechargeProgress.GetOrAdd(targetUid, _ => new TemporalProgressData());
                     progress.PermanentPercent = level;
                     pendingTemporalRechargeSave = true;
-                    result = $"Temporal Recharge set to {level}% (recovery {(1.0 + level / 100.0):F2}x) for {targetPlayer.PlayerName}.";
+                    result = $"Temporal Recharge set to {level}% (recovery {(1.0 + level / 100.0):F2}x) for {targetName}.";
                     break;
                 }
                 case "hunger":
@@ -3837,7 +3852,7 @@ namespace SeraphLeveling
                     pendingHungerProgressSave = true;
                     ApplyHungerBonusStatic(targetPlayer, level);
                     UpdateSkillActivityDay(targetUid, "hunger");
-                    result = $"Hunger level set to {level} (-{level}% hunger rate) for {targetPlayer.PlayerName}.";
+                    result = $"Hunger level set to {level} (-{level}% hunger rate) for {targetName}.";
                     break;
                 }
                 case "mender":
@@ -3848,7 +3863,7 @@ namespace SeraphLeveling
                     pendingMenderProgressSave = true;
                     ApplyMenderBonusStatic(targetPlayer, level);
                     UpdateSkillActivityDay(targetUid, "mender");
-                    result = $"Mender level set to {level} (+{level}% repair) for {targetPlayer.PlayerName}.";
+                    result = $"Mender level set to {level} (+{level}% repair) for {targetName}.";
                     break;
                 }
                 case "pilferer":
@@ -3859,7 +3874,7 @@ namespace SeraphLeveling
                     pendingPilfererProgressSave = true;
                     ApplyPilfererBonusStatic(targetPlayer, level);
                     UpdateSkillActivityDay(targetUid, "pilferer");
-                    result = $"Pilferer level set to {level} for {targetPlayer.PlayerName}.";
+                    result = $"Pilferer level set to {level} for {targetName}.";
                     break;
                 }
                 case "resourceful":
@@ -3870,7 +3885,7 @@ namespace SeraphLeveling
                     pendingResourcefulProgressSave = true;
                     ApplyResourcefulBonusStatic(targetPlayer, level);
                     UpdateSkillActivityDay(targetUid, "resourceful");
-                    result = $"Resourceful level set to {level} for {targetPlayer.PlayerName}.";
+                    result = $"Resourceful level set to {level} for {targetName}.";
                     break;
                 }
                 case "forager":
@@ -3881,7 +3896,7 @@ namespace SeraphLeveling
                     pendingForagerProgressSave = true;
                     ApplyForagerBonusStatic(targetPlayer, level);
                     UpdateSkillActivityDay(targetUid, "forager");
-                    result = $"Forager level set to {level} for {targetPlayer.PlayerName}.";
+                    result = $"Forager level set to {level} for {targetName}.";
                     break;
                 }
                 case "furtive":
@@ -3892,11 +3907,16 @@ namespace SeraphLeveling
                     pendingFurtiveProgressSave = true;
                     ApplyFurtiveBonusStatic(targetPlayer, level);
                     UpdateSkillActivityDay(targetUid, "furtive");
-                    result = $"Furtive level set to {level} (-{level}% detection) for {targetPlayer.PlayerName}.";
+                    result = $"Furtive level set to {level} (-{level}% detection) for {targetName}.";
                     break;
                 }
                 default:
                     return TextCommandResult.Error($"Unknown trait '{traitName}'. Valid traits: mining, melee, ranged, walking, hunger, armor, mender, pilferer, resourceful, forager, furtive, precise");
+            }
+
+            if (targetPlayer == null)
+            {
+                result += " Offline player; the change applies when they next join.";
             }
 
             return TextCommandResult.Success(result);
@@ -4035,10 +4055,9 @@ namespace SeraphLeveling
         /// <summary>
         /// Sets per-tool credits for mining. Returns the result or null if the caller should proceed with total-level setting.
         /// </summary>
-        private TextCommandResult SetMiningLevelForPlayer(IServerPlayer player, int level, string toolName)
+        private TextCommandResult SetMiningLevelForPlayer(IServerPlayer player, string playerUid, int level, string toolName)
         {
-            string playerUid = player.PlayerUID;
-            int maxCredits = GetMaxMiningCredits(player.Entity);
+            int maxCredits = GetMaxMiningCredits(player?.Entity);
             var progress = MiningProgress.GetOrAdd(playerUid, _ => new MiningProgressData());
 
             if (level < 0)
@@ -4071,10 +4090,13 @@ namespace SeraphLeveling
                     BaseBlocksPerIncrement, IncrementStep);
 
                 pendingMiningProgressSave = true;
+                UpdateSkillActivityDay(playerUid, "mining");
+                if (player == null)
+                    return TextCommandResult.Success($"Set {level} credits on {toolName}. Total: {progress.TotalCredits}/{maxCredits}. Offline player; applies on next join.");
+
                 int bonusPercent = ApplyMiningBonus(player, progress.TotalCredits);
                 CheckHardyHealthUnlock(player);
                 CheckClaustrophobicRemoval(player);
-                UpdateSkillActivityDay(playerUid, "mining");
 
                 return TextCommandResult.Success($"Set {level} credits on {toolName}. Total: {progress.TotalCredits}/{maxCredits} (+{bonusPercent}% mining speed).");
             }
@@ -4088,10 +4110,13 @@ namespace SeraphLeveling
                 progress.PickaxeProgress.Clear();
 
                 pendingMiningProgressSave = true;
+                UpdateSkillActivityDay(playerUid, "mining");
+                if (player == null)
+                    return TextCommandResult.Success($"Mining credits set to {level}. Per-pickaxe progress reset. Offline player; applies on next join.");
+
                 int bonusPercent = ApplyMiningBonus(player, level);
                 CheckHardyHealthUnlock(player);
                 CheckClaustrophobicRemoval(player);
-                UpdateSkillActivityDay(playerUid, "mining");
 
                 return TextCommandResult.Success($"Mining credits set to {level} (+{bonusPercent}% mining speed). Per-pickaxe progress reset.");
             }
@@ -4100,10 +4125,9 @@ namespace SeraphLeveling
         /// <summary>
         /// Sets per-tool credits for melee.
         /// </summary>
-        private TextCommandResult SetMeleeLevelForPlayer(IServerPlayer player, int level, string toolName)
+        private TextCommandResult SetMeleeLevelForPlayer(IServerPlayer player, string playerUid, int level, string toolName)
         {
-            string playerUid = player.PlayerUID;
-            int maxCredits = GetMaxMeleeCredits(player.Entity);
+            int maxCredits = GetMaxMeleeCredits(player?.Entity);
             var progress = MeleeProgress.GetOrAdd(playerUid, _ => new MeleeProgressData());
 
             if (level < 0)
@@ -4135,9 +4159,12 @@ namespace SeraphLeveling
                     BaseDamagePerIncrement, MeleeIncrementStep);
 
                 pendingMeleeProgressSave = true;
+                UpdateSkillActivityDay(playerUid, "melee");
+                if (player == null)
+                    return TextCommandResult.Success($"Set {level} credits on {toolName}. Total: {progress.TotalCredits}/{maxCredits}. Offline player; applies on next join.");
+
                 int bonusPercent = ApplyMeleeBonusStatic(player, progress.TotalCredits);
                 CheckMercilessUnlock(player);
-                UpdateSkillActivityDay(playerUid, "melee");
 
                 return TextCommandResult.Success($"Set {level} credits on {toolName}. Total: {progress.TotalCredits}/{maxCredits} (+{bonusPercent}% melee damage).");
             }
@@ -4150,9 +4177,12 @@ namespace SeraphLeveling
                 progress.WeaponProgress.Clear();
 
                 pendingMeleeProgressSave = true;
+                UpdateSkillActivityDay(playerUid, "melee");
+                if (player == null)
+                    return TextCommandResult.Success($"Melee credits set to {level}. Per-weapon progress reset. Offline player; applies on next join.");
+
                 int bonusPercent = ApplyMeleeBonusStatic(player, level);
                 CheckMercilessUnlock(player);
-                UpdateSkillActivityDay(playerUid, "melee");
 
                 return TextCommandResult.Success($"Melee credits set to {level} (+{bonusPercent}% melee damage). Per-weapon progress reset.");
             }
@@ -4161,10 +4191,9 @@ namespace SeraphLeveling
         /// <summary>
         /// Sets per-tool credits for ranged.
         /// </summary>
-        private TextCommandResult SetRangedLevelForPlayer(IServerPlayer player, int level, string toolName)
+        private TextCommandResult SetRangedLevelForPlayer(IServerPlayer player, string playerUid, int level, string toolName)
         {
-            string playerUid = player.PlayerUID;
-            int maxCredits = GetMaxRangedCredits(player.Entity);
+            int maxCredits = GetMaxRangedCredits(player?.Entity);
             var progress = RangedProgress.GetOrAdd(playerUid, _ => new RangedProgressData());
 
             if (level < 0)
@@ -4196,10 +4225,13 @@ namespace SeraphLeveling
                     BaseRangedDamagePerIncrement, RangedIncrementStep);
 
                 pendingRangedProgressSave = true;
+                UpdateSkillActivityDay(playerUid, "ranged");
+                if (player == null)
+                    return TextCommandResult.Success($"Set {level} credits on {toolName}. Total: {progress.TotalCredits}/{maxCredits}. Offline player; applies on next join.");
+
                 var (dmg, acc, dist) = ApplyRangedBonusStatic(player, progress.TotalCredits);
                 CheckBowyerUnlock(player);
                 CheckImproviserUnlock(player);
-                UpdateSkillActivityDay(playerUid, "ranged");
 
                 return TextCommandResult.Success($"Set {level} credits on {toolName}. Total: {progress.TotalCredits}/{maxCredits} (+{dmg}% damage, +{acc}% accuracy, +{dist}% distance).");
             }
@@ -4212,10 +4244,13 @@ namespace SeraphLeveling
                 progress.WeaponProgress.Clear();
 
                 pendingRangedProgressSave = true;
+                UpdateSkillActivityDay(playerUid, "ranged");
+                if (player == null)
+                    return TextCommandResult.Success($"Ranged credits set to {level}. Per-weapon progress reset. Offline player; applies on next join.");
+
                 var (dmg, acc, dist) = ApplyRangedBonusStatic(player, level);
                 CheckBowyerUnlock(player);
                 CheckImproviserUnlock(player);
-                UpdateSkillActivityDay(playerUid, "ranged");
 
                 return TextCommandResult.Success($"Ranged credits set to {level} (+{dmg}% damage, +{acc}% accuracy, +{dist}% distance). Per-weapon progress reset.");
             }
@@ -4224,9 +4259,8 @@ namespace SeraphLeveling
         /// <summary>
         /// Sets per-tool credits for precise.
         /// </summary>
-        private TextCommandResult SetPreciseLevelForPlayer(IServerPlayer player, int level, string toolName)
+        private TextCommandResult SetPreciseLevelForPlayer(IServerPlayer player, string playerUid, int level, string toolName)
         {
-            string playerUid = player.PlayerUID;
             var progress = PreciseProgress.GetOrAdd(playerUid, _ => new PreciseProgressData());
 
             if (level < 0 || level > MaxPrecisePercent)
@@ -4258,9 +4292,12 @@ namespace SeraphLeveling
                     BasePreciseDamagePerIncrement, PreciseIncrementStep);
 
                 pendingPreciseProgressSave = true;
+                UpdateSkillActivityDay(playerUid, "precise");
+                if (player == null)
+                    return TextCommandResult.Success($"Set {level} credits on {toolName}. Total: {progress.TotalCredits}/{MaxPrecisePercent}. Offline player; applies on next join.");
+
                 int bonusPercent = ApplyPreciseBonusStatic(player, progress.TotalCredits);
                 CheckTinkererUnlock(player);
-                UpdateSkillActivityDay(playerUid, "precise");
 
                 return TextCommandResult.Success($"Set {level} credits on {toolName}. Total: {progress.TotalCredits}/{MaxPrecisePercent} (+{bonusPercent}% mechanical damage).");
             }
@@ -4270,9 +4307,12 @@ namespace SeraphLeveling
                 progress.WeaponProgress.Clear();
 
                 pendingPreciseProgressSave = true;
+                UpdateSkillActivityDay(playerUid, "precise");
+                if (player == null)
+                    return TextCommandResult.Success($"Precise level set to {level}. Offline player; applies on next join.");
+
                 int bonusPercent = ApplyPreciseBonusStatic(player, level);
                 CheckTinkererUnlock(player);
-                UpdateSkillActivityDay(playerUid, "precise");
 
                 return TextCommandResult.Success($"Precise level set to {level} (+{bonusPercent}% mechanical damage).");
             }
@@ -4283,9 +4323,8 @@ namespace SeraphLeveling
         /// Armor has 3 credit streams (time, damage, repair) per piece, so per-piece setting
         /// distributes credits equally across all 3 streams for the specified armor piece.
         /// </summary>
-        private TextCommandResult SetArmorLevelForPlayer(IServerPlayer player, int level, string toolName)
+        private TextCommandResult SetArmorLevelForPlayer(IServerPlayer player, string playerUid, int level, string toolName)
         {
-            string playerUid = player.PlayerUID;
             var progress = ArmorProgress.GetOrAdd(playerUid, _ => new ArmorProgressData());
 
             if (level < 0)
@@ -4340,11 +4379,14 @@ namespace SeraphLeveling
                 progress.TotalDurabilityCredits = total;
 
                 pendingArmorProgressSave = true;
+                UpdateSkillActivityDay(playerUid, "armor");
+                if (player == null)
+                    return TextCommandResult.Success($"Set {level} credits per stream on {toolName}. Total durability: {progress.TotalDurabilityCredits}/{MaxArmorDurabilityPercent}. Offline player; applies on next join.");
+
                 ApplyArmorBonusesStatic(player, progress.TotalDurabilityCredits, progress.TotalWalkSpeedCredits);
                 int bonusPercent = CalculateArmorDurabilityBonusPercent(progress.TotalDurabilityCredits, player.Entity);
                 CheckHardyHealthUnlock(player);
                 CheckMercilessUnlock(player);
-                UpdateSkillActivityDay(playerUid, "armor");
 
                 return TextCommandResult.Success($"Set {level} credits per stream on {toolName}. Total durability: {progress.TotalDurabilityCredits}/{MaxArmorDurabilityPercent} (+{bonusPercent}% durability).");
             }
@@ -4355,11 +4397,14 @@ namespace SeraphLeveling
 
                 progress.TotalDurabilityCredits = level;
                 pendingArmorProgressSave = true;
+                UpdateSkillActivityDay(playerUid, "armor");
+                if (player == null)
+                    return TextCommandResult.Success($"Armor durability credits set to {level}. Offline player; applies on next join.");
+
                 ApplyArmorBonusesStatic(player, progress.TotalDurabilityCredits, progress.TotalWalkSpeedCredits);
                 int bonusPercent = CalculateArmorDurabilityBonusPercent(level, player.Entity);
                 CheckHardyHealthUnlock(player);
                 CheckMercilessUnlock(player);
-                UpdateSkillActivityDay(playerUid, "armor");
 
                 return TextCommandResult.Success($"Armor durability credits set to {level} (+{bonusPercent}% durability).");
             }
@@ -4465,7 +4510,7 @@ namespace SeraphLeveling
             }
 
             string toolName = (string)args[1];
-            return SetMiningLevelForPlayer(player, newCredits.Value, toolName);
+            return SetMiningLevelForPlayer(player, player.PlayerUID, newCredits.Value, toolName);
         }
 
         /// <summary>
@@ -4692,7 +4737,7 @@ namespace SeraphLeveling
             }
 
             string toolName = (string)args[1];
-            return SetMeleeLevelForPlayer(player, newCredits.Value, toolName);
+            return SetMeleeLevelForPlayer(player, player.PlayerUID, newCredits.Value, toolName);
         }
 
         /// <summary>
@@ -4855,7 +4900,7 @@ namespace SeraphLeveling
             }
 
             string toolName = (string)args[1];
-            return SetRangedLevelForPlayer(player, newCredits.Value, toolName);
+            return SetRangedLevelForPlayer(player, player.PlayerUID, newCredits.Value, toolName);
         }
 
         /// <summary>
@@ -5411,7 +5456,7 @@ namespace SeraphLeveling
             }
 
             string toolName = (string)args[1];
-            return SetArmorLevelForPlayer(player, newCredits.Value, toolName);
+            return SetArmorLevelForPlayer(player, player.PlayerUID, newCredits.Value, toolName);
         }
 
         /// <summary>
@@ -14080,6 +14125,8 @@ namespace SeraphLeveling
         /// </summary>
         private static int ApplyFurtiveBonusStatic(IServerPlayer player, int credits)
         {
+            if (player?.Entity == null) return 0;
+
             // Check if player has vanilla Furtive trait (Malefactor)
             bool hasVanillaFurtive = PlayerHasVanillaFurtiveStatic(player.Entity);
 
@@ -16070,7 +16117,7 @@ namespace SeraphLeveling
             }
 
             string toolName = (string)args[1];
-            return SetPreciseLevelForPlayer(player, newLevel.Value, toolName);
+            return SetPreciseLevelForPlayer(player, player.PlayerUID, newLevel.Value, toolName);
         }
 
         /// <summary>

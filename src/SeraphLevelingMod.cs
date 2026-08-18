@@ -7905,23 +7905,48 @@ namespace SeraphLeveling
 
             // Approach 1: The sewing-kit-onto-clothing merge. This is the primary
             // repair mechanic; one credit per kit actually consumed by a repair.
+            // Patch the vanilla behavior AND every loaded subclass that declares
+            // its own override (Overhaullib-style mods replace wearable behaviors
+            // with subclasses; a patch on only the base method never fires for
+            // an overriding subclass).
             try
             {
                 var wearableBehaviorType = AccessTools.TypeByName("Vintagestory.GameContent.CollectibleBehaviorWearable");
-                var tryMergeMethod = wearableBehaviorType != null ? AccessTools.Method(wearableBehaviorType, "TryMergeStacks") : null;
-                if (tryMergeMethod != null)
+                if (wearableBehaviorType != null)
                 {
                     var prefixMethod = AccessTools.Method(typeof(SewingKitPatches),
                         nameof(SewingKitPatches.TryMergeStacks_Prefix));
                     var postfixMethod = AccessTools.Method(typeof(SewingKitPatches),
                         nameof(SewingKitPatches.TryMergeStacks_Postfix));
-                    serverHarmony.Patch(tryMergeMethod, prefix: new HarmonyMethod(prefixMethod), postfix: new HarmonyMethod(postfixMethod));
-                    api.Logger.Notification("[SeraphLeveling] Successfully patched CollectibleBehaviorWearable.TryMergeStacks for Mender trait");
-                    anyPatchSucceeded = true;
+
+                    var paramTypes = new[] { typeof(ItemStackMergeOperation), typeof(EnumHandling).MakeByRefType() };
+                    int patched = 0;
+                    foreach (var asm in AppDomain.CurrentDomain.GetAssemblies())
+                    {
+                        Type[] types;
+                        try { types = asm.GetTypes(); }
+                        catch { continue; }
+                        foreach (var type in types)
+                        {
+                            if (!wearableBehaviorType.IsAssignableFrom(type)) continue;
+                            var m = type.GetMethod("TryMergeStacks",
+                                System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic,
+                                null, paramTypes, null);
+                            if (m == null || m.DeclaringType != type) continue;
+                            serverHarmony.Patch(m, prefix: new HarmonyMethod(prefixMethod), postfix: new HarmonyMethod(postfixMethod));
+                            api.Logger.Notification($"[SeraphLeveling] Patched {type.FullName}.TryMergeStacks for Mender trait");
+                            patched++;
+                        }
+                    }
+                    anyPatchSucceeded = patched > 0;
+                    if (patched == 0)
+                    {
+                        api.Logger.Warning("[SeraphLeveling] Found no TryMergeStacks declarations to patch for Mender trait");
+                    }
                 }
                 else
                 {
-                    api.Logger.Warning("[SeraphLeveling] Could not find CollectibleBehaviorWearable.TryMergeStacks for Mender trait");
+                    api.Logger.Warning("[SeraphLeveling] Could not find CollectibleBehaviorWearable for Mender trait");
                 }
             }
             catch (Exception ex)
@@ -22522,9 +22547,15 @@ namespace SeraphLeveling
             try
             {
                 var player = op?.ActingPlayer as IServerPlayer;
-                if (player == null) return;
+                float newCondition = op?.SinkSlot?.Itemstack?.Attributes?.GetFloat("condition", 1f) ?? 1f;
 
-                float newCondition = op.SinkSlot?.Itemstack?.Attributes?.GetFloat("condition", 1f) ?? 1f;
+                if (SeraphLevelingModSystem.DebugLoggingEnabled)
+                {
+                    SeraphLevelingModSystem.ServerApi?.Logger.Debug(
+                        $"[SeraphLeveling] TryMergeStacks postfix: before={__state:F2} after={newCondition:F2} actor={(op?.ActingPlayer?.PlayerName ?? "null")} isServerPlayer={player != null}");
+                }
+
+                if (player == null) return;
                 if (newCondition <= __state + 0.001f) return;
 
                 SeraphLevelingModSystem.ProcessMenderRepair(player);

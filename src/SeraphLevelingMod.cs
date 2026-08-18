@@ -2036,8 +2036,9 @@ namespace SeraphLeveling
         // Durability tracking for repair detection - key is "playerUid_slotId", value is last known durability
         private static ConcurrentDictionary<string, int> TrackedItemDurabilities = new ConcurrentDictionary<string, int>();
 
-        // Sewing kit consumption tracking - key is playerUid, value is last known sewing kit count on mouse cursor
-        private static ConcurrentDictionary<string, int> TrackedSewingKitCounts = new ConcurrentDictionary<string, int>();
+        // Sleep tracking - key is playerUid, value is Calendar.TotalHours when the player mounted a bed.
+        // Written by DidMount_Postfix, consumed by DidUnmount_Postfix to verify real sleep.
+        internal static ConcurrentDictionary<string, double> SleepMountHours = new ConcurrentDictionary<string, double>();
 
         // =========================================================================
         // PILFERER TRAIT - Tracks chests/vessels for loot bonuses
@@ -7077,6 +7078,7 @@ namespace SeraphLeveling
             playerEquippedArmor.TryRemove(playerUid, out _);
             VanillaTraitsCache.TryRemove(playerUid, out _);
             LastDecayCheckDay.TryRemove(playerUid, out _);
+            SleepMountHours.TryRemove(playerUid, out _);
             pendingClassChangeReapply.TryRemove(playerUid, out _);
             if (classChangeListeners.TryRemove(playerUid, out var classListener))
             {
@@ -7770,8 +7772,8 @@ namespace SeraphLeveling
         /// </summary>
         private void PatchBedSleeping(ICoreServerAPI api)
         {
-            if (!EnableSleepBuff) return; // Only patch if sleep buff is enabled
-
+            // Always patch; the postfixes check EnableSleepBuff at runtime, so a
+            // config reload that enables the buff works without a restart.
             try
             {
                 // BlockEntityBed is in Vintagestory.GameContent (already imported)
@@ -7782,28 +7784,29 @@ namespace SeraphLeveling
                     return;
                 }
 
-                // Find the DidUnmount method (called when player gets out of bed)
+                var didMountMethod = AccessTools.Method(bedBehaviorType, "DidMount");
                 var didUnmountMethod = AccessTools.Method(bedBehaviorType, "DidUnmount");
-                if (didUnmountMethod == null)
+                if (didMountMethod == null || didUnmountMethod == null)
                 {
-                    api.Logger.Debug("[SeraphLeveling] Could not find BlockEntityBed.DidUnmount method for sleep buff");
+                    api.Logger.Debug("[SeraphLeveling] Could not find BlockEntityBed.DidMount/DidUnmount methods for sleep buff");
                     return;
                 }
 
-                // Get our postfix method
-                var postfixMethod = AccessTools.Method(typeof(BedSleepPatches), nameof(BedSleepPatches.DidUnmount_Postfix));
-                if (postfixMethod == null)
+                var mountPostfix = AccessTools.Method(typeof(BedSleepPatches), nameof(BedSleepPatches.DidMount_Postfix));
+                var unmountPostfix = AccessTools.Method(typeof(BedSleepPatches), nameof(BedSleepPatches.DidUnmount_Postfix));
+                if (mountPostfix == null || unmountPostfix == null)
                 {
-                    api.Logger.Error("[SeraphLeveling] Could not find DidUnmount_Postfix method!");
+                    api.Logger.Error("[SeraphLeveling] Could not find DidMount_Postfix/DidUnmount_Postfix method!");
                     return;
                 }
 
-                serverHarmony.Patch(didUnmountMethod, postfix: new HarmonyMethod(postfixMethod));
-                api.Logger.Notification("[SeraphLeveling] Successfully patched BlockEntityBed.DidUnmount for sleep buff");
+                serverHarmony.Patch(didMountMethod, postfix: new HarmonyMethod(mountPostfix));
+                serverHarmony.Patch(didUnmountMethod, postfix: new HarmonyMethod(unmountPostfix));
+                api.Logger.Notification("[SeraphLeveling] Successfully patched BlockEntityBed.DidMount/DidUnmount for sleep buff");
             }
             catch (Exception ex)
             {
-                api.Logger.Warning($"[SeraphLeveling] Failed to patch BlockEntityBed.DidUnmount: {ex.Message}");
+                api.Logger.Warning($"[SeraphLeveling] Failed to patch BlockEntityBed sleep methods: {ex.Message}");
             }
         }
 
@@ -7889,33 +7892,41 @@ namespace SeraphLeveling
 
         /// <summary>
         /// Patch methods to track sewing kit repairs for Mender trait.
-        /// Tries multiple approaches since sewing kit repairs can happen in different ways.
+        /// Vanilla has exactly two repair paths:
+        /// 1. Merging a sewing kit onto damaged clothing raises its "condition"
+        ///    attribute and consumes one kit (CollectibleBehaviorWearable.TryMergeStacks).
+        /// 2. Grid "repair" recipes restore durability on the crafted output.
+        /// Path 1 gets a precise prefix/postfix pair. Path 2 is detected by the
+        /// durability-increase watcher on OnModifiedInInventorySlot.
         /// </summary>
         private void PatchSewingKitRepairs(ICoreServerAPI api)
         {
             bool anyPatchSucceeded = false;
 
-            // Approach 1: Try to patch ItemSewingKit directly if it exists
+            // Approach 1: The sewing-kit-onto-clothing merge. This is the primary
+            // repair mechanic; one credit per kit actually consumed by a repair.
             try
             {
-                var sewingKitType = AccessTools.TypeByName("Vintagestory.GameContent.ItemSewingKit");
-                if (sewingKitType != null)
+                var wearableBehaviorType = AccessTools.TypeByName("Vintagestory.GameContent.CollectibleBehaviorWearable");
+                var tryMergeMethod = wearableBehaviorType != null ? AccessTools.Method(wearableBehaviorType, "TryMergeStacks") : null;
+                if (tryMergeMethod != null)
                 {
-                    // Try to find repair-related methods
-                    var onHeldInteractStopMethod = AccessTools.Method(sewingKitType, "OnHeldInteractStop");
-                    if (onHeldInteractStopMethod != null)
-                    {
-                        var postfixMethod = AccessTools.Method(typeof(SewingKitPatches),
-                            nameof(SewingKitPatches.OnHeldInteractStop_Postfix));
-                        serverHarmony.Patch(onHeldInteractStopMethod, postfix: new HarmonyMethod(postfixMethod));
-                        api.Logger.Notification("[SeraphLeveling] Successfully patched ItemSewingKit.OnHeldInteractStop for Mender trait");
-                        anyPatchSucceeded = true;
-                    }
+                    var prefixMethod = AccessTools.Method(typeof(SewingKitPatches),
+                        nameof(SewingKitPatches.TryMergeStacks_Prefix));
+                    var postfixMethod = AccessTools.Method(typeof(SewingKitPatches),
+                        nameof(SewingKitPatches.TryMergeStacks_Postfix));
+                    serverHarmony.Patch(tryMergeMethod, prefix: new HarmonyMethod(prefixMethod), postfix: new HarmonyMethod(postfixMethod));
+                    api.Logger.Notification("[SeraphLeveling] Successfully patched CollectibleBehaviorWearable.TryMergeStacks for Mender trait");
+                    anyPatchSucceeded = true;
+                }
+                else
+                {
+                    api.Logger.Warning("[SeraphLeveling] Could not find CollectibleBehaviorWearable.TryMergeStacks for Mender trait");
                 }
             }
             catch (Exception ex)
             {
-                api.Logger.Debug($"[SeraphLeveling] ItemSewingKit patch attempt: {ex.Message}");
+                api.Logger.Debug($"[SeraphLeveling] TryMergeStacks patch attempt: {ex.Message}");
             }
 
             // Approach 2: Patch CollectibleObject.OnModifiedInInventorySlot to detect durability restoration
@@ -7935,25 +7946,6 @@ namespace SeraphLeveling
             catch (Exception ex)
             {
                 api.Logger.Debug($"[SeraphLeveling] OnModifiedInInventorySlot patch attempt: {ex.Message}");
-            }
-
-            // Approach 3: Patch OnHeldInteractStep as fallback
-            try
-            {
-                var collectibleType = typeof(CollectibleObject);
-                var onHeldInteractStepMethod = AccessTools.Method(collectibleType, "OnHeldInteractStep");
-                if (onHeldInteractStepMethod != null)
-                {
-                    var postfixMethod = AccessTools.Method(typeof(SewingKitPatches),
-                        nameof(SewingKitPatches.OnHeldInteractStep_Postfix));
-                    serverHarmony.Patch(onHeldInteractStepMethod, postfix: new HarmonyMethod(postfixMethod));
-                    api.Logger.Notification("[SeraphLeveling] Successfully patched CollectibleObject.OnHeldInteractStep for Mender trait");
-                    anyPatchSucceeded = true;
-                }
-            }
-            catch (Exception ex)
-            {
-                api.Logger.Debug($"[SeraphLeveling] OnHeldInteractStep patch attempt: {ex.Message}");
             }
 
             if (!anyPatchSucceeded)
@@ -9049,7 +9041,7 @@ namespace SeraphLeveling
             playerEquippedArmor.Clear();
             playerEquippedClothing.Clear();
             TrackedItemDurabilities.Clear();
-            TrackedSewingKitCounts.Clear();
+            SleepMountHours.Clear();
             classChangeListeners.Clear();
             pendingClassChangeReapply.Clear();
             pendingSleepBuffSave = false;
@@ -13971,51 +13963,14 @@ namespace SeraphLeveling
 
                 string playerUid = player.PlayerUID;
 
-                // =============================================
-                // METHOD 1: Track sewing kit consumption from mouse cursor
-                // When player holds sewing kits and clicks on clothing, the count decreases
-                // =============================================
-                var mouseSlot = player.InventoryManager?.MouseItemSlot;
-                if (mouseSlot?.Itemstack?.Collectible != null)
-                {
-                    string mouseItemCode = mouseSlot.Itemstack.Collectible.Code?.ToString()?.ToLowerInvariant() ?? "";
-
-                    if (mouseItemCode.Contains("sewingkit"))
-                    {
-                        int currentCount = mouseSlot.Itemstack.StackSize;
-
-                        if (TrackedSewingKitCounts.TryGetValue(playerUid, out int previousCount))
-                        {
-                            if (currentCount < previousCount)
-                            {
-                                // Sewing kit was consumed - repair happened!
-                                int kitsUsed = previousCount - currentCount;
-                                ServerApi.Logger.Debug($"[SeraphLeveling] Player {player.PlayerName} used {kitsUsed} sewing kit(s) for repair");
-
-                                for (int i = 0; i < kitsUsed; i++)
-                                {
-                                    ProcessMenderRepair(player);
-                                }
-                            }
-                        }
-
-                        // Update tracked count
-                        TrackedSewingKitCounts[playerUid] = currentCount;
-                    }
-                    else
-                    {
-                        // Not holding sewing kit anymore, clear tracking
-                        TrackedSewingKitCounts.TryRemove(playerUid, out _);
-                    }
-                }
-                else
-                {
-                    // Mouse slot empty, clear tracking
-                    TrackedSewingKitCounts.TryRemove(playerUid, out _);
-                }
+                // NOTE: cursor sewing-kit stack tracking used to live here. It
+                // counted ANY stack decrease as repairs, so depositing kits into
+                // a chest or splitting the stack farmed Mender XP. The real
+                // repair (kit merged onto clothing) is now detected precisely by
+                // the TryMergeStacks patch in SewingKitPatches.
 
                 // =============================================
-                // METHOD 2: Track durability increases on wearable items (backup)
+                // Track durability increases on worn items (grid repair backup)
                 // =============================================
                 var characterInventory = player.InventoryManager?.GetOwnInventory(GlobalConstants.characterInvClassName);
                 if (characterInventory == null) continue;
@@ -22545,45 +22500,38 @@ namespace SeraphLeveling
         private const long MIN_REPAIR_INTERVAL = 10;
 
         /// <summary>
-        /// Postfix for ItemSewingKit.OnHeldInteractStop - tracks when sewing kit repair completes.
+        /// Prefix for CollectibleBehaviorWearable.TryMergeStacks: captures the
+        /// clothing's condition before the merge so the postfix can tell whether
+        /// a repair actually happened.
         /// </summary>
-        public static void OnHeldInteractStop_Postfix(
-            object __instance,
-            float secondsUsed,
-            ItemSlot slot,
-            EntityAgent byEntity,
-            BlockSelection blockSel,
-            EntitySelection entitySel)
+        public static void TryMergeStacks_Prefix(ItemStackMergeOperation op, out float __state)
+        {
+            __state = op?.SinkSlot?.Itemstack?.Attributes?.GetFloat("condition", 1f) ?? 1f;
+        }
+
+        /// <summary>
+        /// Postfix for CollectibleBehaviorWearable.TryMergeStacks: merging a
+        /// sewing kit onto damaged clothing is the vanilla repair mechanic. The
+        /// merge raises the clothing's "condition" attribute and consumes one
+        /// kit, so a condition increase IS a completed repair. This cannot be
+        /// farmed: every credit costs a sewing kit spent on actually damaged
+        /// clothing.
+        /// </summary>
+        public static void TryMergeStacks_Postfix(ItemStackMergeOperation op, float __state)
         {
             try
             {
-                // Only count if the repair actually happened (at least some time was spent)
-                if (secondsUsed < 0.25f) return;
-
-                // Get the player
-                var playerEntity = byEntity as EntityPlayer;
-                if (playerEntity == null) return;
-
-                var player = playerEntity.Player as IServerPlayer;
+                var player = op?.ActingPlayer as IServerPlayer;
                 if (player == null) return;
 
-                // Check cooldown to avoid duplicate credits
-                long currentTick = playerEntity.World?.ElapsedMilliseconds ?? 0;
-                string playerKey = player.PlayerUID;
+                float newCondition = op.SinkSlot?.Itemstack?.Attributes?.GetFloat("condition", 1f) ?? 1f;
+                if (newCondition <= __state + 0.001f) return;
 
-                if (LastRepairTime.TryGetValue(playerKey, out long lastTime) &&
-                    currentTick - lastTime < MIN_REPAIR_INTERVAL * 50)
-                {
-                    return; // Too soon since last credit
-                }
-
-                // Update last repair time and give credit
-                LastRepairTime[playerKey] = currentTick;
                 SeraphLevelingModSystem.ProcessMenderRepair(player);
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"[SeraphLeveling] Error in OnHeldInteractStop_Postfix: {ex.Message}");
+                System.Diagnostics.Debug.WriteLine($"[SeraphLeveling] Error in TryMergeStacks_Postfix: {ex.Message}");
             }
         }
 
@@ -22665,54 +22613,6 @@ namespace SeraphLeveling
             }
         }
 
-        /// <summary>
-        /// Postfix for CollectibleObject.OnHeldInteractStep - tracks sewing kit repairs during use.
-        /// This is a fallback for when the sewing kit is used in a world interaction context.
-        /// </summary>
-        public static void OnHeldInteractStep_Postfix(
-            CollectibleObject __instance,
-            float secondsUsed,
-            ItemSlot slot,
-            EntityAgent byEntity,
-            BlockSelection blockSel,
-            EntitySelection entitySel,
-            bool __result)
-        {
-            try
-            {
-                // Only process if interaction is still ongoing
-                if (!__result) return;
-
-                // Check if this is a sewing kit
-                string itemCode = __instance.Code?.ToString();
-                if (itemCode == null || !itemCode.Contains("sewingkit")) return;
-
-                // Get the player
-                var playerEntity = byEntity as EntityPlayer;
-                if (playerEntity == null) return;
-
-                var player = playerEntity.Player as IServerPlayer;
-                if (player == null) return;
-
-                // Give credit every 0.5 seconds of repair (rate-limited)
-                long currentTick = playerEntity.World?.ElapsedMilliseconds ?? 0;
-                string playerKey = player.PlayerUID + "_step";
-
-                if (LastRepairTime.TryGetValue(playerKey, out long lastTime) &&
-                    currentTick - lastTime < 500) // 500ms cooldown
-                {
-                    return;
-                }
-
-                // Update last repair time and give credit
-                LastRepairTime[playerKey] = currentTick;
-                SeraphLevelingModSystem.ProcessMenderRepair(player);
-            }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Debug.WriteLine($"[SeraphLeveling] Error in OnHeldInteractStep_Postfix: {ex.Message}");
-            }
-        }
     }
 
     /// <summary>
@@ -22815,6 +22715,35 @@ namespace SeraphLeveling
     public static class BedSleepPatches
     {
         /// <summary>
+        /// The buff requires at least this many in-game hours in bed. Real sleep
+        /// accelerates the calendar, so a night passes this easily. Hopping in
+        /// and out of a bed passes almost no game time and grants nothing.
+        /// </summary>
+        public const double MIN_SLEEP_HOURS = 0.5;
+
+        /// <summary>
+        /// Postfix for BlockEntityBed.DidMount - records when the player got
+        /// into bed so DidUnmount can verify they actually slept.
+        /// </summary>
+        public static void DidMount_Postfix(EntityAgent entityAgent)
+        {
+            try
+            {
+                var serverApi = SeraphLevelingModSystem.ServerApi;
+                if (serverApi == null) return;
+
+                var playerEntity = entityAgent as EntityPlayer;
+                if (playerEntity?.PlayerUID == null) return;
+
+                SeraphLevelingModSystem.SleepMountHours[playerEntity.PlayerUID] = serverApi.World.Calendar.TotalHours;
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[SeraphLeveling] Error in DidMount_Postfix: {ex.Message}");
+            }
+        }
+
+        /// <summary>
         /// Postfix for BlockEntityBed.DidUnmount - applies sleep buff when player gets out of bed.
         /// DidUnmount(EntityAgent) is called when a player unmounts from the bed after sleeping.
         /// __instance is the BlockEntityBed itself (a BlockEntity subclass).
@@ -22834,6 +22763,22 @@ namespace SeraphLeveling
 
                 string playerUid = serverPlayer.PlayerUID;
                 if (string.IsNullOrEmpty(playerUid)) return;
+
+                // Require real sleep: the mount record must exist and enough
+                // game time must have passed while in bed. TryRemove also makes
+                // the head/foot double-fire a no-op.
+                if (!SeraphLevelingModSystem.SleepMountHours.TryRemove(playerUid, out double mountHours)) return;
+                double currentHours = SeraphLevelingModSystem.ServerApi?.World?.Calendar?.TotalHours ?? mountHours;
+                double hoursSlept = currentHours - mountHours;
+                if (hoursSlept < MIN_SLEEP_HOURS)
+                {
+                    if (SeraphLevelingModSystem.DebugLoggingEnabled)
+                    {
+                        SeraphLevelingModSystem.ServerApi?.Logger.Debug(
+                            $"[SeraphLeveling] No sleep buff for {serverPlayer.PlayerName}: only {hoursSlept:F2} game hours in bed.");
+                    }
+                    return;
+                }
 
                 // Dedup: beds have two parts (head + foot), so DidUnmount fires twice.
                 // Skip if we already applied the buff within the last 2 seconds (real time).

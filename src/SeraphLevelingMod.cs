@@ -3143,7 +3143,7 @@ namespace SeraphLeveling
                 .EndSubCommand()
                 // Reset one named player's progression (admin only)
                 .BeginSubCommand("resetplayer")
-                    .WithDescription("Reset ALL trait progression to 0 for a named online player (admin only)")
+                    .WithDescription("Reset ALL trait progression to 0 for a named player. Works on offline players by their exact full name. (admin only)")
                     .WithArgs(api.ChatCommands.Parsers.Word("playername"))
                     .RequiresPrivilege(Privilege.controlserver)
                     .HandleWith(OnTraitResetPlayerCommand)
@@ -3538,7 +3538,7 @@ namespace SeraphLeveling
                 "  /trait testsound [0.0-1.0] - Play the level-up ding once for testing (admin)\n" +
                 "  /trait setplayer &lt;name&gt; &lt;trait&gt; &lt;level&gt; [toolname] - Set trait level for another player (admin)\n" +
                 "  /trait reset - Reset all trait progression to 0 (admin)\n" +
-                "  /trait resetplayer &lt;name&gt; - Reset all trait progression for an online player (admin)\n" +
+                "  /trait resetplayer &lt;name&gt; - Reset all trait progression for a player, online or offline (admin)\n" +
                 "  /trait resetall confirm - Wipe all trait progression for EVERY player (admin)\n" +
                 "  /trait resetconfig - Reset all config values to defaults (admin)\n" +
                 "  /trait reloadconfig - Re-read ModConfig/SeraphLeveling.json without restarting (admin)\n" +
@@ -16432,8 +16432,67 @@ namespace SeraphLeveling
         }
 
         /// <summary>
+        /// Removes every stored progression entry for one UID and flags all systems
+        /// for save. Used for offline players: their stats and extra traits are
+        /// recomputed from the (now missing) stored data when they next join.
+        /// </summary>
+        private static void RemoveStoredProgressForUid(string uid)
+        {
+            MiningProgress.TryRemove(uid, out _);
+            MeleeProgress.TryRemove(uid, out _);
+            RangedProgress.TryRemove(uid, out _);
+            WalkingProgress.TryRemove(uid, out _);
+            HungerProgress.TryRemove(uid, out _);
+            ArmorProgress.TryRemove(uid, out _);
+            ClothierProgress.TryRemove(uid, out _);
+            MenderProgress.TryRemove(uid, out _);
+            PilfererProgress.TryRemove(uid, out _);
+            ResourcefulProgress.TryRemove(uid, out _);
+            ForagerProgress.TryRemove(uid, out _);
+            FurtiveProgress.TryRemove(uid, out _);
+            PreciseProgress.TryRemove(uid, out _);
+            TechnicalProgress.TryRemove(uid, out _);
+            HardyHealthProgress.TryRemove(uid, out _);
+            BowyerProgress.TryRemove(uid, out _);
+            ImproviserProgress.TryRemove(uid, out _);
+            TinkererProgress.TryRemove(uid, out _);
+            MercilessProgress.TryRemove(uid, out _);
+            ClaustrophobicRemovalProgress.TryRemove(uid, out _);
+            COProgress.TryRemove(uid, out _);
+            TemporalResistanceProgress.TryRemove(uid, out _);
+            TemporalRechargeProgress.TryRemove(uid, out _);
+
+            pendingMiningProgressSave = true;
+            pendingMeleeProgressSave = true;
+            pendingRangedProgressSave = true;
+            pendingWalkingProgressSave = true;
+            pendingHungerProgressSave = true;
+            pendingArmorProgressSave = true;
+            pendingClothierProgressSave = true;
+            pendingMenderProgressSave = true;
+            pendingPilfererProgressSave = true;
+            pendingResourcefulProgressSave = true;
+            pendingForagerProgressSave = true;
+            pendingFurtiveProgressSave = true;
+            pendingPreciseProgressSave = true;
+            pendingTechnicalProgressSave = true;
+            pendingHardyHealthProgressSave = true;
+            pendingBowyerProgressSave = true;
+            pendingImproviserProgressSave = true;
+            pendingTinkererProgressSave = true;
+            pendingMercilessProgressSave = true;
+            pendingClaustrophobicRemovalProgressSave = true;
+            pendingCOProgressSave = true;
+            pendingTemporalResistanceSave = true;
+            pendingTemporalRechargeSave = true;
+        }
+
+        /// <summary>
         /// Handler for /trait resetplayer command.
-        /// Resets all trait progression to 0 for a named online player.
+        /// Resets all trait progression to 0 for a named player. Online players get
+        /// their live stats stripped immediately. Offline players are matched by
+        /// their exact last known name in the server's player database and have
+        /// their stored progress removed; the reset takes effect on their next join.
         /// </summary>
         private TextCommandResult OnTraitResetPlayerCommand(TextCommandCallingArgs args)
         {
@@ -16441,16 +16500,29 @@ namespace SeraphLeveling
             if (string.IsNullOrWhiteSpace(nameArg))
                 return TextCommandResult.Error("Usage: /trait resetplayer &lt;playername&gt;");
 
+            // Online first: full reset with a live stat strip.
             IServerPlayer target = ResolvePlayerByName(nameArg);
-            if (target?.Entity == null)
-                return TextCommandResult.Error($"Could not find online player matching '{nameArg}'. The player must be online, or use /trait resetall for a full wipe.");
+            if (target?.Entity != null)
+            {
+                ResetProgressForPlayer(target);
+                SaveAllPendingProgress();
 
-            ResetProgressForPlayer(target);
+                target.SendMessage(GlobalConstants.GeneralChatGroup,
+                    "An admin has reset all of your trait progression to 0.", EnumChatType.Notification);
+                return TextCommandResult.Success($"All trait progression has been reset to 0 for {target.PlayerName}.");
+            }
+
+            // Offline: exact last-known-name match only, so a typo or partial name
+            // cannot wipe the wrong player.
+            var offlineData = ServerApi?.PlayerData?.GetPlayerDataByLastKnownName(nameArg);
+            if (offlineData == null || string.IsNullOrEmpty(offlineData.PlayerUID))
+                return TextCommandResult.Error($"No online player matches '{nameArg}' and no offline player has that exact name. Offline players must be matched by their full name.");
+
+            RemoveStoredProgressForUid(offlineData.PlayerUID);
             SaveAllPendingProgress();
 
-            target.SendMessage(GlobalConstants.GeneralChatGroup,
-                "An admin has reset all of your trait progression to 0.", EnumChatType.Notification);
-            return TextCommandResult.Success($"All trait progression has been reset to 0 for {target.PlayerName}.");
+            return TextCommandResult.Success(
+                $"Removed all stored trait progression for offline player {offlineData.LastKnownPlayername}. The reset takes effect when they next join.");
         }
 
         /// <summary>

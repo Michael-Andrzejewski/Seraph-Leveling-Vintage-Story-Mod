@@ -3141,6 +3141,20 @@ namespace SeraphLeveling
                     .RequiresPlayer()
                     .HandleWith(OnTraitResetCommand)
                 .EndSubCommand()
+                // Reset one named player's progression (admin only)
+                .BeginSubCommand("resetplayer")
+                    .WithDescription("Reset ALL trait progression to 0 for a named online player (admin only)")
+                    .WithArgs(api.ChatCommands.Parsers.Word("playername"))
+                    .RequiresPrivilege(Privilege.controlserver)
+                    .HandleWith(OnTraitResetPlayerCommand)
+                .EndSubCommand()
+                // Reset every player on the server, online and offline (admin only)
+                .BeginSubCommand("resetall")
+                    .WithDescription("Reset ALL trait progression for EVERY player, online and offline. Type /trait resetall confirm to run it. (admin only)")
+                    .WithArgs(api.ChatCommands.Parsers.OptionalWord("confirm"))
+                    .RequiresPrivilege(Privilege.controlserver)
+                    .HandleWith(OnTraitResetAllCommand)
+                .EndSubCommand()
                 // Export full progression to a JSON file for cross-world transfer (admin only)
                 .BeginSubCommand("export")
                     .WithDescription("Export your (or a named player's) full progression to a JSON file you can carry to another world. Admin only.")
@@ -3524,6 +3538,8 @@ namespace SeraphLeveling
                 "  /trait testsound [0.0-1.0] - Play the level-up ding once for testing (admin)\n" +
                 "  /trait setplayer &lt;name&gt; &lt;trait&gt; &lt;level&gt; [toolname] - Set trait level for another player (admin)\n" +
                 "  /trait reset - Reset all trait progression to 0 (admin)\n" +
+                "  /trait resetplayer &lt;name&gt; - Reset all trait progression for an online player (admin)\n" +
+                "  /trait resetall confirm - Wipe all trait progression for EVERY player (admin)\n" +
                 "  /trait resetconfig - Reset all config values to defaults (admin)\n" +
                 "  /trait reloadconfig - Re-read ModConfig/SeraphLeveling.json without restarting (admin)\n" +
                 "  /trait verify - Show what each stat this mod writes is actually made of (admin)\n" +
@@ -9128,11 +9144,8 @@ namespace SeraphLeveling
 
             lock (persistLock)
             {
-                if (MiningProgress.IsEmpty)
-                {
-                    return;
-                }
-
+                // An empty dict is persisted too. Skipping it would leave the old
+                // blob in the save and resurrect wiped progress on the next load.
                 try
                 {
                     var snapshot = MiningProgress.ToArray();
@@ -9388,11 +9401,8 @@ namespace SeraphLeveling
 
             lock (persistLock)
             {
-                if (MeleeProgress.IsEmpty)
-                {
-                    return;
-                }
-
+                // An empty dict is persisted too. Skipping it would leave the old
+                // blob in the save and resurrect wiped progress on the next load.
                 try
                 {
                     var snapshot = MeleeProgress.ToArray();
@@ -9574,11 +9584,8 @@ namespace SeraphLeveling
 
             lock (persistLock)
             {
-                if (RangedProgress.IsEmpty)
-                {
-                    return;
-                }
-
+                // An empty dict is persisted too. Skipping it would leave the old
+                // blob in the save and resurrect wiped progress on the next load.
                 try
                 {
                     var snapshot = RangedProgress.ToArray();
@@ -9760,11 +9767,8 @@ namespace SeraphLeveling
 
             lock (persistLock)
             {
-                if (WalkingProgress.IsEmpty)
-                {
-                    return;
-                }
-
+                // An empty dict is persisted too. Skipping it would leave the old
+                // blob in the save and resurrect wiped progress on the next load.
                 try
                 {
                     var snapshot = WalkingProgress.ToArray();
@@ -9916,11 +9920,8 @@ namespace SeraphLeveling
 
             lock (persistLock)
             {
-                if (HungerProgress.IsEmpty)
-                {
-                    return;
-                }
-
+                // An empty dict is persisted too. Skipping it would leave the old
+                // blob in the save and resurrect wiped progress on the next load.
                 try
                 {
                     var snapshot = HungerProgress.ToArray();
@@ -10072,11 +10073,8 @@ namespace SeraphLeveling
 
             lock (persistLock)
             {
-                if (ArmorProgress.IsEmpty)
-                {
-                    return;
-                }
-
+                // An empty dict is persisted too. Skipping it would leave the old
+                // blob in the save and resurrect wiped progress on the next load.
                 try
                 {
                     var snapshot = ArmorProgress.ToArray();
@@ -16434,6 +16432,115 @@ namespace SeraphLeveling
         }
 
         /// <summary>
+        /// Handler for /trait resetplayer command.
+        /// Resets all trait progression to 0 for a named online player.
+        /// </summary>
+        private TextCommandResult OnTraitResetPlayerCommand(TextCommandCallingArgs args)
+        {
+            string nameArg = args[0] as string;
+            if (string.IsNullOrWhiteSpace(nameArg))
+                return TextCommandResult.Error("Usage: /trait resetplayer &lt;playername&gt;");
+
+            IServerPlayer target = ResolvePlayerByName(nameArg);
+            if (target?.Entity == null)
+                return TextCommandResult.Error($"Could not find online player matching '{nameArg}'. The player must be online, or use /trait resetall for a full wipe.");
+
+            ResetProgressForPlayer(target);
+            SaveAllPendingProgress();
+
+            target.SendMessage(GlobalConstants.GeneralChatGroup,
+                "An admin has reset all of your trait progression to 0.", EnumChatType.Notification);
+            return TextCommandResult.Success($"All trait progression has been reset to 0 for {target.PlayerName}.");
+        }
+
+        /// <summary>
+        /// Handler for /trait resetall command.
+        /// Wipes every progression system for every player, online and offline.
+        /// Online players get their live stats stripped and reapplied; offline
+        /// players simply have no stored data left, and stats are recomputed from
+        /// that on their next join. Requires the literal word "confirm".
+        /// </summary>
+        private TextCommandResult OnTraitResetAllCommand(TextCommandCallingArgs args)
+        {
+            if (ServerApi == null) return TextCommandResult.Error("Server API not available.");
+
+            string confirmArg = args[0] as string;
+            if (!string.Equals(confirmArg, "confirm", StringComparison.OrdinalIgnoreCase))
+            {
+                return TextCommandResult.Error(
+                    "This wipes ALL trait progression for EVERY player on this server, online and offline. There is no undo. Run /trait resetall confirm to proceed.");
+            }
+
+            // Strip live stats and traits from everyone online.
+            int onlineReset = 0;
+            foreach (var onlinePlayer in ServerApi.World.AllOnlinePlayers)
+            {
+                if (onlinePlayer is IServerPlayer sp && sp.Entity != null)
+                {
+                    ResetProgressForPlayer(sp);
+                    onlineReset++;
+                }
+            }
+
+            // Clear every stored entry, which also covers offline players. Stats are
+            // not persistent; they are recomputed from these dicts on join, so an
+            // offline player whose entries are gone comes back with zero bonuses.
+            MiningProgress.Clear();
+            MeleeProgress.Clear();
+            RangedProgress.Clear();
+            WalkingProgress.Clear();
+            HungerProgress.Clear();
+            ArmorProgress.Clear();
+            ClothierProgress.Clear();
+            MenderProgress.Clear();
+            PilfererProgress.Clear();
+            ResourcefulProgress.Clear();
+            ForagerProgress.Clear();
+            FurtiveProgress.Clear();
+            PreciseProgress.Clear();
+            TechnicalProgress.Clear();
+            HardyHealthProgress.Clear();
+            BowyerProgress.Clear();
+            ImproviserProgress.Clear();
+            TinkererProgress.Clear();
+            MercilessProgress.Clear();
+            ClaustrophobicRemovalProgress.Clear();
+            COProgress.Clear();
+            TemporalResistanceProgress.Clear();
+            TemporalRechargeProgress.Clear();
+
+            pendingMiningProgressSave = true;
+            pendingMeleeProgressSave = true;
+            pendingRangedProgressSave = true;
+            pendingWalkingProgressSave = true;
+            pendingHungerProgressSave = true;
+            pendingArmorProgressSave = true;
+            pendingClothierProgressSave = true;
+            pendingMenderProgressSave = true;
+            pendingPilfererProgressSave = true;
+            pendingResourcefulProgressSave = true;
+            pendingForagerProgressSave = true;
+            pendingFurtiveProgressSave = true;
+            pendingPreciseProgressSave = true;
+            pendingTechnicalProgressSave = true;
+            pendingHardyHealthProgressSave = true;
+            pendingBowyerProgressSave = true;
+            pendingImproviserProgressSave = true;
+            pendingTinkererProgressSave = true;
+            pendingMercilessProgressSave = true;
+            pendingClaustrophobicRemovalProgressSave = true;
+            pendingCOProgressSave = true;
+            pendingTemporalResistanceSave = true;
+            pendingTemporalRechargeSave = true;
+
+            SaveAllPendingProgress();
+
+            ServerApi.Logger.Notification($"[SeraphLeveling] /trait resetall by {(args.Caller.Player?.PlayerName ?? "console")}: wiped all progression ({onlineReset} online players reset live).");
+            return TextCommandResult.Success(
+                $"Wiped ALL trait progression for every player. {onlineReset} online player(s) were reset live; offline players are reset the next time they join.");
+        }
+
+        /// <summary>
         /// Clears every progression system back to class defaults for one player
         /// and strips the applied stat/trait bonuses. Shared by /trait reset and
         /// the pre-step of /trait import. Sends no chat message.
@@ -17950,11 +18057,8 @@ namespace SeraphLeveling
 
             lock (persistLock)
             {
-                if (ClothierProgress.IsEmpty)
-                {
-                    return;
-                }
-
+                // An empty dict is persisted too. Skipping it would leave the old
+                // blob in the save and resurrect wiped progress on the next load.
                 try
                 {
                     var snapshot = ClothierProgress.ToArray();
@@ -18065,11 +18169,8 @@ namespace SeraphLeveling
 
             lock (persistLock)
             {
-                if (MenderProgress.IsEmpty)
-                {
-                    return;
-                }
-
+                // An empty dict is persisted too. Skipping it would leave the old
+                // blob in the save and resurrect wiped progress on the next load.
                 try
                 {
                     var snapshot = MenderProgress.ToArray();
@@ -18191,11 +18292,8 @@ namespace SeraphLeveling
 
             lock (persistLock)
             {
-                if (PilfererProgress.IsEmpty)
-                {
-                    return;
-                }
-
+                // An empty dict is persisted too. Skipping it would leave the old
+                // blob in the save and resurrect wiped progress on the next load.
                 try
                 {
                     var snapshot = PilfererProgress.ToArray();
@@ -18334,11 +18432,8 @@ namespace SeraphLeveling
 
             lock (persistLock)
             {
-                if (ResourcefulProgress.IsEmpty)
-                {
-                    return;
-                }
-
+                // An empty dict is persisted too. Skipping it would leave the old
+                // blob in the save and resurrect wiped progress on the next load.
                 try
                 {
                     var snapshot = ResourcefulProgress.ToArray();
@@ -18460,11 +18555,8 @@ namespace SeraphLeveling
 
             lock (persistLock)
             {
-                if (ForagerProgress.IsEmpty)
-                {
-                    return;
-                }
-
+                // An empty dict is persisted too. Skipping it would leave the old
+                // blob in the save and resurrect wiped progress on the next load.
                 try
                 {
                     var snapshot = ForagerProgress.ToArray();
@@ -18590,11 +18682,8 @@ namespace SeraphLeveling
 
             lock (persistLock)
             {
-                if (FurtiveProgress.IsEmpty)
-                {
-                    return;
-                }
-
+                // An empty dict is persisted too. Skipping it would leave the old
+                // blob in the save and resurrect wiped progress on the next load.
                 try
                 {
                     var snapshot = FurtiveProgress.ToArray();
@@ -18738,11 +18827,8 @@ namespace SeraphLeveling
 
             lock (persistLock)
             {
-                if (PreciseProgress.IsEmpty)
-                {
-                    return;
-                }
-
+                // An empty dict is persisted too. Skipping it would leave the old
+                // blob in the save and resurrect wiped progress on the next load.
                 try
                 {
                     var snapshot = PreciseProgress.ToArray();
@@ -18916,11 +19002,8 @@ namespace SeraphLeveling
 
             lock (persistLock)
             {
-                if (TechnicalProgress.IsEmpty)
-                {
-                    return;
-                }
-
+                // An empty dict is persisted too. Skipping it would leave the old
+                // blob in the save and resurrect wiped progress on the next load.
                 try
                 {
                     var snapshot = TechnicalProgress.ToArray();
@@ -19028,11 +19111,8 @@ namespace SeraphLeveling
 
             lock (persistLock)
             {
-                if (HardyHealthProgress.IsEmpty)
-                {
-                    return;
-                }
-
+                // An empty dict is persisted too. Skipping it would leave the old
+                // blob in the save and resurrect wiped progress on the next load.
                 try
                 {
                     var snapshot = HardyHealthProgress.ToArray();
@@ -19138,11 +19218,8 @@ namespace SeraphLeveling
 
             lock (persistLock)
             {
-                if (BowyerProgress.IsEmpty)
-                {
-                    return;
-                }
-
+                // An empty dict is persisted too. Skipping it would leave the old
+                // blob in the save and resurrect wiped progress on the next load.
                 try
                 {
                     var snapshot = BowyerProgress.ToArray();
@@ -19251,11 +19328,8 @@ namespace SeraphLeveling
 
             lock (persistLock)
             {
-                if (ImproviserProgress.IsEmpty)
-                {
-                    return;
-                }
-
+                // An empty dict is persisted too. Skipping it would leave the old
+                // blob in the save and resurrect wiped progress on the next load.
                 try
                 {
                     var snapshot = ImproviserProgress.ToArray();
@@ -19364,11 +19438,8 @@ namespace SeraphLeveling
 
             lock (persistLock)
             {
-                if (TinkererProgress.IsEmpty)
-                {
-                    return;
-                }
-
+                // An empty dict is persisted too. Skipping it would leave the old
+                // blob in the save and resurrect wiped progress on the next load.
                 try
                 {
                     var snapshot = TinkererProgress.ToArray();
@@ -19475,11 +19546,8 @@ namespace SeraphLeveling
 
             lock (persistLock)
             {
-                if (MercilessProgress.IsEmpty)
-                {
-                    return;
-                }
-
+                // An empty dict is persisted too. Skipping it would leave the old
+                // blob in the save and resurrect wiped progress on the next load.
                 try
                 {
                     var snapshot = MercilessProgress.ToArray();
@@ -19586,11 +19654,8 @@ namespace SeraphLeveling
 
             lock (persistLock)
             {
-                if (ClaustrophobicRemovalProgress.IsEmpty)
-                {
-                    return;
-                }
-
+                // An empty dict is persisted too. Skipping it would leave the old
+                // blob in the save and resurrect wiped progress on the next load.
                 try
                 {
                     var snapshot = ClaustrophobicRemovalProgress.ToArray();
@@ -19637,11 +19702,8 @@ namespace SeraphLeveling
 
             lock (persistLock)
             {
-                if (COProgress.IsEmpty)
-                {
-                    return;
-                }
-
+                // An empty dict is persisted too. Skipping it would leave the old
+                // blob in the save and resurrect wiped progress on the next load.
                 try
                 {
                     var snapshot = COProgress.ToArray();
@@ -19854,11 +19916,8 @@ namespace SeraphLeveling
 
             lock (persistLock)
             {
-                if (SleepBuffExpiration.IsEmpty)
-                {
-                    return;
-                }
-
+                // An empty dict is persisted too. Skipping it would leave the old
+                // blob in the save and resurrect wiped progress on the next load.
                 try
                 {
                     var snapshot = SleepBuffExpiration.ToArray();

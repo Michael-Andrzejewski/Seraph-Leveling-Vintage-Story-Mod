@@ -3818,6 +3818,8 @@ namespace SeraphLeveling
                     if (level > MaxWalkingSpeedPercent) return TextCommandResult.Error($"Level cannot exceed max ({MaxWalkingSpeedPercent}).");
                     var progress = WalkingProgress.GetOrAdd(targetUid, _ => new WalkingProgressData { CurrentIncrementSize = BaseBlocksWalkedPerIncrement });
                     progress.TotalCredits = level;
+                    progress.BlocksInIncrement = 0;
+                    progress.CurrentIncrementSize = BaseBlocksWalkedPerIncrement + (level * WalkingIncrementStep);
                     pendingWalkingProgressSave = true;
                     ApplyWalkingBonusStatic(targetPlayer, level);
                     UpdateSkillActivityDay(targetUid, "walking");
@@ -3846,9 +3848,14 @@ namespace SeraphLeveling
                 }
                 case "hunger":
                 {
-                    if (level > MaxHungerReductionPercent) return TextCommandResult.Error($"Level cannot exceed max ({MaxHungerReductionPercent}).");
+                    // Ravenous players have a higher per-player cap; use it when the
+                    // entity is available (offline falls back to the global max).
+                    int maxHungerCredits = targetPlayer?.Entity != null ? CalculateMaxHungerCredits(targetPlayer.Entity) : MaxHungerReductionPercent;
+                    if (level > maxHungerCredits) return TextCommandResult.Error($"Level cannot exceed max ({maxHungerCredits}).");
                     var progress = HungerProgress.GetOrAdd(targetUid, _ => new HungerProgressData { CurrentIncrementSize = BaseSecondsPerIncrement });
                     progress.TotalCredits = level;
+                    progress.SecondsInIncrement = 0;
+                    progress.CurrentIncrementSize = BaseSecondsPerIncrement + (level * HungerIncrementStep);
                     pendingHungerProgressSave = true;
                     ApplyHungerBonusStatic(targetPlayer, level);
                     UpdateSkillActivityDay(targetUid, "hunger");
@@ -3860,6 +3867,8 @@ namespace SeraphLeveling
                     if (level > MaxMenderPercent) return TextCommandResult.Error($"Level cannot exceed max ({MaxMenderPercent}).");
                     var progress = MenderProgress.GetOrAdd(targetUid, _ => new MenderProgressData { CurrentIncrementSize = BaseMenderRepairsPerIncrement });
                     progress.TotalCredits = level;
+                    progress.RepairsInIncrement = 0;
+                    progress.CurrentIncrementSize = BaseMenderRepairsPerIncrement + (level * MenderIncrementStep);
                     pendingMenderProgressSave = true;
                     ApplyMenderBonusStatic(targetPlayer, level);
                     UpdateSkillActivityDay(targetUid, "mender");
@@ -3871,6 +3880,8 @@ namespace SeraphLeveling
                     if (level > MaxPilfererPercent) return TextCommandResult.Error($"Level cannot exceed max ({MaxPilfererPercent}).");
                     var progress = PilfererProgress.GetOrAdd(targetUid, _ => new PilfererProgressData { CurrentIncrementSize = BasePilfererPointsPerIncrement });
                     progress.TotalCredits = level;
+                    progress.PointsInIncrement = 0;
+                    progress.CurrentIncrementSize = BasePilfererPointsPerIncrement + (level * PilfererIncrementStep);
                     pendingPilfererProgressSave = true;
                     ApplyPilfererBonusStatic(targetPlayer, level);
                     UpdateSkillActivityDay(targetUid, "pilferer");
@@ -3882,6 +3893,8 @@ namespace SeraphLeveling
                     if (level > MaxResourcefulLootPercent) return TextCommandResult.Error($"Level cannot exceed max ({MaxResourcefulLootPercent}).");
                     var progress = ResourcefulProgress.GetOrAdd(targetUid, _ => new ResourcefulProgressData { CurrentIncrementSize = BaseResourcefulAnimalsPerIncrement });
                     progress.TotalCredits = level;
+                    progress.AnimalsInIncrement = 0;
+                    progress.CurrentIncrementSize = BaseResourcefulAnimalsPerIncrement + (level * ResourcefulIncrementStep);
                     pendingResourcefulProgressSave = true;
                     ApplyResourcefulBonusStatic(targetPlayer, level);
                     UpdateSkillActivityDay(targetUid, "resourceful");
@@ -3893,6 +3906,8 @@ namespace SeraphLeveling
                     if (level > MaxForagerLootPercent) return TextCommandResult.Error($"Level cannot exceed max ({MaxForagerLootPercent}).");
                     var progress = ForagerProgress.GetOrAdd(targetUid, _ => new ForagerProgressData { CurrentIncrementSize = BaseForagerCropsPerIncrement });
                     progress.TotalCredits = level;
+                    progress.CropsInIncrement = 0;
+                    progress.CurrentIncrementSize = BaseForagerCropsPerIncrement + (level * ForagerIncrementStep);
                     pendingForagerProgressSave = true;
                     ApplyForagerBonusStatic(targetPlayer, level);
                     UpdateSkillActivityDay(targetUid, "forager");
@@ -3904,6 +3919,8 @@ namespace SeraphLeveling
                     if (level > MaxFurtivePercent) return TextCommandResult.Error($"Level cannot exceed max ({MaxFurtivePercent}).");
                     var progress = FurtiveProgress.GetOrAdd(targetUid, _ => new FurtiveProgressData { CurrentIncrementSize = BaseFurtiveSneakBlocksPerIncrement });
                     progress.TotalCredits = level;
+                    progress.BlocksInIncrement = 0;
+                    progress.CurrentIncrementSize = BaseFurtiveSneakBlocksPerIncrement + (level * FurtiveIncrementStep);
                     pendingFurtiveProgressSave = true;
                     ApplyFurtiveBonusStatic(targetPlayer, level);
                     UpdateSkillActivityDay(targetUid, "furtive");
@@ -3911,7 +3928,7 @@ namespace SeraphLeveling
                     break;
                 }
                 default:
-                    return TextCommandResult.Error($"Unknown trait '{traitName}'. Valid traits: mining, melee, ranged, walking, hunger, armor, mender, pilferer, resourceful, forager, furtive, precise");
+                    return TextCommandResult.Error($"Unknown trait '{traitName}'. Valid traits: mining, melee, ranged, precise, armor, walking, hunger, mender, pilferer, resourceful, forager, furtive, tempresist, temprecharge");
             }
 
             if (targetPlayer == null)
@@ -5856,19 +5873,11 @@ namespace SeraphLeveling
             bool hasFarsighted = PlayerHasVanillaFarsighted(entity);
             bool hasNervous = PlayerHasVanillaNervous(entity);
 
-            // Farsighted penalty is 15% melee damage, need 15 extra levels to cancel it
-            if (hasFarsighted)
-            {
-                return MaxMeleeDamagePercent + VANILLA_FARSIGHTED_MELEE_PENALTY;
-            }
-
-            // Nervous penalty is 15% melee damage, need 15 extra levels to cancel it
-            if (hasNervous)
-            {
-                return MaxMeleeDamagePercent + VANILLA_NERVOUS_MELEE_PENALTY;
-            }
-
-            return MaxMeleeDamagePercent;
+            // Sum the extra credits; the apply path subtracts BOTH penalties, so
+            // a class with both needs both to be cancellable (15 + 15).
+            int extraCredits = (hasFarsighted ? VANILLA_FARSIGHTED_MELEE_PENALTY : 0)
+                             + (hasNervous ? VANILLA_NERVOUS_MELEE_PENALTY : 0);
+            return MaxMeleeDamagePercent + extraCredits;
         }
 
         /// <summary>
@@ -6409,10 +6418,15 @@ namespace SeraphLeveling
 
                             if (!pieceProgress.HasBeenEquipped)
                             {
+                                // Same grant as the OnArmorTick first-equip path:
+                                // clamp both stats and give the walk-speed bonus too.
                                 pieceProgress.HasBeenEquipped = true;
                                 int firstEquipBonus = GetFirstEquipBonus(armorType);
-                                armorProgress.TotalDurabilityCredits += firstEquipBonus;
+                                armorProgress.TotalDurabilityCredits = Math.Min(armorProgress.TotalDurabilityCredits + firstEquipBonus, MaxArmorDurabilityPercent);
+                                int walkSpeedEquipBonus = GetFirstEquipWalkSpeedBonus(armorType);
+                                armorProgress.TotalWalkSpeedCredits = Math.Min(armorProgress.TotalWalkSpeedCredits + walkSpeedEquipBonus, MaxArmorWalkSpeedPercent);
                                 pendingArmorProgressSave = true;
+                                UpdateSkillActivityDay(playerUid, "armor");
 
                                 ServerApi.Logger.Debug($"[SeraphLeveling] Player {player.PlayerName} first-time equipped {itemCode}, +{firstEquipBonus}% durability bonus");
 
@@ -6894,6 +6908,9 @@ namespace SeraphLeveling
                 if (playerProgress.BlocksInIncrement > 0 || playerProgress.TotalCredits > oldCredits)
                 {
                     pendingWalkingProgressSave = true;
+                    // Walking counts as activity for decay even between level-ups.
+                    // Without this the decay timer only reset on admin commands.
+                    UpdateSkillActivityDay(playerUid, "walking");
                 }
 
                 // If credits increased, update the stat and notify player
@@ -6969,12 +6986,14 @@ namespace SeraphLeveling
                 if (playerProgress.SecondsInIncrement > 0 || playerProgress.TotalCredits > oldCredits)
                 {
                     pendingHungerProgressSave = true;
+                    // Time at full saturation is activity for decay purposes even
+                    // between level-ups; increments get long at high levels.
+                    UpdateSkillActivityDay(playerUid, "hunger");
                 }
 
                 // If credits increased, update the stat and notify player
                 if (playerProgress.TotalCredits > oldCredits)
                 {
-                    UpdateSkillActivityDay(playerUid, "hunger");
                     ApplyHungerBonusStatic(player, playerProgress.TotalCredits);
 
                     // Notify player of level up with raw improvement (shows progress even when cancelling Ravenous)
@@ -7090,6 +7109,11 @@ namespace SeraphLeveling
         {
             // Reuse the same logic as OnGameWorldSave
             OnGameWorldSave();
+            // The temporal dicts persist in their own world-save subscriber
+            // (TemporalTraits.cs), so flush them here too. Without this,
+            // disconnect saves, auto-save ticks, and the reset commands would
+            // leave temporal progress unsaved until the next full world save.
+            SaveTemporalProgressOnWorldSave();
         }
 
         /// <summary>
@@ -7522,13 +7546,21 @@ namespace SeraphLeveling
                 }
             }
 
-            // Check if any values have changed before updating WatchedAttributes
+            // Check if any values have changed before updating WatchedAttributes.
+            // The trait booleans must be part of the comparison: after a class
+            // change with unchanged level/bonus (e.g. both 0), the display attrs
+            // would otherwise keep the old class's traits.
             var watchedAttrs = player.Entity.WatchedAttributes;
             int oldLevel = watchedAttrs.GetInt(WATCHED_MINING_LEVEL, -1);
             int oldBonus = watchedAttrs.GetInt(WATCHED_MINING_BONUS, -1);
             int oldClaustoMining = watchedAttrs.GetInt(WATCHED_CLAUSTROPHOBIC_MINING_REMAINING, -1);
 
-            bool valuesChanged = (oldLevel != level) || (oldBonus != bonusPercent) || (oldClaustoMining != claustrophobicMiningRemaining);
+            bool valuesChanged = (oldLevel != level) || (oldBonus != bonusPercent) || (oldClaustoMining != claustrophobicMiningRemaining)
+                || watchedAttrs.GetBool("sitHasVanillaHardy") != hasVanillaHardy
+                || watchedAttrs.GetBool("sitHasWeak") != hasWeak
+                || watchedAttrs.GetInt(WATCHED_WEAK_MINING_REMAINING, -1) != weakMiningRemaining
+                || watchedAttrs.GetBool("sitHasClaustrophobic") != hasClaustrophobic
+                || watchedAttrs.GetInt(WATCHED_CLAUSTROPHOBIC_ORE_REMAINING, -1) != claustrophobicOreRemaining;
 
             // Only update WatchedAttributes if values changed
             if (valuesChanged)
@@ -7652,19 +7684,11 @@ namespace SeraphLeveling
             bool hasWeak = PlayerHasVanillaWeak(entity);
             bool hasClaustrophobic = PlayerHasVanillaClaustrophobic(entity);
 
-            // Weak penalty is 10% mining speed, need 10 extra levels to cancel it
-            if (hasWeak)
-            {
-                return MaxMiningSpeedPercent + VANILLA_WEAK_MINING_PENALTY;
-            }
-
-            // Claustrophobic penalty is 10% mining speed, need 10 extra levels to cancel it
-            if (hasClaustrophobic)
-            {
-                return MaxMiningSpeedPercent + VANILLA_CLAUSTROPHOBIC_MINING_PENALTY;
-            }
-
-            return MaxMiningSpeedPercent;
+            // Sum the extra credits; the apply path subtracts BOTH penalties, so
+            // a class with both needs both to be cancellable (10 + 10).
+            int extraCredits = (hasWeak ? VANILLA_WEAK_MINING_PENALTY : 0)
+                             + (hasClaustrophobic ? VANILLA_CLAUSTROPHOBIC_MINING_PENALTY : 0);
+            return MaxMiningSpeedPercent + extraCredits;
         }
 
         // Server-side Harmony instance for melee damage tracking
@@ -7788,8 +7812,9 @@ namespace SeraphLeveling
         /// </summary>
         private void PatchEntityDeath(ICoreServerAPI api)
         {
-            if (!EnableDeathPenalty) return;
-
+            // Always patch; Die_Postfix checks EnableDeathPenalty at runtime.
+            // A load-time gate here would leave the patch missing when the legacy
+            // world-blob config migration enables the penalty after startup.
             try
             {
                 var entityType = typeof(Entity);
@@ -7802,15 +7827,17 @@ namespace SeraphLeveling
                     return;
                 }
 
+                var prefixMethod = AccessTools.Method(typeof(EntityDeathPatches),
+                    nameof(EntityDeathPatches.Die_Prefix));
                 var postfixMethod = AccessTools.Method(typeof(EntityDeathPatches),
                     nameof(EntityDeathPatches.Die_Postfix));
-                if (postfixMethod == null)
+                if (prefixMethod == null || postfixMethod == null)
                 {
-                    api.Logger.Error("[SeraphLeveling] Could not find Die_Postfix method!");
+                    api.Logger.Error("[SeraphLeveling] Could not find Die_Prefix/Die_Postfix method!");
                     return;
                 }
 
-                serverHarmony.Patch(dieMethod, postfix: new HarmonyMethod(postfixMethod));
+                serverHarmony.Patch(dieMethod, prefix: new HarmonyMethod(prefixMethod), postfix: new HarmonyMethod(postfixMethod));
                 api.Logger.Notification("[SeraphLeveling] Successfully patched Entity.Die for death penalty");
             }
             catch (Exception ex)
@@ -8054,16 +8081,12 @@ namespace SeraphLeveling
             int farsightedRemaining = hasFarsighted ? CalculateRemainingPenalty(VANILLA_FARSIGHTED_MELEE_PENALTY, level) : 0;
             int nervousRemaining = hasNervous ? CalculateRemainingPenalty(VANILLA_NERVOUS_MELEE_PENALTY, level) : 0;
 
-            // Calculate net bonus after cancelling negative traits
-            int netBonusPercent = level;
-            if (hasFarsighted)
-            {
-                netBonusPercent = Math.Max(0, level - VANILLA_FARSIGHTED_MELEE_PENALTY);
-            }
-            if (hasNervous)
-            {
-                netBonusPercent = Math.Max(0, level - VANILLA_NERVOUS_MELEE_PENALTY);
-            }
+            // Calculate net bonus after cancelling negative traits. Sum the
+            // penalties; assigning per-trait would let the second overwrite the
+            // first for a custom class that has both.
+            int totalMeleePenalty = (hasFarsighted ? VANILLA_FARSIGHTED_MELEE_PENALTY : 0)
+                                  + (hasNervous ? VANILLA_NERVOUS_MELEE_PENALTY : 0);
+            int netBonusPercent = Math.Max(0, level - totalMeleePenalty);
 
             // Cap earned bonus so total (vanilla + earned) doesn't exceed MaxMeleeDamagePercent
             int maxEarnableBonus = MaxMeleeDamagePercent - CapCounted(vanillaSoldierBonus);
@@ -8093,12 +8116,20 @@ namespace SeraphLeveling
                     player.Entity.Stats.Remove("meleeWeaponsDamage", "sitNervousMeleeCancel");
             }
 
-            // Check if any values have changed before updating WatchedAttributes
+            // Check if any values have changed before updating WatchedAttributes.
+            // The trait booleans must be part of the comparison: after a class
+            // change with unchanged level/bonus (e.g. both 0), the display attrs
+            // would otherwise keep the old class's traits.
             var watchedAttrs = player.Entity.WatchedAttributes;
             int oldLevel = watchedAttrs.GetInt(WATCHED_MELEE_LEVEL, -1);
             int oldBonus = watchedAttrs.GetInt(WATCHED_MELEE_BONUS, -1);
 
-            bool valuesChanged = (oldLevel != level) || (oldBonus != netBonusPercent);
+            bool valuesChanged = (oldLevel != level) || (oldBonus != netBonusPercent)
+                || watchedAttrs.GetBool("sitHasVanillaSoldier") != hasVanillaSoldier
+                || watchedAttrs.GetBool("sitHasFarsighted") != hasFarsighted
+                || watchedAttrs.GetInt(WATCHED_FARSIGHTED_REMAINING, -1) != farsightedRemaining
+                || watchedAttrs.GetBool("sitHasNervous") != hasNervous
+                || watchedAttrs.GetInt(WATCHED_NERVOUS_REMAINING, -1) != nervousRemaining;
 
             // Only update WatchedAttributes if values changed
             if (valuesChanged)
@@ -8980,6 +9011,11 @@ namespace SeraphLeveling
             // Unpatch server-side Harmony patches
             serverHarmony?.UnpatchAll("seraphleveling.server");
 
+            // The single-process guards must reset with the unpatch, or the next
+            // world load in the same process would skip re-patching.
+            BowDrawSpeedPatches.PatchedInProcess = false;
+            MeleeAttackSpeedPatches.ResetPatchGuard();
+
             MiningProgress.Clear();
             MeleeProgress.Clear();
             RangedProgress.Clear();
@@ -9000,6 +9036,9 @@ namespace SeraphLeveling
             TinkererProgress.Clear();
             MercilessProgress.Clear();
             ClaustrophobicRemovalProgress.Clear();
+            COProgress.Clear();
+            TemporalResistanceProgress.Clear();
+            TemporalRechargeProgress.Clear();
             lastPlayerPositions.Clear();
             lastSneakingPositions.Clear();
             VanillaTraitsCache.Clear();
@@ -9007,6 +9046,12 @@ namespace SeraphLeveling
             SleepBuffExpiration.Clear();
             SleepBuffMultiplier.Clear();
             LastSleepBuffApplyTick.Clear();
+            playerEquippedArmor.Clear();
+            playerEquippedClothing.Clear();
+            TrackedItemDurabilities.Clear();
+            TrackedSewingKitCounts.Clear();
+            classChangeListeners.Clear();
+            pendingClassChangeReapply.Clear();
             pendingSleepBuffSave = false;
             pendingMiningProgressSave = false;
             pendingMeleeProgressSave = false;
@@ -9028,6 +9073,10 @@ namespace SeraphLeveling
             pendingTinkererProgressSave = false;
             pendingMercilessProgressSave = false;
             pendingClaustrophobicRemovalProgressSave = false;
+            pendingCOProgressSave = false;
+            pendingTemporalResistanceSave = false;
+            pendingTemporalRechargeSave = false;
+            pendingConfigSave = false;
             base.Dispose();
         }
 
@@ -11784,7 +11833,11 @@ namespace SeraphLeveling
             void Keep<T>(string skill, ConcurrentDictionary<string, T> dict) where T : class
             {
                 if (!DeathPenaltyExemptSkills.Contains(skill) && !DisabledSkills.Contains(skill)) return;
-                if (dict.TryGetValue(uid, out var data))
+                // Remove the entry so ResetProgressForPlayer cannot touch it.
+                // A TryGetValue snapshot would keep the same object reference,
+                // and the reset mutates entries in place, so the restore would
+                // write back an already-zeroed object.
+                if (dict.TryRemove(uid, out var data))
                 {
                     restores.Add(() => dict[uid] = data);
                     keptSkills.Add(skill);
@@ -12811,6 +12864,9 @@ namespace SeraphLeveling
             // Apply sleep buff multiplier if active
             float modifiedDamage = ApplyXPMultiplier(player.PlayerUID, damage);
             sharedProgress.DamageInIncrement += modifiedDamage;
+            // Flag here, not just in the caller: the at-max early-return path
+            // reaches this function without setting it.
+            pendingCOProgressSave = true;
 
             while (sharedProgress.DamageInIncrement >= sharedProgress.CurrentIncrementSize && playerProgress.SteadyAimCredits < maxSteadyAimCredits)
             {
@@ -14104,12 +14160,14 @@ namespace SeraphLeveling
                 if (playerProgress.BlocksInIncrement > 0 || playerProgress.TotalCredits > oldCredits)
                 {
                     pendingFurtiveProgressSave = true;
+                    // Sneaking is activity for decay purposes even between
+                    // level-ups; increments get long at high levels.
+                    UpdateSkillActivityDay(playerUid, "furtive");
                 }
 
                 // If credits increased, update the stat and notify player
                 if (playerProgress.TotalCredits > oldCredits)
                 {
-                    UpdateSkillActivityDay(playerUid, "furtive");
                     ApplyFurtiveBonusStatic(player, playerProgress.TotalCredits);
 
                     // Notify player of level up with raw improvement (shows progress even when capped)
@@ -14172,15 +14230,28 @@ namespace SeraphLeveling
         {
             if (entity == null) return false;
 
-            // Check if player class is Malefactor
-            var classTree = entity.WatchedAttributes.GetTreeAttribute("charClass");
-            if (classTree != null)
+            // The class is stored as the "characterClass" string attribute, not a
+            // tree. Check the trait list first so custom classes with Furtive are
+            // detected too, then fall back to the Malefactor class name.
+            return PlayerHasVanillaTraitOrClassStatic(entity, "furtive", "malefactor");
+        }
+
+        /// <summary>
+        /// Check the vanilla characterTraits array for a trait code, with a
+        /// class-name fallback. Same detection pattern as PopulateVanillaTraitsCache.
+        /// </summary>
+        private static bool PlayerHasVanillaTraitOrClassStatic(EntityPlayer entity, string traitCode, string classCode)
+        {
+            if (entity == null) return false;
+
+            string[] traits = entity.WatchedAttributes.GetStringArray("characterTraits", null) ?? Array.Empty<string>();
+            foreach (string trait in traits)
             {
-                string classCode = classTree.GetString("code", "").ToLowerInvariant();
-                return classCode == "malefactor";
+                if (string.Equals(trait, traitCode, StringComparison.OrdinalIgnoreCase)) return true;
             }
 
-            return false;
+            string charClass = entity.WatchedAttributes.GetString("characterClass", "")?.ToLowerInvariant() ?? "";
+            return charClass == classCode;
         }
 
         // =========================================================================
@@ -14336,17 +14407,7 @@ namespace SeraphLeveling
         /// </summary>
         private static bool PlayerHasVanillaPreciseStatic(EntityPlayer entity)
         {
-            if (entity == null) return false;
-
-            // Check if player class is Clockmaker
-            var classTree = entity.WatchedAttributes.GetTreeAttribute("charClass");
-            if (classTree != null)
-            {
-                string classCode = classTree.GetString("code", "").ToLowerInvariant();
-                return classCode == "clockmaker";
-            }
-
-            return false;
+            return PlayerHasVanillaTraitOrClassStatic(entity, "precise", "clockmaker");
         }
 
         // =========================================================================
@@ -14679,16 +14740,9 @@ namespace SeraphLeveling
         /// </summary>
         private static bool PlayerIsHunterStatic(EntityPlayer entity)
         {
-            if (entity == null) return false;
-
-            var classTree = entity.WatchedAttributes.GetTreeAttribute("charClass");
-            if (classTree != null)
-            {
-                string classCode = classTree.GetString("code", "").ToLowerInvariant();
-                return classCode == "hunter";
-            }
-
-            return false;
+            // The removal exists to cancel the Claustrophobic penalty, so gate on
+            // that trait (Hunter carries it in vanilla; custom classes can too).
+            return PlayerHasVanillaTraitOrClassStatic(entity, "claustrophobic", "hunter");
         }
 
         // =========================================================================
@@ -16508,7 +16562,10 @@ namespace SeraphLeveling
             COProgress.TryRemove(uid, out _);
             TemporalResistanceProgress.TryRemove(uid, out _);
             TemporalRechargeProgress.TryRemove(uid, out _);
+            SleepBuffExpiration.TryRemove(uid, out _);
+            SleepBuffMultiplier.TryRemove(uid, out _);
 
+            pendingSleepBuffSave = true;
             pendingMiningProgressSave = true;
             pendingMeleeProgressSave = true;
             pendingRangedProgressSave = true;
@@ -16627,7 +16684,10 @@ namespace SeraphLeveling
             COProgress.Clear();
             TemporalResistanceProgress.Clear();
             TemporalRechargeProgress.Clear();
+            SleepBuffExpiration.Clear();
+            SleepBuffMultiplier.Clear();
 
+            pendingSleepBuffSave = true;
             pendingMiningProgressSave = true;
             pendingMeleeProgressSave = true;
             pendingRangedProgressSave = true;
@@ -17497,6 +17557,8 @@ namespace SeraphLeveling
             // overwrite the file with values from before the reload.
             pendingConfigSave = false;
 
+            SyncExperimentalConfigToClients();
+
             return TextCommandResult.Success(
                 $"Reloaded ModConfig/{CONFIG_FILE_NAME} and reapplied bonuses for {reapplied} online player(s).");
         }
@@ -17663,7 +17725,21 @@ namespace SeraphLeveling
             // Save config
             pendingConfigSave = true;
 
-            return TextCommandResult.Success("All trait configuration values have been reset to defaults.");
+            // Same follow-up as reloadconfig: online players need their stats
+            // recomputed under the new values, and clients need the experimental
+            // settings resynced.
+            int reapplied = 0;
+            foreach (var onlinePlayer in ServerApi.World.AllOnlinePlayers)
+            {
+                if (onlinePlayer is IServerPlayer onlineSp && onlineSp.Entity != null)
+                {
+                    ReapplyAllBonuses(onlineSp);
+                    reapplied++;
+                }
+            }
+            SyncExperimentalConfigToClients();
+
+            return TextCommandResult.Success($"All trait configuration values have been reset to defaults. Reapplied bonuses for {reapplied} online player(s).");
         }
 
         // =========================================================================
@@ -18247,6 +18323,12 @@ namespace SeraphLeveling
                             return;
                         }
 
+                        if (version < 1 || version > 1)
+                        {
+                            ServerApi.Logger.Warning($"[SeraphLeveling] Unknown clothier save format version {version}; not loading");
+                            return;
+                        }
+
                         int playerCount = reader.ReadInt32();
                         for (int i = 0; i < playerCount; i++)
                         {
@@ -18353,6 +18435,12 @@ namespace SeraphLeveling
                         if (magic1 != 0x4D || magic2 != 0x4E || magic3 != 0x44)
                         {
                             ServerApi.Logger.Warning("[SeraphLeveling] Invalid mender progress magic bytes");
+                            return;
+                        }
+
+                        if (version < 1 || version > 2)
+                        {
+                            ServerApi.Logger.Warning($"[SeraphLeveling] Unknown mender save format version {version}; not loading");
                             return;
                         }
 
@@ -18476,6 +18564,12 @@ namespace SeraphLeveling
                         if (magic1 != 0x50 || magic2 != 0x4C || magic3 != 0x46)
                         {
                             ServerApi.Logger.Warning("[SeraphLeveling] Invalid pilferer progress magic bytes");
+                            return;
+                        }
+
+                        if (version < 1 || version > 3)
+                        {
+                            ServerApi.Logger.Warning($"[SeraphLeveling] Unknown pilferer save format version {version}; not loading");
                             return;
                         }
 
@@ -18619,6 +18713,12 @@ namespace SeraphLeveling
                             return;
                         }
 
+                        if (version < 1 || version > 2)
+                        {
+                            ServerApi.Logger.Warning($"[SeraphLeveling] Unknown resourceful save format version {version}; not loading");
+                            return;
+                        }
+
                         int playerCount = reader.ReadInt32();
                         for (int i = 0; i < playerCount; i++)
                         {
@@ -18739,6 +18839,12 @@ namespace SeraphLeveling
                         if (magic1 != 0x46 || magic2 != 0x52 || magic3 != 0x47)
                         {
                             ServerApi.Logger.Warning("[SeraphLeveling] Invalid forager progress magic bytes");
+                            return;
+                        }
+
+                        if (version < 1 || version > 2)
+                        {
+                            ServerApi.Logger.Warning($"[SeraphLeveling] Unknown forager save format version {version}; not loading");
                             return;
                         }
 
@@ -19187,6 +19293,12 @@ namespace SeraphLeveling
                             return;
                         }
 
+                        if (version < 1 || version > 1)
+                        {
+                            ServerApi.Logger.Warning($"[SeraphLeveling] Unknown technical save format version {version}; not loading");
+                            return;
+                        }
+
                         int playerCount = reader.ReadInt32();
                         for (int i = 0; i < playerCount; i++)
                         {
@@ -19292,6 +19404,12 @@ namespace SeraphLeveling
                         if (magic1 != 0x48 || magic2 != 0x44 || magic3 != 0x48)
                         {
                             ServerApi.Logger.Warning("[SeraphLeveling] Invalid hardy health progress magic bytes");
+                            return;
+                        }
+
+                        if (version < 1 || version > 1)
+                        {
+                            ServerApi.Logger.Warning($"[SeraphLeveling] Unknown hardy health save format version {version}; not loading");
                             return;
                         }
 
@@ -19401,6 +19519,12 @@ namespace SeraphLeveling
                         if (magic1 != 0x42 || magic2 != 0x57 || magic3 != 0x59)
                         {
                             ServerApi.Logger.Warning("[SeraphLeveling] Invalid bowyer progress magic bytes");
+                            return;
+                        }
+
+                        if (version < 1 || version > 1)
+                        {
+                            ServerApi.Logger.Warning($"[SeraphLeveling] Unknown bowyer save format version {version}; not loading");
                             return;
                         }
 
@@ -19514,6 +19638,12 @@ namespace SeraphLeveling
                             return;
                         }
 
+                        if (version < 1 || version > 1)
+                        {
+                            ServerApi.Logger.Warning($"[SeraphLeveling] Unknown improviser save format version {version}; not loading");
+                            return;
+                        }
+
                         int playerCount = reader.ReadInt32();
                         for (int i = 0; i < playerCount; i++)
                         {
@@ -19623,6 +19753,12 @@ namespace SeraphLeveling
                             return;
                         }
 
+                        if (version < 1 || version > 1)
+                        {
+                            ServerApi.Logger.Warning($"[SeraphLeveling] Unknown tinkerer save format version {version}; not loading");
+                            return;
+                        }
+
                         int playerCount = reader.ReadInt32();
                         for (int i = 0; i < playerCount; i++)
                         {
@@ -19728,6 +19864,12 @@ namespace SeraphLeveling
                         if (magic1 != 0x4D || magic2 != 0x52 || magic3 != 0x43)
                         {
                             ServerApi.Logger.Warning("[SeraphLeveling] Invalid merciless progress magic bytes");
+                            return;
+                        }
+
+                        if (version < 1 || version > 1)
+                        {
+                            ServerApi.Logger.Warning($"[SeraphLeveling] Unknown merciless save format version {version}; not loading");
                             return;
                         }
 
@@ -20187,6 +20329,12 @@ namespace SeraphLeveling
                             return;
                         }
 
+                        if (version < 1 || version > 1)
+                        {
+                            ServerApi.Logger.Warning($"[SeraphLeveling] Unknown claustrophobic removal save format version {version}; not loading");
+                            return;
+                        }
+
                         int playerCount = reader.ReadInt32();
                         for (int i = 0; i < playerCount; i++)
                         {
@@ -20329,8 +20477,14 @@ namespace SeraphLeveling
 
                 if (charDlg == null)
                 {
-                    // Dialog not loaded yet, try again later
-                    clientApi.Event.RegisterCallback(TryHookCharacterDialog, 1000);
+                    // Dialog not loaded yet, try again later. Count the attempt so a
+                    // dialog that never appears cannot keep the retry loop alive for
+                    // the whole session.
+                    hookAttempts++;
+                    if (hookAttempts < 20)
+                    {
+                        clientApi.Event.RegisterCallback(TryHookCharacterDialog, 1000);
+                    }
                     return;
                 }
 
@@ -20393,8 +20547,12 @@ namespace SeraphLeveling
             catch (Exception ex)
             {
                 clientApi.Logger.Error($"[SeraphLeveling] Failed to hook character dialog: {ex.Message}");
-                // Retry after a delay
-                clientApi.Event.RegisterCallback(TryHookCharacterDialog, 2000);
+                // Retry after a delay, under the same attempt cap as the other branches.
+                hookAttempts++;
+                if (hookAttempts < 20)
+                {
+                    clientApi.Event.RegisterCallback(TryHookCharacterDialog, 2000);
+                }
             }
         }
 
@@ -20561,6 +20719,10 @@ namespace SeraphLeveling
         public override void Dispose()
         {
             harmony?.UnpatchAll("seraphleveling");
+
+            // See the server Dispose: the guards must reset with the unpatch.
+            BowDrawSpeedPatches.PatchedInProcess = false;
+            MeleeAttackSpeedPatches.ResetPatchGuard();
 
             // Unhook from character dialog: put the vanilla handler back in the same
             // slot. Removing our entry instead would shift every later handler and
@@ -22601,8 +22763,20 @@ namespace SeraphLeveling
     /// </summary>
     public static class EntityDeathPatches
     {
-        public static void Die_Postfix(Entity __instance)
+        /// <summary>
+        /// Captures whether the entity was alive before Die ran, so the postfix
+        /// only applies the penalty on the alive-to-dead transition. Die can be
+        /// called more than once per death; without this the sqrt penalty
+        /// would apply once per call.
+        /// </summary>
+        public static void Die_Prefix(Entity __instance, out bool __state)
         {
+            __state = __instance?.Alive ?? false;
+        }
+
+        public static void Die_Postfix(Entity __instance, bool __state)
+        {
+            if (!__state) return;
             if (!SeraphLevelingModSystem.EnableDeathPenalty) return;
             var playerEntity = __instance as EntityPlayer;
             if (playerEntity == null) return;

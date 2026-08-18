@@ -105,6 +105,24 @@ namespace SeraphLeveling
             };
         }
 
+        /// <summary>
+        /// Sends the current experimental settings to every online client.
+        /// Join sends the packet per player; config commands call this so
+        /// connected clients do not keep stale values until rejoin.
+        /// </summary>
+        public void SyncExperimentalConfigToClients()
+        {
+            if (ServerApi == null) return;
+            var msg = BuildFeatureConfigMessage();
+            foreach (var onlinePlayer in ServerApi.World.AllOnlinePlayers)
+            {
+                if (onlinePlayer is IServerPlayer sp)
+                {
+                    try { serverSoundChannel?.SendPacket(msg, sp); } catch { }
+                }
+            }
+        }
+
         /// <summary>Applies a received sync packet to the client-side statics.</summary>
         public static void ApplyFeatureConfigMessage(ExperimentalFeatureConfigMessage msg)
         {
@@ -982,6 +1000,9 @@ namespace SeraphLeveling
 
         /// <summary>See BowDrawSpeedPatches.PatchedInProcess: one application covers both sides.</summary>
         private static bool patchedInProcess;
+
+        /// <summary>Called from Dispose so the next world load in the same process re-patches.</summary>
+        public static void ResetPatchGuard() => patchedInProcess = false;
 
         public static void Apply(Harmony harmony, ICoreAPI api, string side)
         {

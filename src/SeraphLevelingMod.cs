@@ -3456,33 +3456,33 @@ namespace SeraphLeveling
             api.Event.SaveGameLoaded += LoadSleepBuffData;
 
             // Register game tick listener for walking distance tracking (every 500ms)
-            api.Event.RegisterGameTickListener(OnWalkingTick, 500);
+            RegisterSafeTickListener(api, OnWalkingTick, 500, "the walking tick");
 
             // Experimental temporal traits: registers their save/load, world-save, and 1s leveling tick
             InitTemporalTraits(api);
 
             // Register game tick listener for hunger tracking (every 1000ms / 1 second)
-            api.Event.RegisterGameTickListener(OnHungerTick, 1000);
+            RegisterSafeTickListener(api, OnHungerTick, 1000, "the hunger tick");
 
             // Register game tick listener for armor time tracking (every 1000ms / 1 second)
-            api.Event.RegisterGameTickListener(OnArmorTick, 1000);
+            RegisterSafeTickListener(api, OnArmorTick, 1000, "the armour tick");
 
             // Register game tick listener for clothing tracking (every 1000ms / 1 second)
-            api.Event.RegisterGameTickListener(OnClothingTick, 1000);
+            RegisterSafeTickListener(api, OnClothingTick, 1000, "the clothing tick");
 
             // Register game tick listener for Mender repair tracking (every 500ms for responsive detection)
-            api.Event.RegisterGameTickListener(OnMenderRepairTick, 500);
+            RegisterSafeTickListener(api, OnMenderRepairTick, 500, "the mender repair tick");
 
             // Register game tick listener for sneaking distance tracking (every 500ms for Furtive)
-            api.Event.RegisterGameTickListener(OnSneakingTick, 500);
+            RegisterSafeTickListener(api, OnSneakingTick, 500, "the sneaking tick");
 
             // Register decay tick (every 10 seconds, checks for daily decay while online)
-            api.Event.RegisterGameTickListener(OnDecayTick, 10000);
+            RegisterSafeTickListener(api, OnDecayTick, 10000, "the decay tick");
 
             // Register auto-save timer if enabled
             if (AutoSaveIntervalSeconds > 0)
             {
-                autoSaveTimerId = api.Event.RegisterGameTickListener(OnAutoSaveTick, AutoSaveIntervalSeconds * 1000);
+                autoSaveTimerId = RegisterSafeTickListener(api, OnAutoSaveTick, AutoSaveIntervalSeconds * 1000, "the auto save tick");
                 api.Logger.Notification($"[SeraphLeveling] Auto-save enabled every {AutoSaveIntervalSeconds} seconds");
             }
 
@@ -6459,7 +6459,7 @@ namespace SeraphLeveling
 
             foreach (IServerPlayer player in ServerApi.World.AllOnlinePlayers)
             {
-                if (player?.Entity == null) continue;
+                if (!IsPlaying(player)) continue;
                 if (!player.Entity.Alive) continue;
 
                 string playerUid = player.PlayerUID;
@@ -6853,7 +6853,7 @@ namespace SeraphLeveling
 
             foreach (IServerPlayer player in ServerApi.World.AllOnlinePlayers)
             {
-                if (player?.Entity == null) continue;
+                if (!IsPlaying(player)) continue;
 
                 string playerUid = player.PlayerUID;
                 double currentX = player.Entity.Pos.X;
@@ -6937,7 +6937,7 @@ namespace SeraphLeveling
 
             foreach (IServerPlayer player in ServerApi.World.AllOnlinePlayers)
             {
-                if (player?.Entity == null) continue;
+                if (!IsPlaying(player)) continue;
 
                 string playerUid = player.PlayerUID;
 
@@ -10923,7 +10923,7 @@ namespace SeraphLeveling
             foreach (var onlinePlayer in ServerApi.World.AllOnlinePlayers)
             {
                 var player = onlinePlayer as IServerPlayer;
-                if (player?.Entity == null) continue;
+                if (!IsPlaying(player)) continue;
 
                 string playerUid = player.PlayerUID;
 
@@ -13866,7 +13866,7 @@ namespace SeraphLeveling
 
             foreach (IServerPlayer player in ServerApi.World.AllOnlinePlayers)
             {
-                if (player?.Entity == null) continue;
+                if (!IsPlaying(player)) continue;
                 if (!player.Entity.Alive) continue;
 
                 string playerUid = player.PlayerUID;
@@ -13983,7 +13983,7 @@ namespace SeraphLeveling
 
             foreach (IServerPlayer player in ServerApi.World.AllOnlinePlayers)
             {
-                if (player?.Entity == null) continue;
+                if (!IsPlaying(player)) continue;
                 if (!player.Entity.Alive) continue;
 
                 string playerUid = player.PlayerUID;
@@ -14073,7 +14073,7 @@ namespace SeraphLeveling
 
             foreach (IServerPlayer player in ServerApi.World.AllOnlinePlayers)
             {
-                if (player?.Entity == null) continue;
+                if (!IsPlaying(player)) continue;
 
                 string playerUid = player.PlayerUID;
 

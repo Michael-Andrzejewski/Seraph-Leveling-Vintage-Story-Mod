@@ -154,6 +154,84 @@ namespace SeraphLeveling
         private static SystemTemporalStability temporalSystemRef;
 
         // ===================================================================
+        // SHARED GUARDS
+        // ===================================================================
+
+        /// <summary>
+        /// Is this player far enough into the world to be asked questions
+        /// about their entity?
+        ///
+        /// A player who is still joining is already in AllOnlinePlayers, and
+        /// their entity is already there and already reports itself alive,
+        /// but the game has not built its sided properties yet. Anything that
+        /// reads those, GetBehavior above all, throws a null reference on it.
+        ///
+        /// The window is normally a few milliseconds. It gets much wider on a
+        /// slow join, which is exactly when the server logs "Delayed join,
+        /// need to load one spawn chunk first", and on a heavily modded world
+        /// that can last several seconds.
+        ///
+        /// Alive is not a substitute: it reads a watched attribute, which is
+        /// present long before the entity is put together.
+        /// </summary>
+        internal static bool IsPlaying(IServerPlayer player)
+        {
+            var entity = player?.Entity;
+            if (entity == null) return false;
+            if (player.ConnectionState != EnumClientState.Playing) return false;
+
+            // Belt and braces, in the order that cannot itself throw. Plain
+            // fields first: SidedProperties reads World.Side to decide which
+            // half to hand back, so on an entity that has a shape but no
+            // world yet, asking for it is the very fault being guarded
+            // against. Properties null is the case actually seen in the wild.
+            if (entity.World == null || entity.Properties == null) return false;
+
+            return entity.SidedProperties != null;
+        }
+
+        /// <summary>
+        /// Registers a tick listener that cannot bring the server down.
+        ///
+        /// A handler registered the plain way has no error handler, and the
+        /// game rethrows anything that escapes one of those. The rethrow
+        /// happens before the listener records that it ran, so it is still
+        /// due on the very next pass of the server loop, and it fires again,
+        /// and again, as fast as the loop turns.
+        ///
+        /// One null reference during a slow join therefore became a hundred
+        /// thousand of them in three seconds, filled the log with sixty nine
+        /// megabytes of the same stack, and tripped DieAboveErrorCount, which
+        /// shut the server down before the player had finished joining.
+        ///
+        /// Handing the game an error handler is what stops that: the listener
+        /// records that it ran either way, so a fault costs one line a minute
+        /// instead of the world.
+        /// </summary>
+        private long RegisterSafeTickListener(ICoreServerAPI api, Action<float> handler, int intervalMs, string what)
+        {
+            return api.Event.RegisterGameTickListener(
+                handler,
+                ex => ComplainAbout(api, what, ex),
+                intervalMs);
+        }
+
+        /// <summary>When each tick listener last complained, so one fault is one line a minute.</summary>
+        private readonly ConcurrentDictionary<string, long> lastComplaintMs = new ConcurrentDictionary<string, long>();
+
+        private void ComplainAbout(ICoreServerAPI api, string what, Exception ex)
+        {
+            long now = api.World.ElapsedMilliseconds;
+            long last = lastComplaintMs.TryGetValue(what, out long when) ? when : long.MinValue / 2;
+
+            if (now - last < 60000) return;
+            lastComplaintMs[what] = now;
+
+            api.Logger.Error($"[SeraphLeveling] {what} threw and was skipped. This will be reported at most once a minute.");
+            api.Logger.Error(ex);
+        }
+
+        // ===================================================================
         // INIT (called once from StartServerSide)
         // ===================================================================
 
@@ -168,7 +246,7 @@ namespace SeraphLeveling
                 api.Event.GameWorldSave += SaveTemporalProgressOnWorldSave;
 
                 // 1 second cadence: matches the per-tick second we add while at low stability.
-                api.Event.RegisterGameTickListener(OnTemporalTick, 1000);
+                RegisterSafeTickListener(api, OnTemporalTick, 1000, "the temporal traits tick");
 
                 if (TemporalResistanceEnabled || TemporalRechargeEnabled)
                 {
@@ -208,7 +286,7 @@ namespace SeraphLeveling
 
             foreach (IServerPlayer player in ServerApi.World.AllOnlinePlayers)
             {
-                if (player?.Entity == null || !player.Entity.Alive) continue;
+                if (!IsPlaying(player) || !player.Entity.Alive) continue;
 
                 var beh = player.Entity.GetBehavior<EntityBehaviorTemporalStabilityAffected>();
                 if (beh == null) continue;

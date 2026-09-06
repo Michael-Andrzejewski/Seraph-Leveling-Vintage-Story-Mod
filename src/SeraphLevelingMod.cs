@@ -3696,7 +3696,73 @@ namespace SeraphLeveling
             {
                 return TextCommandResult.Error("Could not find player entity");
             }
-            return TextCommandResult.Success(BuildProgressReport(player));
+            return TextCommandResult.Success(BuildProgressSummary(player));
+        }
+
+        /// <summary>
+        /// The full report for the handbook page: the /trait all summary first,
+        /// then every skill's own status text (the same text /trait mining,
+        /// /trait melee and so on print), so per-tool progress and points to
+        /// the next level are visible without a command.
+        /// </summary>
+        public static string BuildProgressReport(IPlayer player)
+        {
+            var sb = new StringBuilder();
+            sb.AppendLine(BuildProgressSummary(player));
+
+            var inst = Instance;
+            if (inst == null) return sb.ToString().TrimEnd();
+
+            var args = new TextCommandCallingArgs
+            {
+                Caller = new Caller { Player = player, FromChatGroupId = GlobalConstants.GeneralChatGroup }
+            };
+
+            void Section(string title, System.Func<TextCommandCallingArgs, TextCommandResult> handler)
+            {
+                try
+                {
+                    var result = handler(args);
+                    if (result == null || string.IsNullOrWhiteSpace(result.StatusMessage)) return;
+                    sb.AppendLine();
+                    sb.AppendLine($"--- {title} ---");
+                    sb.AppendLine(result.StatusMessage.TrimEnd());
+                }
+                catch (Exception ex)
+                {
+                    sb.AppendLine();
+                    sb.AppendLine($"--- {title} ---");
+                    sb.AppendLine("(could not read: " + ex.Message + ")");
+                }
+            }
+
+            Section("Mining", inst.OnTraitMiningCommand);
+            Section("Melee", inst.OnTraitMeleeCommand);
+            Section("Ranged", inst.OnTraitRangedCommand);
+            Section("Walking", inst.OnTraitWalkingCommand);
+            Section("Hunger", inst.OnTraitHungerCommand);
+            Section("Armor", inst.OnTraitArmorCommand);
+            Section("Clothier", inst.OnTraitClothierCommand);
+            Section("Mender", inst.OnTraitMenderCommand);
+            Section("Pilferer", inst.OnTraitPilfererCommand);
+            Section("Resourceful", inst.OnTraitResourcefulCommand);
+            Section("Forager", inst.OnTraitForagerCommand);
+            Section("Furtive", inst.OnTraitFurtiveCommand);
+            Section("Precise", inst.OnTraitPreciseCommand);
+            Section("Technical", inst.OnTraitTechnicalCommand);
+            Section("Hardy Health", inst.OnTraitHardyHealthCommand);
+            Section("Bowyer", inst.OnTraitBowyerCommand);
+            Section("Improviser", inst.OnTraitImproviserCommand);
+            Section("Tinkerer", inst.OnTraitTinkererCommand);
+            Section("Merciless", inst.OnTraitMercilessCommand);
+            Section("Claustrophobic", inst.OnTraitClaustrophobicCommand);
+            if (IsCombatOverhaulLoaded) Section("Combat Overhaul proficiencies", inst.OnTraitCOProficiencyCommand);
+            Section("Temporal Resistance", inst.OnTraitTempResistCommand);
+            Section("Temporal Recharge", inst.OnTraitTempRechargeCommand);
+            Section("Skill decay", inst.OnTraitDecayCommand);
+            Section("Sleep buff", inst.OnTraitSleepBuffCommand);
+
+            return sb.ToString().TrimEnd();
         }
 
         /// <summary>
@@ -3705,7 +3771,7 @@ namespace SeraphLeveling
         /// handbook page "Seraph Leveling: My Progress" can show it without a
         /// command.
         /// </summary>
-        public static string BuildProgressReport(IPlayer player)
+        public static string BuildProgressSummary(IPlayer player)
         {
             string playerUid = player.PlayerUID;
             var sb = new StringBuilder();

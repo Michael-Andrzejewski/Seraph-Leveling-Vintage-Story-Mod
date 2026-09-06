@@ -57,6 +57,12 @@ namespace SeraphLeveling
         public int HungerBaseSecondsPerIncrement { get; set; } = 300;
         public int HungerIncrementStep { get; set; } = 60;
         public int HungerMaxReductionPercent { get; set; } = 25;
+        /// <summary>
+        /// Hunger progress counts while saturation is at or above this percent of the
+        /// maximum (default 100 = only at exactly full). Mods that remove the saturation
+        /// pause make "exactly full" unreachable; 95 or 90 keeps the skill trainable there.
+        /// </summary>
+        public int HungerSaturationThresholdPercent { get; set; } = 100;
 
         // Armor progression
         public int ArmorBaseSecondsPerIncrement { get; set; } = 2880;
@@ -498,6 +504,15 @@ namespace SeraphLeveling
         /// everyone converges to the same endgame totals).
         /// </summary>
         public bool EnableClassCapOffsets { get; set; } = false;
+
+        /// <summary>
+        /// When false, negative class traits (Weak, Claustrophobic, Farsighted, Nervous,
+        /// Nearsighted, Frail, Civil, Kind, Heavyhanded, Ravenous, and the Combat Overhaul
+        /// negatives) are never cancelled or removed by leveling: bonuses stack on top of
+        /// them from level 0 and the penalty stays for the life of the character. Default
+        /// true (classic behavior: leveling pays the penalty off first, then adds bonus).
+        /// </summary>
+        public bool CancelNegativeTraits { get; set; } = true;
 
         // =========================================================================
         // DEBUG SETTINGS
@@ -1882,6 +1897,7 @@ namespace SeraphLeveling
         public static int BaseSecondsPerIncrement = 300;   // Base seconds needed for first credit (5 minutes)
         public static int HungerIncrementStep = 60;        // How many more seconds each subsequent credit needs (1 minute)
         public static int MaxHungerReductionPercent = 25;  // 25% max hunger rate reduction (to 75% rate)
+        public static int HungerSaturationThresholdPercent = 100;  // count time at >= this % of max saturation
 
         // Vanilla Ravenous trait hunger rate increase (used for cap calculations)
         // Blackguard has +30% hunger rate, so earning 25% brings them back to nearly normal
@@ -2430,6 +2446,7 @@ namespace SeraphLeveling
         // Notification settings
         public static float GlobalXPRateMultiplier = 1.0f;
         public static bool EnableClassCapOffsets = false;
+        public static bool CancelNegativeTraits = true;
 
         /// <summary>
         /// The part of a vanilla class-trait bonus that counts against the earnable
@@ -2598,6 +2615,8 @@ namespace SeraphLeveling
         /// </summary>
         private static float TraitStatPenalty(EntityPlayer entity, string statCategory)
         {
+            // With CancelNegativeTraits off the CO penalty is left in place untouched.
+            if (!CancelNegativeTraits) return 0f;
             return Math.Min(0f, TraitStatValue(entity, statCategory));
         }
 
@@ -6332,7 +6351,13 @@ namespace SeraphLeveling
         {
             if (string.IsNullOrEmpty(itemCode)) return null;
 
-            string codeToCheck = itemCode.StartsWith("game:") ? itemCode.Substring(5) : itemCode;
+            // Strip ANY domain prefix, not only "game:". Collectible.Code.ToString()
+            // always carries a domain, so the old game:-only strip meant armor from
+            // the Combat Overhaul armory, Ancient Armory or any other mod never
+            // counted for first-equip bonuses or armor progression (Edmmuz, May 2026).
+            string codeToCheck = itemCode;
+            int colon = itemCode.IndexOf(':');
+            if (colon >= 0) codeToCheck = itemCode.Substring(colon + 1);
 
             // Check if it's armor (starts with "armor-")
             if (!codeToCheck.StartsWith("armor-")) return null;
@@ -6949,8 +6974,9 @@ namespace SeraphLeveling
                 float currentSaturation = hungerTree.GetFloat("currentsaturation", 0);
                 float maxSaturation = hungerTree.GetFloat("maxsaturation", 1500);
 
-                // Only count time when at exactly max saturation
-                if (currentSaturation < maxSaturation) continue;
+                // Count time at or above the configured share of max saturation
+                // (100 = only at exactly full, the original rule).
+                if (currentSaturation < maxSaturation * (HungerSaturationThresholdPercent / 100f)) continue;
 
                 // Get or create player progress data
                 var playerProgress = HungerProgress.GetOrAdd(playerUid, _ => new HungerProgressData
@@ -7182,6 +7208,29 @@ namespace SeraphLeveling
                 HasCOMeleeExpert = IsCombatOverhaulLoaded && (traitSet.Contains("meleeexpert") || traitSet.Contains("melee expert") || traitSet.Contains("expert in melee") || characterClass == "blackguard"),
                 HasCOSelfDefence = IsCombatOverhaulLoaded && (traitSet.Contains("selfdefence") || traitSet.Contains("self defence") || characterClass == "tailor")
             };
+
+            // CancelNegativeTraits off: every Apply* function reads these flags to decide
+            // how much penalty to pay off before bonus shows and whether to write a
+            // counter-stat. Reporting "no negative traits" makes them skip both, so the
+            // vanilla penalty stays and earned bonus applies from level 0.
+            if (!CancelNegativeTraits)
+            {
+                cache.HasFarsighted = false;
+                cache.HasNervous = false;
+                cache.HasNearsighted = false;
+                cache.HasFrail = false;
+                cache.HasCivil = false;
+                cache.HasWeak = false;
+                cache.HasKind = false;
+                cache.HasHeavyhanded = false;
+                cache.HasClaustrophobic = false;
+                cache.HasRavenous = false;
+                cache.HasCOTremblingAim = false;
+                cache.HasCOClumsyHands = false;
+                cache.HasCOFearOfMelee = false;
+                cache.HasCOWeakHand = false;
+                cache.HasCONervous = false;
+            }
 
             VanillaTraitsCache[playerUid] = cache;
 
@@ -10444,6 +10493,7 @@ namespace SeraphLeveling
                 BaseSecondsPerIncrement = AtLeastOne(config.HungerBaseSecondsPerIncrement, "HungerBaseSecondsPerIncrement");
                 HungerIncrementStep = AtLeastOne(config.HungerIncrementStep, "HungerIncrementStep");
                 MaxHungerReductionPercent = config.HungerMaxReductionPercent;
+                HungerSaturationThresholdPercent = Math.Clamp(config.HungerSaturationThresholdPercent, 1, 100);
 
                 BaseSecondsInArmorPerIncrement = AtLeastOne(config.ArmorBaseSecondsPerIncrement, "ArmorBaseSecondsPerIncrement");
                 ArmorTimeIncrementStep = AtLeastOne(config.ArmorTimeIncrementStep, "ArmorTimeIncrementStep");
@@ -10634,6 +10684,7 @@ namespace SeraphLeveling
                 }
 
                 EnableClassCapOffsets = config.EnableClassCapOffsets;
+                CancelNegativeTraits = config.CancelNegativeTraits;
                 if (EnableClassCapOffsets)
                 {
                     api.Logger.Notification("[SeraphLeveling] Class cap offsets ENABLED: starting class traits shift each skill's endgame ceiling.");
@@ -10727,6 +10778,7 @@ namespace SeraphLeveling
                 config.HungerBaseSecondsPerIncrement = BaseSecondsPerIncrement;
                 config.HungerIncrementStep = HungerIncrementStep;
                 config.HungerMaxReductionPercent = MaxHungerReductionPercent;
+                config.HungerSaturationThresholdPercent = HungerSaturationThresholdPercent;
 
                 config.ArmorBaseSecondsPerIncrement = BaseSecondsInArmorPerIncrement;
                 config.ArmorTimeIncrementStep = ArmorTimeIncrementStep;
@@ -10840,6 +10892,7 @@ namespace SeraphLeveling
 
                 config.GlobalXPRateMultiplier = GlobalXPRateMultiplier;
                 config.EnableClassCapOffsets = EnableClassCapOffsets;
+                config.CancelNegativeTraits = CancelNegativeTraits;
 
                 config.TemporalResistanceEnabled = TemporalResistanceEnabled;
                 config.TemporalResistanceMaxPercent = TemporalResistanceMaxPercent;
@@ -14675,6 +14728,9 @@ namespace SeraphLeveling
 
             // Already removed
             if (progress.IsRemoved) return;
+
+            // Servers that keep negative traits for life never remove Claustrophobic.
+            if (!CancelNegativeTraits) return;
 
             // Check mining speed threshold
             var miningProgress = MiningProgress.GetOrAdd(playerUid, _ => new MiningProgressData());
@@ -22010,10 +22066,30 @@ namespace SeraphLeveling
             // earlier replacement step produced them.
             __result = CollapseDuplicateBullets(__result);
 
+            // Last line of defense: when another mod (Player Model Library, Gloome
+            // Classes, Racial Equality) rewrites vanilla's trait text so none of the
+            // orphan matches above fire, the raw key "trait-sitarmormastery" survives
+            // at the top of the list. Our own rendered lines never contain that
+            // literal (they are localized markup), so any line still carrying a raw
+            // sit* key is a leftover and is dropped.
+            __result = DropRawTraitKeyLines(__result);
+
             // Final trim
             __result = __result.Trim();
 
             ClientApi.Logger.Debug($"[SeraphLeveling] Modified result: {__result}");
+        }
+
+        private static string DropRawTraitKeyLines(string text)
+        {
+            if (string.IsNullOrEmpty(text) || text.IndexOf("trait-sit", StringComparison.OrdinalIgnoreCase) < 0) return text;
+            var kept = new List<string>();
+            foreach (string line in text.Split('\n'))
+            {
+                if (line.IndexOf("trait-sit", StringComparison.OrdinalIgnoreCase) >= 0) continue;
+                kept.Add(line);
+            }
+            return string.Join("\n", kept);
         }
 
         private static readonly System.Text.RegularExpressions.Regex DuplicateBulletPair =

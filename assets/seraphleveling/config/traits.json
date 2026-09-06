@@ -58,5 +58,45 @@
     "code": "sittechnicalmastery",
     "type": "positive",
     "attributes": {}
+  },
+  {
+    "code": "sitfurtivemastery",
+    "type": "positive",
+    "attributes": {}
+  },
+  {
+    "code": "sitprecisemastery",
+    "type": "positive",
+    "attributes": {}
+  },
+  {
+    "code": "sithardyhealthmastery",
+    "type": "positive",
+    "attributes": {}
+  },
+  {
+    "code": "sitbowyermastery",
+    "type": "positive",
+    "attributes": {}
+  },
+  {
+    "code": "sitimprovisermastery",
+    "type": "positive",
+    "attributes": {}
+  },
+  {
+    "code": "sittinkerermastery",
+    "type": "positive",
+    "attributes": {}
+  },
+  {
+    "code": "sitmercilessmastery",
+    "type": "positive",
+    "attributes": {}
+  },
+  {
+    "code": "sitclaustrophobicremoved",
+    "type": "positive",
+    "attributes": {}
   }
 ]

@@ -14,6 +14,7 @@ using Vintagestory.API.Config;
 using Vintagestory.API.Datastructures;
 using Vintagestory.API.MathTools;
 using Vintagestory.API.Server;
+using Vintagestory.API.Util;
 
 namespace SeraphLeveling
 {
@@ -2664,6 +2665,14 @@ namespace SeraphLeveling
             isDisposed = false;
 
             // Register network channel for level-up sound and experimental-feature config sync
+            // Keep the handbook progress page current: every 15 s, re-sync any
+            // player whose report changed (unlocks, /trait setplayer, resets).
+            api.Event.RegisterGameTickListener(dt =>
+            {
+                foreach (var p in api.World.AllOnlinePlayers)
+                    if (p is IServerPlayer sp && sp.Entity != null) PushProgressReport(sp);
+            }, 15000);
+
             serverSoundChannel = api.Network.RegisterChannel("seraphleveling")
                 .RegisterMessageType<LevelUpSoundMessage>()
                 .RegisterMessageType<ExperimentalFeatureConfigMessage>();
@@ -3674,7 +3683,17 @@ namespace SeraphLeveling
             {
                 return TextCommandResult.Error("Could not find player entity");
             }
+            return TextCommandResult.Success(BuildProgressReport(player));
+        }
 
+        /// <summary>
+        /// The full progression report for a player, one line per skill. Used by
+        /// /trait all and pushed to the client as a watched attribute so the
+        /// handbook page "Seraph Leveling: My Progress" can show it without a
+        /// command.
+        /// </summary>
+        public static string BuildProgressReport(IPlayer player)
+        {
             string playerUid = player.PlayerUID;
             var sb = new StringBuilder();
             sb.AppendLine("=== All Trait Progression ===");
@@ -3741,7 +3760,30 @@ namespace SeraphLeveling
             var mercilessProg = MercilessProgress.GetOrAdd(playerUid, _ => new MercilessProgressData());
             sb.AppendLine($"Merciless: {(mercilessProg.IsUnlocked ? "UNLOCKED" : "locked")}");
 
-            return TextCommandResult.Success(sb.ToString().TrimEnd());
+            return sb.ToString().TrimEnd();
+        }
+
+        public const string WATCHED_PROGRESS_REPORT = "seraphleveling:progressReport";
+
+        /// <summary>
+        /// Sync the progression report to the player's client (watched attributes
+        /// replicate automatically). Only writes when the text changed, so the
+        /// 15 second refresh costs nothing when nothing happened.
+        /// </summary>
+        public static void PushProgressReport(IServerPlayer player)
+        {
+            try
+            {
+                if (player?.Entity == null) return;
+                string report = BuildProgressReport(player);
+                if (player.Entity.WatchedAttributes.GetString(WATCHED_PROGRESS_REPORT) == report) return;
+                player.Entity.WatchedAttributes.SetString(WATCHED_PROGRESS_REPORT, report);
+                player.Entity.WatchedAttributes.MarkPathDirty(WATCHED_PROGRESS_REPORT);
+            }
+            catch (Exception ex)
+            {
+                ServerApi?.Logger?.Warning($"[SeraphLeveling] Could not sync the progress report for {player?.PlayerName}: {ex.Message}");
+            }
         }
 
         /// <summary>
@@ -7497,6 +7539,8 @@ namespace SeraphLeveling
         /// </summary>
         private static void NotifyLevelUp(IServerPlayer player, string message)
         {
+            PushProgressReport(player);
+
             if (EnableLevelUpMessages)
             {
                 player.SendMessage(GlobalConstants.GeneralChatGroup, message, EnumChatType.Notification);
@@ -20405,6 +20449,64 @@ namespace SeraphLeveling
     /// Client-side mod system that displays mining progression in the character traits dialog.
     /// Uses Harmony to patch the CharacterSystem's trait display method and adds scrollable traits UI.
     /// </summary>
+    /// <summary>
+    /// Handbook page "Seraph Leveling: My Progress". The text is rebuilt every
+    /// time the page is opened from the report the server keeps in the
+    /// player's watched attributes, so it always shows the exact current
+    /// numbers without a chat command.
+    /// </summary>
+    public class SeraphProgressPage : GuiHandbookTextPage
+    {
+        private readonly ICoreClientAPI capi;
+
+        public SeraphProgressPage(ICoreClientAPI capi)
+        {
+            this.capi = capi;
+            pageCode = "seraphleveling-progress";
+            Title = "sl-progress-title";
+            categoryCode = "guide";
+            Text = "sl-progress-title";
+            Init(capi);
+        }
+
+        private string CurrentVtml()
+        {
+            string report = capi.World?.Player?.Entity?.WatchedAttributes?.GetString(SeraphLevelingModSystem.WATCHED_PROGRESS_REPORT);
+            var sb = new StringBuilder();
+            sb.Append("<strong>").Append(Lang.Get("sl-progress-title")).Append("</strong><br><br>");
+            if (string.IsNullOrEmpty(report))
+            {
+                sb.Append(Lang.Get("sl-progress-waiting"));
+            }
+            else
+            {
+                foreach (string raw in report.Split('\n'))
+                {
+                    string line = raw.Trim();
+                    if (line.Length == 0) { sb.Append("<br>"); continue; }
+                    string safe = line.Replace("&", "&amp;").Replace("<", "&lt;").Replace(">", "&gt;");
+                    if (line.StartsWith("===") || line.StartsWith("---"))
+                        sb.Append("<strong>").Append(safe.Trim('=', '-', ' ')).Append("</strong><br>");
+                    else
+                        sb.Append(safe).Append("<br>");
+                }
+            }
+            sb.Append("<br>").Append(Lang.Get("sl-progress-footer"));
+            return sb.ToString();
+        }
+
+        public override void ComposePage(GuiComposer detailViewGui, ElementBounds textBounds, ItemStack[] allstacks, ActionConsumable<string> openDetailPageFor)
+        {
+            var comps = VtmlUtil.Richtextify(capi, CurrentVtml(), CairoFont.WhiteSmallText().WithLineHeightMultiplier(1.2));
+            detailViewGui.AddRichtext(comps, textBounds, "richtext");
+        }
+
+        public override PageText GetPageText()
+        {
+            return new PageText { Title = Lang.Get("sl-progress-title").ToSearchFriendly(), Text = CurrentVtml() };
+        }
+    }
+
     public class SeraphLevelingClientSystem : ModSystem
     {
         private ICoreClientAPI clientApi;
@@ -20465,6 +20567,13 @@ namespace SeraphLeveling
 
             // Register event to hook into character dialog when it's loaded
             api.Event.PlayerJoin += OnPlayerJoin;
+
+            // Live progression page in the handbook (Guides section).
+            var handbook = api.ModLoader.GetModSystem<ModSystemSurvivalHandbook>();
+            if (handbook != null)
+            {
+                handbook.OnInitCustomPages += pages => pages.Add(new SeraphProgressPage(api));
+            }
         }
 
         /// <summary>

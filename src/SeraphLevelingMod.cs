@@ -2063,7 +2063,11 @@ namespace SeraphLeveling
         private static volatile bool pendingMenderProgressSave = false;
 
         // Durability tracking for repair detection - key is "playerUid_slotId", value is last known durability
-        private static ConcurrentDictionary<string, int> TrackedItemDurabilities = new ConcurrentDictionary<string, int>();
+        // Keyed by player, slot and item code; the value carries the item's own tracking id
+        // so a fresh item of the same code swapped into the slot does not read as a repair.
+        private static ConcurrentDictionary<string, (long Id, int Durability)> TrackedItemDurabilities = new ConcurrentDictionary<string, (long, int)>();
+        private const string TRACK_ID_ATTR = "sitTrackId";
+        private static long nextTrackId = 1;
 
         // Sleep tracking - key is playerUid, value is Calendar.TotalHours when the player mounted a bed.
         // Written by DidMount_Postfix, consumed by DidUnmount_Postfix to verify real sleep.
@@ -2700,7 +2704,6 @@ namespace SeraphLeveling
             api.ChatCommands.Create("trait")
                 .WithDescription("Manage and view trait progression")
                 .RequiresPrivilege(Privilege.chat)
-                .RequiresPlayer()
                 .HandleWith(OnTraitHelpCommand)
                 .BeginSubCommand("mining")
                     .WithDescription("View your mining progression stats")
@@ -3520,12 +3523,7 @@ namespace SeraphLeveling
             // Register decay tick (every 10 seconds, checks for daily decay while online)
             RegisterSafeTickListener(api, OnDecayTick, 10000, "the decay tick");
 
-            // Register auto-save timer if enabled
-            if (AutoSaveIntervalSeconds > 0)
-            {
-                autoSaveTimerId = RegisterSafeTickListener(api, OnAutoSaveTick, AutoSaveIntervalSeconds * 1000, "the auto save tick");
-                api.Logger.Notification($"[SeraphLeveling] Auto-save enabled every {AutoSaveIntervalSeconds} seconds");
-            }
+            RestartAutoSaveTimer(api);
 
             // Hook into player disconnect to clean up position tracking and save data
             api.Event.PlayerDisconnect += OnPlayerDisconnect;
@@ -3536,56 +3534,41 @@ namespace SeraphLeveling
         /// <summary>
         /// Handler for /trait command (shows help).
         /// </summary>
+        /// <summary>
+        /// Value of an optional integer argument, or null when the player left it
+        /// out. The engine's IntArgParser.GetValue() returns a boxed default (0)
+        /// for a missing optional argument instead of null, so "OptInt(args, 0)"
+        /// always has a value and every "show or set" command took the set branch:
+        /// a bare /trait mininglevel wiped the caller's mining credits to zero.
+        /// </summary>
+        internal static int? OptInt(TextCommandCallingArgs args, int index)
+        {
+            if (args?.Parsers == null || index >= args.Parsers.Count) return null;
+            if (args.Parsers[index] is ArgumentParserBase p && p.IsMissing) return null;
+            return (int?)args[index];
+        }
+
         private TextCommandResult OnTraitHelpCommand(TextCommandCallingArgs args)
         {
+            // Built from the registered subcommands so the list can never fall
+            // behind the commands again (the hand-written list covered 45 of 114).
+            var cmd = ServerApi?.ChatCommands.Get("trait");
+            if (cmd?.AllSubcommands == null || cmd.AllSubcommands.Count == 0)
+                return TextCommandResult.Success("Usage: /trait &lt;subcommand&gt;. Try /trait all for your progress.");
+
+            static string Esc(string t) => (t ?? "").Replace("<", "&lt;").Replace(">", "&gt;");
+            var player = new StringBuilder();
+            var admin = new StringBuilder();
+            foreach (var kv in cmd.AllSubcommands.OrderBy(k => k.Key, StringComparer.OrdinalIgnoreCase))
+            {
+                string desc = kv.Value.Description ?? "";
+                bool isAdmin = desc.IndexOf("admin", StringComparison.OrdinalIgnoreCase) >= 0;
+                (isAdmin ? admin : player).Append("  /trait ").Append(kv.Key).Append(" - ").Append(Esc(desc)).Append('\n');
+            }
             return TextCommandResult.Success(
-                "Usage:\n" +
-                "  /trait mining - View your mining progression stats\n" +
-                "  /trait miningbase [value] - Get or set base points for first credit (admin)\n" +
-                "  /trait miningincrement [value] - Get or set increment step per credit (admin)\n" +
-                "  /trait mininglevel [level] [toolname] - Get or set your mining level (admin)\n" +
-                "  /trait miningmax [percent] - Get or set max mining speed bonus (admin)\n" +
-                "  /trait melee - View your melee damage progression stats\n" +
-                "  /trait meleebase [value] - Get or set base damage for first credit (admin)\n" +
-                "  /trait meleeincrement [value] - Get or set melee increment step per credit (admin)\n" +
-                "  /trait meleelevel [level] [toolname] - Get or set your melee level (admin)\n" +
-                "  /trait meleemax [percent] - Get or set max melee damage bonus (admin)\n" +
-                "  /trait ranged - View your ranged damage progression stats\n" +
-                "  /trait rangedbase [value] - Get or set base damage for first credit (admin)\n" +
-                "  /trait rangedincrement [value] - Get or set ranged increment step per credit (admin)\n" +
-                "  /trait rangedlevel [level] [toolname] - Get or set your ranged level (admin)\n" +
-                "  /trait rangedmax [percent] - Get or set max ranged damage bonus (admin)\n" +
-                "  /trait rangedmaxacc [percent] - Get or set max ranged accuracy bonus (admin)\n" +
-                "  /trait rangedmaxdist [percent] - Get or set max ranged distance bonus (admin)\n" +
-                "  /trait walking - View your walking speed progression stats\n" +
-                "  /trait walkingbase [value] - Get or set base blocks for first credit (admin)\n" +
-                "  /trait walkingincrement [value] - Get or set walking increment step per credit (admin)\n" +
-                "  /trait walkinglevel [level] - Get or set your walking level (admin)\n" +
-                "  /trait walkingmax [percent] - Get or set max walking speed bonus (admin)\n" +
-                "  /trait hunger - View your hunger rate progression stats\n" +
-                "  /trait hungerbase [value] - Get or set base seconds for first credit (admin)\n" +
-                "  /trait hungerincrement [value] - Get or set hunger increment step per credit (admin)\n" +
-                "  /trait hungerlevel [level] - Get or set your hunger level (admin)\n" +
-                "  /trait hungermax [percent] - Get or set max hunger rate reduction (admin)\n" +
-                "  /trait armor - View your armor progression stats\n" +
-                "  /trait armorlevel [level] [armorpiece] - Get or set your armor durability level (admin)\n" +
-                "  /trait armorwalkspeedlevel [level] - Get or set walk speed penalty reduction level (admin)\n" +
-                "  /trait armordurabilitymax [percent] - Get or set max durability bonus (admin)\n" +
-                "  /trait armorwalkspeedmax [percent] - Get or set max walk speed reduction (admin)\n" +
-                "  /trait all - View all trait progression at once\n" +
-                "  /trait tempresist - View Temporal Resistance (experimental, config-gated)\n" +
-                "  /trait temprecharge - View Temporal Recharge (experimental, config-gated)\n" +
-                "  /trait tempstability [0.0-1.0] - Get or set your temporal stability for testing (admin)\n" +
-                "  /trait soundvolume [0.0-1.0] - Get or set the level-up ding volume (admin)\n" +
-                "  /trait testsound [0.0-1.0] - Play the level-up ding once for testing (admin)\n" +
-                "  /trait setplayer &lt;name&gt; &lt;trait&gt; &lt;level&gt; [toolname] - Set trait level for another player (admin)\n" +
-                "  /trait reset - Reset all trait progression to 0 (admin)\n" +
-                "  /trait resetplayer &lt;name&gt; - Reset all trait progression for a player, online or offline (admin)\n" +
-                "  /trait resetall confirm - Wipe all trait progression for EVERY player (admin)\n" +
-                "  /trait resetconfig - Reset all config values to defaults (admin)\n" +
-                "  /trait reloadconfig - Re-read ModConfig/SeraphLeveling.json without restarting (admin)\n" +
-                "  /trait verify - Show what each stat this mod writes is actually made of (admin)\n" +
-                "  /trait maxall - Set all trait progression to maximum for testing (admin)");
+                "Usage: /trait &lt;subcommand&gt;. The handbook page \"Seraph Leveling: My Progress\" shows everything at once.\n" +
+                "Player commands:\n" + player +
+                "Admin commands:\n" + admin.ToString().TrimEnd());
         }
 
         /// <summary>
@@ -3873,7 +3856,7 @@ namespace SeraphLeveling
         /// Resolves a player by name (case-insensitive partial match).
         /// Returns null if not found online.
         /// </summary>
-        private IServerPlayer ResolvePlayerByName(string playerName)
+        private IServerPlayer ResolvePlayerByName(string playerName, bool exactOnly = false)
         {
             if (ServerApi?.World?.AllOnlinePlayers == null) return null;
 
@@ -3884,6 +3867,8 @@ namespace SeraphLeveling
                 if (sp != null && string.Equals(sp.PlayerName, playerName, StringComparison.OrdinalIgnoreCase))
                     return sp;
             }
+            // Commands that wipe or overwrite progress never guess from a partial name.
+            if (exactOnly) return null;
 
             // Try partial match
             IServerPlayer match = null;
@@ -3918,7 +3903,7 @@ namespace SeraphLeveling
             // by their exact last known name only, so a typo cannot edit the wrong
             // player; their stored progress is edited directly and the live stats
             // catch up when they next join.
-            var targetPlayer = ResolvePlayerByName(playerName);
+            var targetPlayer = ResolvePlayerByName(playerName, exactOnly: true);
             string targetUid;
             string targetName;
             if (targetPlayer != null)
@@ -4139,7 +4124,7 @@ namespace SeraphLeveling
         /// </summary>
         private TextCommandResult OnTraitMiningBaseCommand(TextCommandCallingArgs args)
         {
-            int? newValue = (int?)args[0];
+            int? newValue = OptInt(args, 0);
 
             if (newValue.HasValue)
             {
@@ -4165,7 +4150,7 @@ namespace SeraphLeveling
         /// </summary>
         private TextCommandResult OnTraitMiningIncrementCommand(TextCommandCallingArgs args)
         {
-            int? newValue = (int?)args[0];
+            int? newValue = OptInt(args, 0);
 
             if (newValue.HasValue)
             {
@@ -4660,7 +4645,7 @@ namespace SeraphLeveling
                 return TextCommandResult.Error("Could not find player entity");
             }
 
-            int? newCredits = (int?)args[0];
+            int? newCredits = OptInt(args, 0);
 
             // If no value provided, show current level
             if (!newCredits.HasValue)
@@ -4744,7 +4729,7 @@ namespace SeraphLeveling
         /// </summary>
         private TextCommandResult OnTraitMiningMaxCommand(TextCommandCallingArgs args)
         {
-            int? newValue = (int?)args[0];
+            int? newValue = OptInt(args, 0);
 
             if (newValue.HasValue)
             {
@@ -4828,7 +4813,7 @@ namespace SeraphLeveling
         /// </summary>
         private TextCommandResult OnTraitMeleeBaseCommand(TextCommandCallingArgs args)
         {
-            int? newValue = (int?)args[0];
+            int? newValue = OptInt(args, 0);
 
             if (newValue.HasValue)
             {
@@ -4854,7 +4839,7 @@ namespace SeraphLeveling
         /// </summary>
         private TextCommandResult OnTraitMeleeIncrementCommand(TextCommandCallingArgs args)
         {
-            int? newValue = (int?)args[0];
+            int? newValue = OptInt(args, 0);
 
             if (newValue.HasValue)
             {
@@ -4887,7 +4872,7 @@ namespace SeraphLeveling
                 return TextCommandResult.Error("Could not find player entity");
             }
 
-            int? newCredits = (int?)args[0];
+            int? newCredits = OptInt(args, 0);
 
             // If no value provided, show current level
             if (!newCredits.HasValue)
@@ -4908,7 +4893,7 @@ namespace SeraphLeveling
         /// </summary>
         private TextCommandResult OnTraitMeleeMaxCommand(TextCommandCallingArgs args)
         {
-            int? newValue = (int?)args[0];
+            int? newValue = OptInt(args, 0);
 
             if (newValue.HasValue)
             {
@@ -4991,7 +4976,7 @@ namespace SeraphLeveling
         /// </summary>
         private TextCommandResult OnTraitRangedBaseCommand(TextCommandCallingArgs args)
         {
-            int? newValue = (int?)args[0];
+            int? newValue = OptInt(args, 0);
 
             if (newValue.HasValue)
             {
@@ -5017,7 +5002,7 @@ namespace SeraphLeveling
         /// </summary>
         private TextCommandResult OnTraitRangedIncrementCommand(TextCommandCallingArgs args)
         {
-            int? newValue = (int?)args[0];
+            int? newValue = OptInt(args, 0);
 
             if (newValue.HasValue)
             {
@@ -5050,7 +5035,7 @@ namespace SeraphLeveling
                 return TextCommandResult.Error("Could not find player entity");
             }
 
-            int? newCredits = (int?)args[0];
+            int? newCredits = OptInt(args, 0);
 
             // If no value provided, show current level
             if (!newCredits.HasValue)
@@ -5071,7 +5056,7 @@ namespace SeraphLeveling
         /// </summary>
         private TextCommandResult OnTraitRangedMaxCommand(TextCommandCallingArgs args)
         {
-            int? newValue = (int?)args[0];
+            int? newValue = OptInt(args, 0);
 
             if (newValue.HasValue)
             {
@@ -5106,7 +5091,7 @@ namespace SeraphLeveling
         /// </summary>
         private TextCommandResult OnTraitRangedMaxAccuracyCommand(TextCommandCallingArgs args)
         {
-            int? newValue = (int?)args[0];
+            int? newValue = OptInt(args, 0);
 
             if (newValue.HasValue)
             {
@@ -5141,7 +5126,7 @@ namespace SeraphLeveling
         /// </summary>
         private TextCommandResult OnTraitRangedMaxDistanceCommand(TextCommandCallingArgs args)
         {
-            int? newValue = (int?)args[0];
+            int? newValue = OptInt(args, 0);
 
             if (newValue.HasValue)
             {
@@ -5209,7 +5194,7 @@ namespace SeraphLeveling
         /// </summary>
         private TextCommandResult OnTraitWalkingBaseCommand(TextCommandCallingArgs args)
         {
-            int? newValue = (int?)args[0];
+            int? newValue = OptInt(args, 0);
 
             if (newValue.HasValue)
             {
@@ -5235,7 +5220,7 @@ namespace SeraphLeveling
         /// </summary>
         private TextCommandResult OnTraitWalkingIncrementCommand(TextCommandCallingArgs args)
         {
-            int? newValue = (int?)args[0];
+            int? newValue = OptInt(args, 0);
 
             if (newValue.HasValue)
             {
@@ -5273,7 +5258,7 @@ namespace SeraphLeveling
                 CurrentIncrementSize = BaseBlocksWalkedPerIncrement
             });
 
-            int? newCredits = (int?)args[0];
+            int? newCredits = OptInt(args, 0);
 
             // If no value provided, show current level
             if (!newCredits.HasValue)
@@ -5314,7 +5299,7 @@ namespace SeraphLeveling
         /// </summary>
         private TextCommandResult OnTraitWalkingMaxCommand(TextCommandCallingArgs args)
         {
-            int? newValue = (int?)args[0];
+            int? newValue = OptInt(args, 0);
 
             if (newValue.HasValue)
             {
@@ -5402,7 +5387,7 @@ namespace SeraphLeveling
         /// </summary>
         private TextCommandResult OnTraitHungerBaseCommand(TextCommandCallingArgs args)
         {
-            int? newValue = (int?)args[0];
+            int? newValue = OptInt(args, 0);
 
             if (newValue.HasValue)
             {
@@ -5428,7 +5413,7 @@ namespace SeraphLeveling
         /// </summary>
         private TextCommandResult OnTraitHungerIncrementCommand(TextCommandCallingArgs args)
         {
-            int? newValue = (int?)args[0];
+            int? newValue = OptInt(args, 0);
 
             if (newValue.HasValue)
             {
@@ -5468,7 +5453,7 @@ namespace SeraphLeveling
                 CurrentIncrementSize = BaseSecondsPerIncrement
             });
 
-            int? newCredits = (int?)args[0];
+            int? newCredits = OptInt(args, 0);
 
             // If no value provided, show current level
             if (!newCredits.HasValue)
@@ -5514,7 +5499,7 @@ namespace SeraphLeveling
         /// </summary>
         private TextCommandResult OnTraitHungerMaxCommand(TextCommandCallingArgs args)
         {
-            int? newValue = (int?)args[0];
+            int? newValue = OptInt(args, 0);
 
             if (newValue.HasValue)
             {
@@ -5607,7 +5592,7 @@ namespace SeraphLeveling
                 return TextCommandResult.Error("Could not find player entity");
             }
 
-            int? newCredits = (int?)args[0];
+            int? newCredits = OptInt(args, 0);
 
             // If no value provided, show current level
             if (!newCredits.HasValue)
@@ -5636,7 +5621,7 @@ namespace SeraphLeveling
             string playerUid = player.PlayerUID;
             var progress = ArmorProgress.GetOrAdd(playerUid, _ => new ArmorProgressData());
 
-            int? newCredits = (int?)args[0];
+            int? newCredits = OptInt(args, 0);
 
             // If no value provided, show current level
             if (!newCredits.HasValue)
@@ -5672,7 +5657,7 @@ namespace SeraphLeveling
         /// </summary>
         private TextCommandResult OnTraitArmorDurabilityMaxCommand(TextCommandCallingArgs args)
         {
-            int? newValue = (int?)args[0];
+            int? newValue = OptInt(args, 0);
 
             if (newValue.HasValue)
             {
@@ -5705,7 +5690,7 @@ namespace SeraphLeveling
         /// </summary>
         private TextCommandResult OnTraitArmorWalkSpeedMaxCommand(TextCommandCallingArgs args)
         {
-            int? newValue = (int?)args[0];
+            int? newValue = OptInt(args, 0);
 
             if (newValue.HasValue)
             {
@@ -5738,7 +5723,7 @@ namespace SeraphLeveling
         /// </summary>
         private TextCommandResult OnTraitArmorTimeBaseCommand(TextCommandCallingArgs args)
         {
-            int? newValue = (int?)args[0];
+            int? newValue = OptInt(args, 0);
 
             if (newValue.HasValue)
             {
@@ -5763,7 +5748,7 @@ namespace SeraphLeveling
         /// </summary>
         private TextCommandResult OnTraitArmorDamageBaseCommand(TextCommandCallingArgs args)
         {
-            int? newValue = (int?)args[0];
+            int? newValue = OptInt(args, 0);
 
             if (newValue.HasValue)
             {
@@ -5788,7 +5773,7 @@ namespace SeraphLeveling
         /// </summary>
         private TextCommandResult OnTraitArmorRepairBaseCommand(TextCommandCallingArgs args)
         {
-            int? newValue = (int?)args[0];
+            int? newValue = OptInt(args, 0);
 
             if (newValue.HasValue)
             {
@@ -5820,7 +5805,7 @@ namespace SeraphLeveling
                 return TextCommandResult.Error("Player entity not found");
             }
 
-            int? percent = (int?)args[0];
+            int? percent = OptInt(args, 0);
 
             if (!percent.HasValue)
             {
@@ -7231,6 +7216,11 @@ namespace SeraphLeveling
             LastDecayCheckDay.TryRemove(playerUid, out _);
             SleepMountHours.TryRemove(playerUid, out _);
             pendingClassChangeReapply.TryRemove(playerUid, out _);
+            playerEquippedClothing.TryRemove(playerUid, out _);
+            LastSleepBuffApplyTick.TryRemove(playerUid, out _);
+            LastSentProgressReport.TryRemove(playerUid, out _);
+            foreach (var key in TrackedItemDurabilities.Keys.Where(k => k.StartsWith(playerUid + "_", StringComparison.Ordinal)).ToList())
+                TrackedItemDurabilities.TryRemove(key, out _);
             if (classChangeListeners.TryRemove(playerUid, out var classListener))
             {
                 try { byPlayer.Entity?.WatchedAttributes.UnregisterListener(classListener); } catch { }
@@ -7244,6 +7234,25 @@ namespace SeraphLeveling
         /// Called periodically by auto-save timer to persist all pending progress.
         /// Only saves when players are online to avoid waking up idle dedicated servers.
         /// </summary>
+        /// <summary>
+        /// (Re)register the auto-save tick at the configured interval. Called at
+        /// startup and after reloadconfig / resetconfig, so a changed
+        /// AutoSaveIntervalSeconds takes effect without a restart.
+        /// </summary>
+        private void RestartAutoSaveTimer(ICoreServerAPI api)
+        {
+            if (autoSaveTimerId != 0)
+            {
+                try { api.Event.UnregisterGameTickListener(autoSaveTimerId); } catch { }
+                autoSaveTimerId = 0;
+            }
+            if (AutoSaveIntervalSeconds > 0)
+            {
+                autoSaveTimerId = RegisterSafeTickListener(api, OnAutoSaveTick, AutoSaveIntervalSeconds * 1000, "the auto save tick");
+                api.Logger.Notification($"[SeraphLeveling] Auto-save enabled every {AutoSaveIntervalSeconds} seconds");
+            }
+        }
+
         private void OnAutoSaveTick(float dt)
         {
             // Don't save if no players are online - this prevents waking up idle dedicated servers
@@ -9273,6 +9282,10 @@ namespace SeraphLeveling
             pendingCOProgressSave = false;
             pendingTemporalResistanceSave = false;
             pendingTemporalRechargeSave = false;
+            if (pendingConfigSave)
+            {
+                try { SaveConfigFile(); } catch (Exception ex) { ServerApi?.Logger?.Warning("[SeraphLeveling] Could not flush the config on shutdown: " + ex.Message); }
+            }
             pendingConfigSave = false;
             base.Dispose();
         }
@@ -10378,7 +10391,7 @@ namespace SeraphLeveling
                             writer.Write((byte)0x53); // 'S'
                             writer.Write((byte)0x49); // 'I'
                             writer.Write((byte)0x41); // 'A' for Armor
-                            writer.Write((byte)2);    // Version 2
+                            writer.Write((byte)3);    // Version 3: v2 plus the hunger-reduction and healing credit pools
 
                             // Number of players
                             writer.Write(snapshot.Length);
@@ -10392,6 +10405,8 @@ namespace SeraphLeveling
                                 writer.Write(progress.TotalDurabilityCredits);
                                 writer.Write(progress.TotalWalkSpeedCredits);
                                 writer.Write(progress.LastActivityDay);
+                                writer.Write(progress.TotalHungerReductionCredits);
+                                writer.Write(progress.TotalHealingCredits);
 
                                 // Snapshot inner dictionary to avoid concurrent modification
                                 var armorSnapshot = progress.ArmorProgress.ToArray();
@@ -10508,7 +10523,7 @@ namespace SeraphLeveling
                             }
                             pendingArmorProgressSave = true;
                         }
-                        else if (version == 2)
+                        else if (version == 2 || version == 3)
                         {
                             for (int i = 0; i < playerCount; i++)
                             {
@@ -10521,6 +10536,13 @@ namespace SeraphLeveling
                                         TotalWalkSpeedCredits = reader.ReadInt32(),
                                         LastActivityDay = reader.ReadDouble()
                                     };
+                                    if (version >= 3)
+                                    {
+                                        // v2 files never stored these two pools, which is why the
+                                        // optional armor hunger and healing bonuses reset on restart.
+                                        progress.TotalHungerReductionCredits = reader.ReadInt32();
+                                        progress.TotalHealingCredits = reader.ReadInt32();
+                                    }
 
                                     // Read per-armor progress
                                     int armorCount = reader.ReadInt32();
@@ -13980,7 +14002,7 @@ namespace SeraphLeveling
         /// </summary>
         private TextCommandResult OnTraitClothierRequiredCommand(TextCommandCallingArgs args)
         {
-            int? newValue = (int?)args[0];
+            int? newValue = OptInt(args, 0);
 
             if (newValue.HasValue)
             {
@@ -14004,7 +14026,7 @@ namespace SeraphLeveling
 
             var progress = ClothierProgress.GetOrAdd(player.PlayerUID, _ => new ClothierProgressData());
 
-            int? newLevel = (int?)args[0];
+            int? newLevel = OptInt(args, 0);
 
             // If no value provided, show current level
             if (!newLevel.HasValue)
@@ -14206,9 +14228,20 @@ namespace SeraphLeveling
                     // Create a tracking key for this item in this slot
                     string trackingKey = $"{playerUid}_{slotIndex}_{itemCode}";
 
-                    // Check if durability increased (repair happened)
-                    if (TrackedItemDurabilities.TryGetValue(trackingKey, out int previousDurability))
+                    // Identify THIS item. A fresh item of the same code swapped into the
+                    // slot starts at full durability, which used to look like a repair.
+                    long trackId = slot.Itemstack.Attributes.GetLong(TRACK_ID_ATTR, 0);
+                    if (trackId == 0)
                     {
+                        trackId = System.Threading.Interlocked.Increment(ref nextTrackId) + (ServerApi?.World?.ElapsedMilliseconds ?? 0) * 1000;
+                        slot.Itemstack.Attributes.SetLong(TRACK_ID_ATTR, trackId);
+                        slot.MarkDirty();
+                    }
+
+                    // Check if durability increased (repair happened) on the same item
+                    if (TrackedItemDurabilities.TryGetValue(trackingKey, out var tracked) && tracked.Id == trackId)
+                    {
+                        int previousDurability = tracked.Durability;
                         if (currentDurability > previousDurability)
                         {
                             // Durability increased - a repair happened!
@@ -14227,7 +14260,7 @@ namespace SeraphLeveling
                     }
 
                     // Update tracked durability
-                    TrackedItemDurabilities[trackingKey] = currentDurability;
+                    TrackedItemDurabilities[trackingKey] = (trackId, currentDurability);
                 }
             }
         }
@@ -14530,6 +14563,7 @@ namespace SeraphLeveling
         /// </summary>
         private static int ApplyPreciseBonusStatic(IServerPlayer player, int credits)
         {
+            if (player?.Entity == null) return 0;
             // Check if player has vanilla Precise trait (Clockmaker)
             bool hasVanillaPrecise = PlayerHasVanillaPreciseStatic(player.Entity);
 
@@ -14953,7 +14987,7 @@ namespace SeraphLeveling
         /// </summary>
         private TextCommandResult OnTraitMenderBaseCommand(TextCommandCallingArgs args)
         {
-            int? newValue = (int?)args[0];
+            int? newValue = OptInt(args, 0);
 
             if (newValue.HasValue)
             {
@@ -14977,7 +15011,7 @@ namespace SeraphLeveling
 
             var progress = MenderProgress.GetOrAdd(player.PlayerUID, _ => new MenderProgressData());
 
-            int? newLevel = (int?)args[0];
+            int? newLevel = OptInt(args, 0);
 
             // If no value provided, show current level
             if (!newLevel.HasValue)
@@ -15013,7 +15047,7 @@ namespace SeraphLeveling
         /// </summary>
         private TextCommandResult OnTraitMenderMaxCommand(TextCommandCallingArgs args)
         {
-            int? newValue = (int?)args[0];
+            int? newValue = OptInt(args, 0);
 
             if (newValue.HasValue)
             {
@@ -15174,7 +15208,7 @@ namespace SeraphLeveling
         /// </summary>
         private TextCommandResult OnTraitPilfererBaseCommand(TextCommandCallingArgs args)
         {
-            int? newValue = (int?)args[0];
+            int? newValue = OptInt(args, 0);
 
             if (newValue.HasValue)
             {
@@ -15201,7 +15235,7 @@ namespace SeraphLeveling
 
             var progress = PilfererProgress.GetOrAdd(player.PlayerUID, _ => new PilfererProgressData());
 
-            int? newLevel = (int?)args[0];
+            int? newLevel = OptInt(args, 0);
 
             // If no value provided, show current level
             if (!newLevel.HasValue)
@@ -15236,7 +15270,7 @@ namespace SeraphLeveling
         /// </summary>
         private TextCommandResult OnTraitPilfererMaxCommand(TextCommandCallingArgs args)
         {
-            int? newValue = (int?)args[0];
+            int? newValue = OptInt(args, 0);
 
             if (newValue.HasValue)
             {
@@ -15468,7 +15502,7 @@ namespace SeraphLeveling
         /// </summary>
         private TextCommandResult OnTraitResourcefulBaseCommand(TextCommandCallingArgs args)
         {
-            int? newValue = (int?)args[0];
+            int? newValue = OptInt(args, 0);
 
             if (newValue.HasValue)
             {
@@ -15495,7 +15529,7 @@ namespace SeraphLeveling
 
             var progress = ResourcefulProgress.GetOrAdd(player.PlayerUID, _ => new ResourcefulProgressData());
 
-            int? newLevel = (int?)args[0];
+            int? newLevel = OptInt(args, 0);
 
             // If no value provided, show current level
             if (!newLevel.HasValue)
@@ -15531,7 +15565,7 @@ namespace SeraphLeveling
         /// </summary>
         private TextCommandResult OnTraitResourcefulMaxCommand(TextCommandCallingArgs args)
         {
-            int? newValue = (int?)args[0];
+            int? newValue = OptInt(args, 0);
 
             if (newValue.HasValue)
             {
@@ -15819,7 +15853,7 @@ namespace SeraphLeveling
         /// </summary>
         private TextCommandResult OnTraitForagerBaseCommand(TextCommandCallingArgs args)
         {
-            int? newValue = (int?)args[0];
+            int? newValue = OptInt(args, 0);
 
             if (newValue.HasValue)
             {
@@ -15846,7 +15880,7 @@ namespace SeraphLeveling
 
             var progress = ForagerProgress.GetOrAdd(player.PlayerUID, _ => new ForagerProgressData());
 
-            int? newLevel = (int?)args[0];
+            int? newLevel = OptInt(args, 0);
 
             // If no value provided, show current level
             if (!newLevel.HasValue)
@@ -15885,7 +15919,7 @@ namespace SeraphLeveling
         /// </summary>
         private TextCommandResult OnTraitForagerMaxCommand(TextCommandCallingArgs args)
         {
-            int? newValue = (int?)args[0];
+            int? newValue = OptInt(args, 0);
 
             if (newValue.HasValue)
             {
@@ -16253,7 +16287,7 @@ namespace SeraphLeveling
             string playerUid = player.PlayerUID;
             var progress = FurtiveProgress.GetOrAdd(playerUid, _ => new FurtiveProgressData());
 
-            int? newLevel = (int?)args[0];
+            int? newLevel = OptInt(args, 0);
 
             // If no value provided, show current level
             if (!newLevel.HasValue)
@@ -16326,7 +16360,7 @@ namespace SeraphLeveling
             IServerPlayer player = args.Caller.Player as IServerPlayer;
             if (player?.Entity == null) return TextCommandResult.Error("Player not found.");
 
-            int? newLevel = (int?)args[0];
+            int? newLevel = OptInt(args, 0);
 
             // If no value provided, show current level
             if (!newLevel.HasValue)
@@ -16772,7 +16806,7 @@ namespace SeraphLeveling
                 return TextCommandResult.Error("Usage: /trait resetplayer &lt;playername&gt;");
 
             // Online first: full reset with a live stat strip.
-            IServerPlayer target = ResolvePlayerByName(nameArg);
+            IServerPlayer target = ResolvePlayerByName(nameArg, exactOnly: true);
             if (target?.Entity != null)
             {
                 ResetProgressForPlayer(target);
@@ -16927,7 +16961,7 @@ namespace SeraphLeveling
             {
                 walkingProg.TotalCredits = 0;
                 walkingProg.BlocksInIncrement = 0;
-                walkingProg.CurrentIncrementSize = 1000; // Default base
+                walkingProg.CurrentIncrementSize = BaseBlocksWalkedPerIncrement;
                 pendingWalkingProgressSave = true;
             }
             ApplyWalkingBonusStatic(player, 0);
@@ -16937,7 +16971,7 @@ namespace SeraphLeveling
             {
                 hungerProg.TotalCredits = 0;
                 hungerProg.SecondsInIncrement = 0;
-                hungerProg.CurrentIncrementSize = 300; // Default base (5 minutes)
+                hungerProg.CurrentIncrementSize = BaseSecondsPerIncrement;
                 pendingHungerProgressSave = true;
             }
             ApplyHungerBonusStatic(player, 0);
@@ -16947,7 +16981,20 @@ namespace SeraphLeveling
             {
                 armorProg.TotalDurabilityCredits = 0;
                 armorProg.TotalWalkSpeedCredits = 0;
-                armorProg.ArmorProgress.Clear();
+                armorProg.TotalHungerReductionCredits = 0;
+                armorProg.TotalHealingCredits = 0;
+                // Zero every piece's counters but keep HasBeenEquipped: clearing the
+                // records let the join path hand the first-equip credits straight back
+                // to a player who was wearing the armor when the reset happened.
+                foreach (var piece in armorProg.ArmorProgress.Values)
+                {
+                    piece.SecondsWornInIncrement = 0;
+                    piece.TimeCredits = 0;
+                    piece.DamageBlockedInIncrement = 0;
+                    piece.DamageCredits = 0;
+                    piece.RepairsInIncrement = 0;
+                    piece.RepairCredits = 0;
+                }
                 pendingArmorProgressSave = true;
             }
             ApplyArmorBonusesStatic(player, 0, 0);
@@ -16966,7 +17013,7 @@ namespace SeraphLeveling
             {
                 menderProg.TotalCredits = 0;
                 menderProg.RepairsInIncrement = 0;
-                menderProg.CurrentIncrementSize = 5; // Default base
+                menderProg.CurrentIncrementSize = BaseMenderRepairsPerIncrement;
                 pendingMenderProgressSave = true;
             }
             ApplyMenderBonusStatic(player, 0);
@@ -16976,7 +17023,7 @@ namespace SeraphLeveling
             {
                 pilfererProg.TotalCredits = 0;
                 pilfererProg.PointsInIncrement = 0;
-                pilfererProg.CurrentIncrementSize = 10; // Default base
+                pilfererProg.CurrentIncrementSize = BasePilfererPointsPerIncrement;
                 pendingPilfererProgressSave = true;
             }
             ApplyPilfererBonusStatic(player, 0);
@@ -16986,7 +17033,7 @@ namespace SeraphLeveling
             {
                 resourcefulProg.TotalCredits = 0;
                 resourcefulProg.AnimalsInIncrement = 0;
-                resourcefulProg.CurrentIncrementSize = 10; // Default base
+                resourcefulProg.CurrentIncrementSize = BaseResourcefulAnimalsPerIncrement;
                 pendingResourcefulProgressSave = true;
             }
             ApplyResourcefulBonusStatic(player, 0);
@@ -16996,7 +17043,7 @@ namespace SeraphLeveling
             {
                 foragerProg.TotalCredits = 0;
                 foragerProg.CropsInIncrement = 0;
-                foragerProg.CurrentIncrementSize = 10; // Default base
+                foragerProg.CurrentIncrementSize = BaseForagerCropsPerIncrement;
                 pendingForagerProgressSave = true;
             }
             ApplyForagerBonusStatic(player, 0);
@@ -17006,7 +17053,7 @@ namespace SeraphLeveling
             {
                 furtiveProg.TotalCredits = 0;
                 furtiveProg.BlocksInIncrement = 0;
-                furtiveProg.CurrentIncrementSize = 100; // Default base
+                furtiveProg.CurrentIncrementSize = BaseFurtiveSneakBlocksPerIncrement;
                 pendingFurtiveProgressSave = true;
             }
             ApplyFurtiveBonusStatic(player, 0);
@@ -17708,12 +17755,18 @@ namespace SeraphLeveling
             if (ServerApi == null) return TextCommandResult.Error("Server API not available.");
 
             LoadConfigFile(ServerApi);
+            RestartAutoSaveTimer(ServerApi);
 
             int reapplied = 0;
             foreach (var onlinePlayer in ServerApi.World.AllOnlinePlayers)
             {
                 if (onlinePlayer is IServerPlayer player && player.Entity != null)
                 {
+                    // CancelNegativeTraits is baked into this cache at join.
+                    PopulateVanillaTraitsCache(player);
+                    // Decay turned on at runtime needs a start day for players already online.
+                    if (EnableSkillDecay && !LastDecayCheckDay.ContainsKey(player.PlayerUID))
+                        LastDecayCheckDay[player.PlayerUID] = ServerApi.World.Calendar.TotalDays;
                     ReapplyAllBonuses(player);
                     reapplied++;
                 }
@@ -17736,177 +17789,29 @@ namespace SeraphLeveling
         /// </summary>
         private TextCommandResult OnTraitResetConfigCommand(TextCommandCallingArgs args)
         {
-            // Mining defaults
-            BaseBlocksPerIncrement = 100;
-            IncrementStep = 100;
-            MaxMiningSpeedPercent = 50;
-            OreMultiplier = 5;
+            if (ServerApi == null) return TextCommandResult.Error("Server API not available.");
 
-            // Melee defaults
-            BaseDamagePerIncrement = 100;
-            MeleeIncrementStep = 100;
-            MaxMeleeDamagePercent = 50;
+            // Write a fresh default file and load it through the normal path, so
+            // every config-backed static returns to its default. The old version
+            // reset a hand-maintained list and missed 47 of them.
+            var defaults = new SeraphLevelingConfig { ConfigVersion = CURRENT_CONFIG_VERSION };
+            ServerApi.StoreModConfig(defaults, CONFIG_FILE_NAME);
+            LoadConfigFile(ServerApi);
+            RestartAutoSaveTimer(ServerApi);
 
-            // Ranged defaults
-            BaseRangedDamagePerIncrement = 100;
-            RangedIncrementStep = 100;
-            MaxRangedDamagePercent = 50;
-            MaxRangedAccuracyPercent = 50;
-            MaxRangedDistancePercent = 50;
-
-            // Walking defaults
-            BaseBlocksWalkedPerIncrement = 1000;
-            WalkingIncrementStep = 1000;
-            MaxWalkingSpeedPercent = 15;
-
-            // Hunger defaults
-            BaseSecondsPerIncrement = 300;
-            HungerIncrementStep = 60;
-            MaxHungerReductionPercent = 25;
-
-            // Armor defaults
-            BaseSecondsInArmorPerIncrement = 2880;
-            ArmorTimeIncrementStep = 2880;
-            BaseDamageBlockedPerIncrement = 100;
-            ArmorDamageIncrementStep = 100;
-            BaseRepairsPerIncrement = 1;
-            ArmorRepairIncrementStep = 1;
-            MaxArmorDurabilityPercent = 50;
-            MaxArmorWalkSpeedPercent = 50;
-
-            // Clothier defaults
-            ClothierRequiredUniqueClothes = 20;
-            ClothierBlacklistedItems = new string[] {
-                // Hunter
-                "clothes-upperbody-hunter-shirt", "clothes-upperbodyover-hunter-coat", "clothes-shoulder-hunter-poncho",
-                "clothes-lowerbody-hunter-leggings", "clothes-foot-hunter-boots", "clothes-hand-hunter-gloves",
-                "clothes-head-hunter-hood", "clothes-face-hunter-mask",
-                // Tailor
-                "clothes-upperbody-tailor-blouse", "clothes-foot-tailor-shoes", "clothes-hand-tailor-gloves",
-                "clothes-waist-tailor-belt", "clothes-shoulder-tailor-jacket",
-                // Malefactor
-                "clothes-shoulder-malefactor-cloak", "clothes-foot-malefactor-boots", "clothes-hand-malefactor-gloves",
-                "clothes-lowerbody-malefactor-trousers", "clothes-neck-malefactor-pendant",
-                // Blackguard
-                "clothes-foot-blackguard-shoes", "clothes-lowerbody-blackguard-leggings",
-                "clothes-upperbody-blackguard-shirt", "clothes-waist-blackguard-belt",
-                // Clockmaker
-                "clothes-hand-clockmaker-wristguard", "clothes-foot-clockmaker-shoes",
-                "clothes-upperbody-clockmaker-shirt", "clothes-shoulder-clockmaker-apron",
-                // Commoner
-                "clothes-upperbody-commoner-shirt", "clothes-upperbodyover-commoner-coat",
-                "clothes-lowerbody-commoner-trousers", "clothes-foot-commoner-boots", "clothes-hand-commoner-gloves"
-            };
-
-            // Mender defaults
-            BaseMenderRepairsPerIncrement = 5;
-            MenderIncrementStep = 1;
-            MaxMenderPercent = 25;
-
-            // Pilferer defaults
-            BasePilfererPointsPerIncrement = 10;
-            PilfererIncrementStep = 10;
-            MaxPilfererPercent = 20;
-
-            // Resourceful defaults
-            BaseResourcefulAnimalsPerIncrement = 10;
-            ResourcefulIncrementStep = 10;
-            MaxResourcefulLootPercent = 20;
-            MaxResourcefulSpeedPercent = 25;
-
-            // Forager defaults
-            BaseForagerCropsPerIncrement = 10;
-            ForagerIncrementStep = 10;
-            MaxForagerLootPercent = 20;
-            MaxForagerWildCropPercent = 20;
-
-            // Furtive defaults
-            BaseFurtiveSneakBlocksPerIncrement = 100;
-            FurtiveIncrementStep = 100;
-            MaxFurtivePercent = 35;
-
-            // Precise defaults
-            BasePreciseDamagePerIncrement = 100;
-            PreciseIncrementStep = 100;
-            MaxPrecisePercent = 30;
-
-            // Technical defaults
-            TechnicalRequiredTranslocatorRepairs = 5;
-
-            // Hardy Health defaults
-            HardyHealthMiningThreshold = 10;
-            HardyHealthArmorDurabilityThreshold = 10;
-            HardyHealthBonus = 5;
-
-            // Skill decay defaults
-            EnableSkillDecay = false;
-            DecayGracePeriodDays = 1.0;
-            DecayBasePointsPerDay = 10;
-            DecayMaxPointsPerDay = 100;
-            DecayExemptSkills.Clear();
-            DecayGracePeriodOverrides = new Dictionary<string, double>
-            {
-                { "walking", 2.0 }, { "hunger", 2.0 }, { "furtive", 2.0 }, { "armor", 2.0 },
-                { "mender", 3.0 }, { "resourceful", 3.0 },
-                { "forager", 5.0 }, { "pilferer", 5.0 }, { "precise", 5.0 }
-            };
-            DecayBasePointsOverrides = new Dictionary<string, int>
-            {
-                { "walking", 5 }, { "hunger", 5 }, { "furtive", 5 }, { "armor", 5 },
-                { "mender", 3 }, { "resourceful", 3 },
-                { "forager", 2 }, { "pilferer", 2 }, { "precise", 2 }
-            };
-            DecayMaxPointsOverrides = new Dictionary<string, int>
-            {
-                { "walking", 50 }, { "hunger", 50 }, { "furtive", 50 }, { "armor", 50 },
-                { "mender", 30 }, { "resourceful", 30 },
-                { "forager", 20 }, { "pilferer", 20 }, { "precise", 20 }
-            };
-
-            // Death penalty defaults
-            EnableDeathPenalty = false;
-            DeathPenaltyFraction = 0.5;
-            DeathPenaltyFullReset = false;
-            DeathPenaltyExemptSkills.Clear();
-            GlobalXPRateMultiplier = 1.0f;
-            EnableClassCapOffsets = false;
-            VerboseDecayLogging = false;
-
-            TemporalResistanceEnabled = false;
-            TemporalResistanceMaxPercent = 75;
-            TemporalResistanceWorksDuringStorms = false;
-            TemporalLowStabilityThreshold = 0.5f;
-            TemporalRechargeEnabled = false;
-            TemporalRechargeMaxPercent = 200;
-            TemporalRechargeGearTrickPercent = 5;
-            TemporalRechargePassiveImmunityAtPercent = 200;
-            RangedDrawSpeedEnabled = false;
-            RangedDrawSpeedMaxReductionPercent = 50;
-            RangedDrawSpeedAtLevel = 50;
-            RangedAimAssistEnabled = false;
-            RangedAccuracyMaxPercent = 99;
-            MeleeAttackSpeedEnabled = false;
-            MeleeAttackSpeedMaxReductionPercent = 50;
-            MeleeAttackSpeedAtLevel = 50;
-
-            // Save config
-            pendingConfigSave = true;
-
-            // Same follow-up as reloadconfig: online players need their stats
-            // recomputed under the new values, and clients need the experimental
-            // settings resynced.
             int reapplied = 0;
             foreach (var onlinePlayer in ServerApi.World.AllOnlinePlayers)
             {
-                if (onlinePlayer is IServerPlayer onlineSp && onlineSp.Entity != null)
+                if (onlinePlayer is IServerPlayer player && player.Entity != null)
                 {
-                    ReapplyAllBonuses(onlineSp);
+                    PopulateVanillaTraitsCache(player);
+                    ReapplyAllBonuses(player);
                     reapplied++;
                 }
             }
+            pendingConfigSave = false;
             SyncExperimentalConfigToClients();
-
-            return TextCommandResult.Success($"All trait configuration values have been reset to defaults. Reapplied bonuses for {reapplied} online player(s).");
+            return TextCommandResult.Success($"All trait configuration values reset to defaults and written to ModConfig/{CONFIG_FILE_NAME}. Reapplied bonuses for {reapplied} online player(s).");
         }
 
         // =========================================================================
@@ -20960,6 +20865,7 @@ namespace SeraphLeveling
         public override void Dispose()
         {
             harmony?.UnpatchAll("seraphleveling");
+            SeraphProgressPage.LatestReport = null;   // never show the last world's numbers in the next one
 
             // See the server Dispose: the guards must reset with the unpatch.
             BowDrawSpeedPatches.PatchedInProcess = false;

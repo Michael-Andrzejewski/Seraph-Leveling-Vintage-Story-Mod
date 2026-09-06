@@ -679,10 +679,10 @@ namespace SeraphLeveling
             var player = args.Caller.Player as IServerPlayer;
             if (player?.Entity == null) return TextCommandResult.Error("Could not find player entity");
 
-            int? lvl = args[0] as int?;
+            int? lvl = OptInt(args, 0);
             var p = TemporalResistanceProgress.GetOrAdd(player.PlayerUID, _ => new TemporalProgressData());
             if (lvl == null)
-                return TextCommandResult.Success($"Temporal Resistance: {p.PermanentPercent}% / {TemporalResistanceMaxPercent}%. Set with /trait tempresistlevel <n>.");
+                return TextCommandResult.Success($"Temporal Resistance: {p.PermanentPercent}% / {TemporalResistanceMaxPercent}%. Set with /trait tempresistlevel &lt;n&gt;.");
 
             int v = Math.Clamp(lvl.Value, 0, TemporalResistanceMaxPercent);
             p.PermanentPercent = v;
@@ -696,10 +696,10 @@ namespace SeraphLeveling
             var player = args.Caller.Player as IServerPlayer;
             if (player?.Entity == null) return TextCommandResult.Error("Could not find player entity");
 
-            int? lvl = args[0] as int?;
+            int? lvl = OptInt(args, 0);
             var p = TemporalRechargeProgress.GetOrAdd(player.PlayerUID, _ => new TemporalProgressData());
             if (lvl == null)
-                return TextCommandResult.Success($"Temporal Recharge: {p.PermanentPercent}% / {TemporalRechargeMaxPercent}%. Set with /trait temprechargelevel <n>.");
+                return TextCommandResult.Success($"Temporal Recharge: {p.PermanentPercent}% / {TemporalRechargeMaxPercent}%. Set with /trait temprechargelevel &lt;n&gt;.");
 
             int v = Math.Clamp(lvl.Value, 0, TemporalRechargeMaxPercent);
             p.PermanentPercent = v;

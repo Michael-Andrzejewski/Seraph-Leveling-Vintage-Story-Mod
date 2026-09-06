@@ -49,6 +49,10 @@ namespace SeraphLeveling
         [ProtoMember(6)] public bool MeleeAttackSpeedEnabled { get; set; }
         [ProtoMember(7)] public int MeleeAttackSpeedMaxReductionPercent { get; set; }
         [ProtoMember(8)] public int MeleeAttackSpeedAtLevel { get; set; }
+        /// <summary>Trait cancellation switch; the sheet must leave vanilla penalty lines alone when off.</summary>
+        [ProtoMember(9)] public bool CancelNegativeTraits { get; set; } = true;
+        /// <summary>Combat Overhaul compatibility switch; the sheet hides CO lines when off.</summary>
+        [ProtoMember(10)] public bool CombatOverhaulCompatEnabled { get; set; } = true;
     }
 
     // Temporal traits, bow draw speed, and the knife gear-trick recharge bump,
@@ -102,6 +106,8 @@ namespace SeraphLeveling
                 MeleeAttackSpeedEnabled = MeleeAttackSpeedEnabled,
                 MeleeAttackSpeedMaxReductionPercent = MeleeAttackSpeedMaxReductionPercent,
                 MeleeAttackSpeedAtLevel = MeleeAttackSpeedAtLevel,
+                CancelNegativeTraits = CancelNegativeTraits,
+                CombatOverhaulCompatEnabled = COEnableCompat,
             };
         }
 
@@ -135,6 +141,8 @@ namespace SeraphLeveling
             MeleeAttackSpeedEnabled = msg.MeleeAttackSpeedEnabled;
             MeleeAttackSpeedMaxReductionPercent = msg.MeleeAttackSpeedMaxReductionPercent;
             MeleeAttackSpeedAtLevel = msg.MeleeAttackSpeedAtLevel;
+            CancelNegativeTraits = msg.CancelNegativeTraits;
+            COEnableCompat = msg.CombatOverhaulCompatEnabled;
         }
 
         // ===================================================================
@@ -444,7 +452,7 @@ namespace SeraphLeveling
                 var stopPrefix = AccessTools.Method(typeof(BowDrawSpeedPatches), nameof(BowDrawSpeedPatches.OnHeldInteractStop_Prefix));
                 if (step != null) serverHarmony.Patch(step, prefix: new HarmonyMethod(stepPrefix));
                 if (stop != null) serverHarmony.Patch(stop, prefix: new HarmonyMethod(stopPrefix));
-                BowDrawSpeedPatches.PatchedInProcess = true;
+                if (step != null || stop != null) BowDrawSpeedPatches.PatchedInProcess = true;
                 api.Logger.Debug("[SeraphLeveling] Patched ItemBow draw speed (server)");
             }
             catch (Exception ex)
@@ -930,7 +938,7 @@ namespace SeraphLeveling
                 var stopPrefix = AccessTools.Method(typeof(BowDrawSpeedPatches), nameof(OnHeldInteractStop_Prefix));
                 if (step != null) harmony.Patch(step, prefix: new HarmonyMethod(stepPrefix));
                 if (stop != null) harmony.Patch(stop, prefix: new HarmonyMethod(stopPrefix));
-                PatchedInProcess = true;
+                if (step != null || stop != null) PatchedInProcess = true;
                 api.Logger.Debug("[SeraphLeveling] Patched ItemBow draw speed (client)");
             }
             catch (Exception ex)
@@ -1093,7 +1101,7 @@ namespace SeraphLeveling
                 var method = AccessTools.Method(typeof(AnimationManager), "StartAnimation", new[] { typeof(AnimationMetaData) });
                 var prefix = AccessTools.Method(typeof(MeleeAttackSpeedPatches), nameof(StartAnimation_Prefix));
                 if (method != null) harmony.Patch(method, prefix: new HarmonyMethod(prefix));
-                patchedInProcess = true;
+                if (method != null) patchedInProcess = true;
                 api.Logger.Debug($"[SeraphLeveling] Patched melee swing animation speed ({side})");
             }
             catch (Exception ex)

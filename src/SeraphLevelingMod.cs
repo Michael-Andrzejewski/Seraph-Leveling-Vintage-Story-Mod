@@ -2222,6 +2222,7 @@ namespace SeraphLeveling
         // HARDY HEALTH TRAIT - Unlocks +5 HP after reaching mining and armor thresholds
         // =========================================================================
         public const string HARDY_HEALTH_STAT_CODE = "sitHardyHealthBonus";
+        public const int VANILLA_HARDY_HP_BONUS = 5;                 // vanilla Hardy: maxhealthExtraPoints 5
         private const string HARDY_HEALTH_PROGRESS_SAVE_KEY = "sitHardyHealthProgress";
         public const string WATCHED_HARDY_HEALTH_UNLOCKED = "sitHardyHealthUnlocked";
         public const string HARDY_HEALTH_TRAIT_CODE = "sithardyhealthmastery";
@@ -2672,6 +2673,13 @@ namespace SeraphLeveling
         {
             return DisabledSkills.Contains(skillName);
         }
+
+        /// <summary>
+        /// Server only. The client half is SeraphLevelingClientSystem; loading this
+        /// system on the client too gave single player a second copy whose Dispose
+        /// flushed and cleared the shared progress tables.
+        /// </summary>
+        public override bool ShouldLoad(EnumAppSide forSide) => forSide == EnumAppSide.Server;
 
         public override void StartServerSide(ICoreServerAPI api)
         {
@@ -3843,8 +3851,8 @@ namespace SeraphLeveling
                 if (player?.Entity == null || serverSoundChannel == null) return;
                 string report = BuildProgressReport(player);
                 if (!force && LastSentProgressReport.TryGetValue(player.PlayerUID, out string last) && last == report) return;
-                LastSentProgressReport[player.PlayerUID] = report;
                 serverSoundChannel.SendPacket(new ProgressReportMessage { Report = report }, player);
+                LastSentProgressReport[player.PlayerUID] = report;
             }
             catch (Exception ex)
             {
@@ -5869,6 +5877,10 @@ namespace SeraphLeveling
         /// </summary>
         public static int CalculateMaxHungerCredits(EntityPlayer entity)
         {
+            // Class cap offsets: no extra credits to pay off Ravenous, same as every
+            // other max-credit helper.
+            if (EnableClassCapOffsets) return MaxHungerReductionPercent;
+
             bool hasRavenous = entity != null && PlayerHasVanillaRavenousStatic(entity);
             int ravenousPenalty = hasRavenous ? VANILLA_RAVENOUS_HUNGER_PENALTY : 0;
             // MaxHungerReductionPercent represents how much a normal player needs to reduce
@@ -5886,27 +5898,101 @@ namespace SeraphLeveling
             return Math.Min(credits, maxCredits);
         }
 
+        // =====================================================================
+        // GAME TRAIT LOOKUP
+        // The game never writes a "characterTraits" attribute. Class traits live in
+        // CharacterSystem.characterClassesByCode[characterClass].Traits (which is
+        // also where class mods register theirs) and traits other mods grant live
+        // in the "extraTraits" attribute. Every "does this player have vanilla
+        // trait X" question goes through here.
+        // =====================================================================
+
+        private static readonly Dictionary<string, string[]> VanillaClassTraitTable =
+            new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["commoner"] = Array.Empty<string>(),
+            ["hunter"] = new[] { "focused", "resourceful", "fleetfooted", "bowyer", "farsighted", "claustrophobic" },
+            ["malefactor"] = new[] { "forager", "pilferer", "furtive", "improviser", "frail", "nervous" },
+            ["clockmaker"] = new[] { "precise", "technical", "fleetfooted", "frail", "nervous", "tinkerer" },
+            ["blackguard"] = new[] { "soldier", "hardy", "merciless", "ravenous", "nearsighted", "heavyhanded" },
+            ["tailor"] = new[] { "clothier", "mender", "civil", "weak", "kind" },
+        };
+
+        private static CharacterSystem serverCharacterSystem;
+        private static CharacterSystem clientCharacterSystem;
+
+        private static CharacterSystem CharacterSystemFor(ICoreAPI api)
+        {
+            if (api == null) return null;
+            if (api.Side == EnumAppSide.Server)
+                return serverCharacterSystem ??= api.ModLoader.GetModSystem<CharacterSystem>();
+            return clientCharacterSystem ??= api.ModLoader.GetModSystem<CharacterSystem>();
+        }
+
+        /// <summary>Forget the cached CharacterSystem; a new world gets a new one.</summary>
+        public static void ResetCharacterSystemCache()
+        {
+            serverCharacterSystem = null;
+            clientCharacterSystem = null;
+        }
+
+        /// <summary>
+        /// Every trait the game itself grants this player: the class's trait list
+        /// (from CharacterSystem, so class mods count; the vanilla table is only a
+        /// fallback for a class the game does not know), the "extraTraits" attribute,
+        /// and a "characterTraits" attribute in case another mod writes one. Our own
+        /// sit* codes sit in extraTraits too but never collide with a game code.
+        /// </summary>
+        public static List<string> GameTraitsOf(EntityPlayer entity)
+        {
+            var result = new List<string>();
+            if (entity == null) return result;
+            var wa = entity.WatchedAttributes;
+            string cls = wa.GetString("characterClass", "") ?? "";
+            var cs = CharacterSystemFor(entity.Api);
+            if (cs != null && cls.Length > 0 && cs.characterClassesByCode.TryGetValue(cls, out var cc) && cc?.Traits != null)
+            {
+                result.AddRange(cc.Traits);
+            }
+            else if (VanillaClassTraitTable.TryGetValue(cls, out var fallback))
+            {
+                result.AddRange(fallback);
+            }
+            string[] extra = wa.GetStringArray("extraTraits", null);
+            if (extra != null) result.AddRange(extra);
+            string[] listed = wa.GetStringArray("characterTraits", null);
+            if (listed != null) result.AddRange(listed);
+            return result;
+        }
+
+        /// <summary>True when the game itself gives this player the trait.</summary>
+        public static bool PlayerHasGameTrait(EntityPlayer entity, string traitCode)
+        {
+            if (entity == null || string.IsNullOrEmpty(traitCode)) return false;
+            foreach (string trait in GameTraitsOf(entity))
+            {
+                if (string.Equals(trait, traitCode, StringComparison.OrdinalIgnoreCase)) return true;
+            }
+            return false;
+        }
+
+        /// <summary>
+        /// A negative trait as far as cancellation is concerned: false whenever
+        /// CancelNegativeTraits is off, so no code path pays it off, grants extra
+        /// credits for it, or writes a counter-stat. The character sheet asks
+        /// PlayerHasGameTrait for the real answer.
+        /// </summary>
+        public static bool PlayerHasCancellableTrait(EntityPlayer entity, string traitCode)
+        {
+            return CancelNegativeTraits && PlayerHasGameTrait(entity, traitCode);
+        }
+
         /// <summary>
         /// Checks if the player's class has the vanilla Ravenous trait.
         /// </summary>
         private static bool PlayerHasVanillaRavenousStatic(EntityPlayer entity)
         {
-            string[] classTraits = entity.WatchedAttributes.GetStringArray("characterTraits", null);
-
-            if (classTraits != null)
-            {
-                foreach (string trait in classTraits)
-                {
-                    if (trait.Equals("ravenous", StringComparison.OrdinalIgnoreCase))
-                    {
-                        return true;
-                    }
-                }
-            }
-
-            // Fallback: check known classes that have Ravenous (Blackguard)
-            string characterClass = entity.WatchedAttributes.GetString("characterClass", "");
-            return characterClass.Equals("blackguard", StringComparison.OrdinalIgnoreCase);
+            return PlayerHasCancellableTrait(entity, "ravenous");
         }
 
         /// <summary>
@@ -5945,7 +6031,10 @@ namespace SeraphLeveling
             int oldLevel = watchedAttrs.GetInt(WATCHED_HUNGER_LEVEL, -1);
             int oldBonus = watchedAttrs.GetInt(WATCHED_HUNGER_BONUS, -1);
 
-            bool valuesChanged = (oldLevel != level) || (oldBonus != bonusPercent);
+            bool valuesChanged = (oldLevel != level) || (oldBonus != bonusPercent)
+                || watchedAttrs.GetBool("sitHasVanillaRavenous") != hasVanillaRavenous
+                || watchedAttrs.GetInt("sitMaxHungerCredits", -1) != maxCredits
+                || watchedAttrs.GetInt(WATCHED_RAVENOUS_REMAINING, -1) != ravenousRemaining;
 
             // Only update WatchedAttributes if values changed
             if (valuesChanged)
@@ -6071,22 +6160,7 @@ namespace SeraphLeveling
         /// </summary>
         private static bool PlayerHasVanillaFocusedStatic(EntityPlayer entity)
         {
-            string[] classTraits = entity.WatchedAttributes.GetStringArray("characterTraits", null);
-
-            if (classTraits != null)
-            {
-                foreach (string trait in classTraits)
-                {
-                    if (trait.Equals("focused", StringComparison.OrdinalIgnoreCase))
-                    {
-                        return true;
-                    }
-                }
-            }
-
-            // Fallback: check known classes that have Focused (Hunter)
-            string characterClass = entity.WatchedAttributes.GetString("characterClass", "");
-            return characterClass.Equals("hunter", StringComparison.OrdinalIgnoreCase);
+            return PlayerHasGameTrait(entity, "focused");
         }
 
         /// <summary>
@@ -6094,23 +6168,7 @@ namespace SeraphLeveling
         /// </summary>
         private static bool PlayerHasVanillaFleetfootedStatic(EntityPlayer entity)
         {
-            string[] classTraits = entity.WatchedAttributes.GetStringArray("characterTraits", null);
-
-            if (classTraits != null)
-            {
-                foreach (string trait in classTraits)
-                {
-                    if (trait.Equals("fleetfooted", StringComparison.OrdinalIgnoreCase))
-                    {
-                        return true;
-                    }
-                }
-            }
-
-            // Fallback: check known classes that have Fleetfooted (Hunter, Clockmaker)
-            string characterClass = entity.WatchedAttributes.GetString("characterClass", "");
-            return characterClass.Equals("hunter", StringComparison.OrdinalIgnoreCase) ||
-                   characterClass.Equals("clockmaker", StringComparison.OrdinalIgnoreCase);
+            return PlayerHasGameTrait(entity, "fleetfooted");
         }
 
         /// <summary>
@@ -6118,22 +6176,7 @@ namespace SeraphLeveling
         /// </summary>
         private static bool PlayerHasVanillaSoldierForArmor(EntityPlayer entity)
         {
-            string[] classTraits = entity.WatchedAttributes.GetStringArray("characterTraits", null);
-
-            if (classTraits != null)
-            {
-                foreach (string trait in classTraits)
-                {
-                    if (trait.Equals("soldier", StringComparison.OrdinalIgnoreCase))
-                    {
-                        return true;
-                    }
-                }
-            }
-
-            // Fallback: check known classes that have Soldier (Blackguard)
-            string characterClass = entity.WatchedAttributes.GetString("characterClass", "");
-            return characterClass.Equals("blackguard", StringComparison.OrdinalIgnoreCase);
+            return PlayerHasGameTrait(entity, "soldier");
         }
 
         // =========================================================================
@@ -6145,18 +6188,7 @@ namespace SeraphLeveling
         /// </summary>
         public static bool PlayerHasVanillaFarsighted(EntityPlayer entity)
         {
-            if (entity == null) return false;
-            string[] classTraits = entity.WatchedAttributes.GetStringArray("characterTraits", null);
-            if (classTraits != null)
-            {
-                foreach (string trait in classTraits)
-                {
-                    if (trait.Equals("farsighted", StringComparison.OrdinalIgnoreCase))
-                        return true;
-                }
-            }
-            string characterClass = entity.WatchedAttributes.GetString("characterClass", "");
-            return characterClass.Equals("hunter", StringComparison.OrdinalIgnoreCase);
+            return PlayerHasCancellableTrait(entity, "farsighted");
         }
 
         /// <summary>
@@ -6164,19 +6196,7 @@ namespace SeraphLeveling
         /// </summary>
         public static bool PlayerHasVanillaNervous(EntityPlayer entity)
         {
-            if (entity == null) return false;
-            string[] classTraits = entity.WatchedAttributes.GetStringArray("characterTraits", null);
-            if (classTraits != null)
-            {
-                foreach (string trait in classTraits)
-                {
-                    if (trait.Equals("nervous", StringComparison.OrdinalIgnoreCase))
-                        return true;
-                }
-            }
-            string characterClass = entity.WatchedAttributes.GetString("characterClass", "");
-            return characterClass.Equals("malefactor", StringComparison.OrdinalIgnoreCase) ||
-                   characterClass.Equals("clockmaker", StringComparison.OrdinalIgnoreCase);
+            return PlayerHasCancellableTrait(entity, "nervous");
         }
 
         /// <summary>
@@ -6184,18 +6204,7 @@ namespace SeraphLeveling
         /// </summary>
         public static bool PlayerHasVanillaNearsighted(EntityPlayer entity)
         {
-            if (entity == null) return false;
-            string[] classTraits = entity.WatchedAttributes.GetStringArray("characterTraits", null);
-            if (classTraits != null)
-            {
-                foreach (string trait in classTraits)
-                {
-                    if (trait.Equals("nearsighted", StringComparison.OrdinalIgnoreCase))
-                        return true;
-                }
-            }
-            string characterClass = entity.WatchedAttributes.GetString("characterClass", "");
-            return characterClass.Equals("blackguard", StringComparison.OrdinalIgnoreCase);
+            return PlayerHasCancellableTrait(entity, "nearsighted");
         }
 
         /// <summary>
@@ -6203,19 +6212,7 @@ namespace SeraphLeveling
         /// </summary>
         public static bool PlayerHasVanillaFrail(EntityPlayer entity)
         {
-            if (entity == null) return false;
-            string[] classTraits = entity.WatchedAttributes.GetStringArray("characterTraits", null);
-            if (classTraits != null)
-            {
-                foreach (string trait in classTraits)
-                {
-                    if (trait.Equals("frail", StringComparison.OrdinalIgnoreCase))
-                        return true;
-                }
-            }
-            string characterClass = entity.WatchedAttributes.GetString("characterClass", "");
-            return characterClass.Equals("malefactor", StringComparison.OrdinalIgnoreCase) ||
-                   characterClass.Equals("clockmaker", StringComparison.OrdinalIgnoreCase);
+            return PlayerHasCancellableTrait(entity, "frail");
         }
 
         /// <summary>
@@ -6223,18 +6220,7 @@ namespace SeraphLeveling
         /// </summary>
         public static bool PlayerHasVanillaCivil(EntityPlayer entity)
         {
-            if (entity == null) return false;
-            string[] classTraits = entity.WatchedAttributes.GetStringArray("characterTraits", null);
-            if (classTraits != null)
-            {
-                foreach (string trait in classTraits)
-                {
-                    if (trait.Equals("civil", StringComparison.OrdinalIgnoreCase))
-                        return true;
-                }
-            }
-            string characterClass = entity.WatchedAttributes.GetString("characterClass", "");
-            return characterClass.Equals("tailor", StringComparison.OrdinalIgnoreCase);
+            return PlayerHasCancellableTrait(entity, "civil");
         }
 
         /// <summary>
@@ -6242,18 +6228,7 @@ namespace SeraphLeveling
         /// </summary>
         public static bool PlayerHasVanillaWeak(EntityPlayer entity)
         {
-            if (entity == null) return false;
-            string[] classTraits = entity.WatchedAttributes.GetStringArray("characterTraits", null);
-            if (classTraits != null)
-            {
-                foreach (string trait in classTraits)
-                {
-                    if (trait.Equals("weak", StringComparison.OrdinalIgnoreCase))
-                        return true;
-                }
-            }
-            string characterClass = entity.WatchedAttributes.GetString("characterClass", "");
-            return characterClass.Equals("tailor", StringComparison.OrdinalIgnoreCase);
+            return PlayerHasCancellableTrait(entity, "weak");
         }
 
         /// <summary>
@@ -6261,18 +6236,7 @@ namespace SeraphLeveling
         /// </summary>
         public static bool PlayerHasVanillaKind(EntityPlayer entity)
         {
-            if (entity == null) return false;
-            string[] classTraits = entity.WatchedAttributes.GetStringArray("characterTraits", null);
-            if (classTraits != null)
-            {
-                foreach (string trait in classTraits)
-                {
-                    if (trait.Equals("kind", StringComparison.OrdinalIgnoreCase))
-                        return true;
-                }
-            }
-            string characterClass = entity.WatchedAttributes.GetString("characterClass", "");
-            return characterClass.Equals("tailor", StringComparison.OrdinalIgnoreCase);
+            return PlayerHasCancellableTrait(entity, "kind");
         }
 
         /// <summary>
@@ -6280,18 +6244,7 @@ namespace SeraphLeveling
         /// </summary>
         public static bool PlayerHasVanillaHeavyhanded(EntityPlayer entity)
         {
-            if (entity == null) return false;
-            string[] classTraits = entity.WatchedAttributes.GetStringArray("characterTraits", null);
-            if (classTraits != null)
-            {
-                foreach (string trait in classTraits)
-                {
-                    if (trait.Equals("heavyhanded", StringComparison.OrdinalIgnoreCase))
-                        return true;
-                }
-            }
-            string characterClass = entity.WatchedAttributes.GetString("characterClass", "");
-            return characterClass.Equals("blackguard", StringComparison.OrdinalIgnoreCase);
+            return PlayerHasCancellableTrait(entity, "heavyhanded");
         }
 
         /// <summary>
@@ -6299,18 +6252,7 @@ namespace SeraphLeveling
         /// </summary>
         public static bool PlayerHasVanillaClaustrophobic(EntityPlayer entity)
         {
-            if (entity == null) return false;
-            string[] classTraits = entity.WatchedAttributes.GetStringArray("characterTraits", null);
-            if (classTraits != null)
-            {
-                foreach (string trait in classTraits)
-                {
-                    if (trait.Equals("claustrophobic", StringComparison.OrdinalIgnoreCase))
-                        return true;
-                }
-            }
-            string characterClass = entity.WatchedAttributes.GetString("characterClass", "");
-            return characterClass.Equals("hunter", StringComparison.OrdinalIgnoreCase);
+            return PlayerHasCancellableTrait(entity, "claustrophobic");
         }
 
         /// <summary>
@@ -6427,7 +6369,10 @@ namespace SeraphLeveling
             int oldDurabilityLevel = watchedAttrs.GetInt(WATCHED_ARMOR_DURABILITY_LEVEL, -1);
             int oldWalkSpeedLevel = watchedAttrs.GetInt(WATCHED_ARMOR_WALKSPEED_LEVEL, -1);
 
-            bool valuesChanged = (oldDurabilityLevel != durabilityCredits) || (oldWalkSpeedLevel != walkSpeedCredits);
+            bool valuesChanged = (oldDurabilityLevel != durabilityCredits) || (oldWalkSpeedLevel != walkSpeedCredits)
+                || watchedAttrs.GetInt(WATCHED_ARMOR_DURABILITY_BONUS, -1) != durabilityBonus
+                || watchedAttrs.GetInt(WATCHED_ARMOR_WALKSPEED_BONUS, -1) != walkSpeedBonus
+                || watchedAttrs.GetBool("sitHasVanillaSoldierArmor") != hasVanillaSoldier;
 
             // Only update WatchedAttributes if values changed
             if (valuesChanged)
@@ -6871,7 +6816,8 @@ namespace SeraphLeveling
             int oldLevel = watchedAttrs.GetInt(WATCHED_WALKING_LEVEL, -1);
             int oldBonus = watchedAttrs.GetInt(WATCHED_WALKING_BONUS, -1);
 
-            bool valuesChanged = (oldLevel != level) || (oldBonus != bonusPercent);
+            bool valuesChanged = (oldLevel != level) || (oldBonus != bonusPercent)
+                || watchedAttrs.GetBool("sitHasVanillaFleetfooted") != hasVanillaFleetfooted;
 
             // Only update WatchedAttributes if values changed
             if (valuesChanged)
@@ -6932,6 +6878,8 @@ namespace SeraphLeveling
             int maxCredits = GetMaxMiningCredits(byPlayer.Entity);
 
             // Skip all processing if already at max - completely invisible
+            // A capped skill is still in use; keep its decay clock fresh.
+            UpdateSkillActivityDay(playerUid, "mining");
             if (playerProgress.TotalCredits >= maxCredits) return;
 
             // Get or create progress for this specific pickaxe type
@@ -7019,6 +6967,8 @@ namespace SeraphLeveling
                 });
 
                 // Skip all processing if already at max - completely invisible
+                // A capped skill is still in use; keep its decay clock fresh.
+                UpdateSkillActivityDay(playerUid, "walking");
                 if (playerProgress.TotalCredits >= MaxWalkingSpeedPercent) continue;
 
                 int oldCredits = playerProgress.TotalCredits;
@@ -7098,6 +7048,8 @@ namespace SeraphLeveling
                 int playerMaxCredits = CalculateMaxHungerCredits(player.Entity);
 
                 // Skip all processing if already at max - completely invisible
+                // A capped skill is still in use; keep its decay clock fresh.
+                UpdateSkillActivityDay(playerUid, "hunger");
                 if (playerProgress.TotalCredits >= playerMaxCredits) continue;
 
                 int oldCredits = playerProgress.TotalCredits;
@@ -7290,7 +7242,7 @@ namespace SeraphLeveling
             var entity = player.Entity;
 
             // Get character traits once
-            string[] characterTraits = entity.WatchedAttributes.GetStringArray("characterTraits", null) ?? Array.Empty<string>();
+            string[] characterTraits = GameTraitsOf(entity).ToArray();
             string characterClass = entity.WatchedAttributes.GetString("characterClass", "")?.ToLowerInvariant() ?? "";
 
             // Debug logging for trait detection
@@ -7301,26 +7253,26 @@ namespace SeraphLeveling
 
             var cache = new CachedVanillaTraits
             {
-                HasHardy = traitSet.Contains("hardy") || characterClass == "blackguard",
-                HasSoldier = traitSet.Contains("soldier") || characterClass == "blackguard",
-                HasFocused = traitSet.Contains("focused") || characterClass == "hunter",
-                HasFleetfooted = traitSet.Contains("fleetfooted") || characterClass == "hunter" || characterClass == "clockmaker",
-                HasRavenous = traitSet.Contains("ravenous") || characterClass == "blackguard",
-                HasFarsighted = traitSet.Contains("farsighted") || characterClass == "hunter",
-                HasNervous = traitSet.Contains("nervous") || characterClass == "malefactor" || characterClass == "clockmaker",
-                HasNearsighted = traitSet.Contains("nearsighted") || characterClass == "blackguard",
-                HasFrail = traitSet.Contains("frail") || characterClass == "malefactor" || characterClass == "clockmaker",
-                HasCivil = traitSet.Contains("civil") || characterClass == "tailor",
-                HasWeak = traitSet.Contains("weak") || characterClass == "tailor",
-                HasKind = traitSet.Contains("kind") || characterClass == "tailor",
-                HasHeavyhanded = traitSet.Contains("heavyhanded") || characterClass == "blackguard",
-                HasClaustrophobic = traitSet.Contains("claustrophobic") || characterClass == "hunter",
-                HasFurtive = traitSet.Contains("furtive") || characterClass == "malefactor",
-                HasPrecise = traitSet.Contains("precise") || characterClass == "clockmaker",
-                HasMender = traitSet.Contains("mender") || characterClass == "tailor",
-                HasPilferer = traitSet.Contains("pilferer") || characterClass == "malefactor",
-                HasResourceful = traitSet.Contains("resourceful") || characterClass == "hunter" || characterClass == "malefactor",
-                HasForager = traitSet.Contains("forager") || characterClass == "hunter" || characterClass == "malefactor",
+                HasHardy = traitSet.Contains("hardy"),
+                HasSoldier = traitSet.Contains("soldier"),
+                HasFocused = traitSet.Contains("focused"),
+                HasFleetfooted = traitSet.Contains("fleetfooted"),
+                HasRavenous = traitSet.Contains("ravenous"),
+                HasFarsighted = traitSet.Contains("farsighted"),
+                HasNervous = traitSet.Contains("nervous"),
+                HasNearsighted = traitSet.Contains("nearsighted"),
+                HasFrail = traitSet.Contains("frail"),
+                HasCivil = traitSet.Contains("civil"),
+                HasWeak = traitSet.Contains("weak"),
+                HasKind = traitSet.Contains("kind"),
+                HasHeavyhanded = traitSet.Contains("heavyhanded"),
+                HasClaustrophobic = traitSet.Contains("claustrophobic"),
+                HasFurtive = traitSet.Contains("furtive"),
+                HasPrecise = traitSet.Contains("precise"),
+                HasMender = traitSet.Contains("mender"),
+                HasPilferer = traitSet.Contains("pilferer"),
+                HasResourceful = traitSet.Contains("resourceful"),
+                HasForager = traitSet.Contains("forager"),
 
                 // Combat Overhaul traits — gated on IsCombatOverhaulLoaded. CO traits don't
                 // exist in the game world unless CO itself is loaded, so the class fallbacks
@@ -7719,6 +7671,12 @@ namespace SeraphLeveling
                     player.Entity.Stats.Remove("oreDropRate", "sitClaustrophobicOreCancel");
                 }
             }
+            else
+            {
+                // Trait gone (class change, or cancellation switched off): drop the counter.
+                player.Entity.Stats.Remove("miningSpeedMul", "sitClaustrophobicMiningCancel");
+                player.Entity.Stats.Remove("oreDropRate", "sitClaustrophobicOreCancel");
+            }
 
             // When Weak mining penalty is fully cancelled, also negate the HP penalty AND the mining speed penalty
             if (hasWeak)
@@ -7735,6 +7693,11 @@ namespace SeraphLeveling
                     player.Entity.Stats.Remove("maxhealthExtraPoints", WEAK_HP_CANCEL_STAT_CODE);
                     player.Entity.Stats.Remove("miningSpeedMul", "sitWeakMiningCancel");
                 }
+            }
+            else
+            {
+                // Trait gone (class change, or cancellation switched off): drop the counter.
+                player.Entity.Stats.Remove("miningSpeedMul", "sitWeakMiningCancel");
             }
 
             // Check if any values have changed before updating WatchedAttributes.
@@ -7786,23 +7749,7 @@ namespace SeraphLeveling
         /// </summary>
         private bool PlayerHasVanillaHardy(EntityPlayer entity)
         {
-            // Get the player's class traits (not extraTraits which we manage)
-            string[] classTraits = entity.WatchedAttributes.GetStringArray("characterTraits", null);
-
-            if (classTraits != null)
-            {
-                foreach (string trait in classTraits)
-                {
-                    if (trait.Equals("hardy", StringComparison.OrdinalIgnoreCase))
-                    {
-                        return true;
-                    }
-                }
-            }
-
-            // Fallback: check known classes that have Hardy
-            string characterClass = entity.WatchedAttributes.GetString("characterClass", "");
-            return characterClass.Equals("blackguard", StringComparison.OrdinalIgnoreCase);
+            return PlayerHasGameTrait(entity, "hardy");
         }
 
         /// <summary>
@@ -7894,6 +7841,46 @@ namespace SeraphLeveling
 
             try
             {
+                PatchDamageTracking(api);
+
+                // Patch EntityBehaviorHarvestable.SetHarvested for Resourceful trait (animal harvesting)
+                PatchAnimalHarvesting(api);
+
+                // Patch CollectibleObject.OnHeldInteractStep for Mender trait (sewing kit repairs)
+                PatchSewingKitRepairs(api);
+
+                // Patch BlockEntityStaticTranslocator.DoRepair for Technical trait (translocator repairs)
+                PatchTranslocatorRepairs(api);
+
+                // Patch BEBehaviorBed.DidSleep for sleep buff system
+                PatchBedSleeping(api);
+
+                // Patch Entity.Die for death penalty system
+                PatchEntityDeath(api);
+
+                // Experimental (config-gated, off by default): temporal traits effect,
+                // bow draw speed, knife gear-trick recharge, melee swing speed. The
+                // patches are always installed but no-op while their switch is off.
+                PatchTemporalStability(api);
+                PatchBowDrawSpeed(api);
+                PatchKnifeGearTrick(api);
+                MeleeAttackSpeedPatches.Apply(serverHarmony, api, "server");
+            }
+            catch (Exception ex)
+            {
+                api.Logger.Error($"[SeraphLeveling] Failed to apply server Harmony patches: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// Patch Entity.ReceiveDamage for melee and ranged damage tracking. Its own
+        /// method so a failed lookup only skips this patch instead of every patch
+        /// registered after it.
+        /// </summary>
+        private void PatchDamageTracking(ICoreServerAPI api)
+        {
+            try
+            {
                 // Find Entity.ReceiveDamage method
                 var entityType = typeof(Entity);
                 api.Logger.Debug($"[SeraphLeveling] Looking for Entity.ReceiveDamage method in {entityType.FullName}");
@@ -7926,33 +7913,10 @@ namespace SeraphLeveling
 
                 serverHarmony.Patch(receiveDamageMethod, postfix: new HarmonyMethod(postfixMethod));
                 api.Logger.Notification("[SeraphLeveling] Successfully patched Entity.ReceiveDamage for damage tracking");
-
-                // Patch EntityBehaviorHarvestable.SetHarvested for Resourceful trait (animal harvesting)
-                PatchAnimalHarvesting(api);
-
-                // Patch CollectibleObject.OnHeldInteractStep for Mender trait (sewing kit repairs)
-                PatchSewingKitRepairs(api);
-
-                // Patch BlockEntityStaticTranslocator.DoRepair for Technical trait (translocator repairs)
-                PatchTranslocatorRepairs(api);
-
-                // Patch BEBehaviorBed.DidSleep for sleep buff system
-                PatchBedSleeping(api);
-
-                // Patch Entity.Die for death penalty system
-                PatchEntityDeath(api);
-
-                // Experimental (config-gated, off by default): temporal traits effect,
-                // bow draw speed, knife gear-trick recharge, melee swing speed. The
-                // patches are always installed but no-op while their switch is off.
-                PatchTemporalStability(api);
-                PatchBowDrawSpeed(api);
-                PatchKnifeGearTrick(api);
-                MeleeAttackSpeedPatches.Apply(serverHarmony, api, "server");
             }
             catch (Exception ex)
             {
-                api.Logger.Error($"[SeraphLeveling] Failed to apply server Harmony patches: {ex.Message}");
+                api.Logger.Error($"[SeraphLeveling] Failed to patch Entity.ReceiveDamage: {ex.Message}");
             }
         }
 
@@ -8223,6 +8187,8 @@ namespace SeraphLeveling
             int maxCredits = GetMaxMeleeCredits(attackerPlayer.Entity);
 
             // Skip all processing if already at max - completely invisible
+            // A capped skill is still in use; keep its decay clock fresh.
+            UpdateSkillActivityDay(playerUid, "melee");
             if (playerProgress.TotalCredits >= maxCredits) return;
 
             // Get or create progress for this specific weapon type
@@ -8314,12 +8280,22 @@ namespace SeraphLeveling
                 else
                     player.Entity.Stats.Remove("meleeWeaponsDamage", "sitFarsightedMeleeCancel");
             }
+            else
+            {
+                // Trait gone (class change, or cancellation switched off): drop the counter.
+                player.Entity.Stats.Remove("meleeWeaponsDamage", "sitFarsightedMeleeCancel");
+            }
             if (hasNervous)
             {
                 if (nervousRemaining == 0)
                     player.Entity.Stats.Set("meleeWeaponsDamage", "sitNervousMeleeCancel", VANILLA_NERVOUS_MELEE_PENALTY * 0.01f, false);
                 else
                     player.Entity.Stats.Remove("meleeWeaponsDamage", "sitNervousMeleeCancel");
+            }
+            else
+            {
+                // Trait gone (class change, or cancellation switched off): drop the counter.
+                player.Entity.Stats.Remove("meleeWeaponsDamage", "sitNervousMeleeCancel");
             }
 
             // Check if any values have changed before updating WatchedAttributes.
@@ -8371,21 +8347,7 @@ namespace SeraphLeveling
         /// </summary>
         private static bool PlayerHasVanillaSoldierStatic(EntityPlayer entity)
         {
-            string[] classTraits = entity.WatchedAttributes.GetStringArray("characterTraits", null);
-
-            if (classTraits != null)
-            {
-                foreach (string trait in classTraits)
-                {
-                    if (trait.Equals("soldier", StringComparison.OrdinalIgnoreCase))
-                    {
-                        return true;
-                    }
-                }
-            }
-
-            string characterClass = entity.WatchedAttributes.GetString("characterClass", "");
-            return characterClass.Equals("blackguard", StringComparison.OrdinalIgnoreCase);
+            return PlayerHasGameTrait(entity, "soldier");
         }
 
         /// <summary>
@@ -8407,31 +8369,6 @@ namespace SeraphLeveling
                 var newTraits = currentTraits.Where(t => t != traitCode).ToArray();
                 entity.WatchedAttributes.SetStringArray("extraTraits", newTraits);
                 entity.WatchedAttributes.MarkPathDirty("extraTraits");
-            }
-        }
-
-        /// <summary>
-        /// Updates the characterTraits array to add or remove a trait.
-        /// This is used for traits that unlock recipes (like Clothier).
-        /// Unlike extraTraits which is only for UI display, characterTraits is
-        /// what the game actually checks for recipe requirements.
-        /// </summary>
-        private static void UpdateCharacterTraitStatic(EntityPlayer entity, string traitCode, bool shouldHave)
-        {
-            string[] currentTraits = entity.WatchedAttributes.GetStringArray("characterTraits", null) ?? Array.Empty<string>();
-            bool hasTrait = currentTraits.Contains(traitCode);
-
-            if (shouldHave && !hasTrait)
-            {
-                var newTraits = currentTraits.Append(traitCode).ToArray();
-                entity.WatchedAttributes.SetStringArray("characterTraits", newTraits);
-                entity.WatchedAttributes.MarkPathDirty("characterTraits");
-            }
-            else if (!shouldHave && hasTrait)
-            {
-                var newTraits = currentTraits.Where(t => t != traitCode).ToArray();
-                entity.WatchedAttributes.SetStringArray("characterTraits", newTraits);
-                entity.WatchedAttributes.MarkPathDirty("characterTraits");
             }
         }
 
@@ -8633,6 +8570,8 @@ namespace SeraphLeveling
             int maxCredits = GetMaxRangedCredits(attackerPlayer.Entity);
 
             // Skip remaining credit processing if already at max - completely invisible
+            // A capped skill is still in use; keep its decay clock fresh.
+            UpdateSkillActivityDay(playerUid, "ranged");
             if (playerProgress.TotalCredits >= maxCredits) return;
 
             // Get or create progress for this specific weapon combination
@@ -8825,6 +8764,11 @@ namespace SeraphLeveling
                 else
                     player.Entity.Stats.Remove("rangedWeaponsDamage", "sitNearsightedRangedCancel");
             }
+            else
+            {
+                // Trait gone (class change, or cancellation switched off): drop the counter.
+                player.Entity.Stats.Remove("rangedWeaponsDamage", "sitNearsightedRangedCancel");
+            }
 
             // When Frail distance penalty is fully cancelled, also negate the HP penalty AND the distance penalty
             if (hasFrail)
@@ -8840,13 +8784,26 @@ namespace SeraphLeveling
                     player.Entity.Stats.Remove("bowDrawingStrength", "sitFrailDistanceCancel");
                 }
             }
+            else
+            {
+                // Trait gone (class change, or cancellation switched off): drop the counter.
+                player.Entity.Stats.Remove("bowDrawingStrength", "sitFrailDistanceCancel");
+            }
 
             // Check if any values have changed before updating WatchedAttributes
             var watchedAttrs = player.Entity.WatchedAttributes;
             int oldLevel = watchedAttrs.GetInt(WATCHED_RANGED_LEVEL, -1);
             int oldDamageBonus = watchedAttrs.GetInt(WATCHED_RANGED_DAMAGE_BONUS, -1);
 
-            bool valuesChanged = (oldLevel != level) || (oldDamageBonus != damagePct);
+            bool valuesChanged = (oldLevel != level) || (oldDamageBonus != damagePct)
+                || watchedAttrs.GetInt(WATCHED_RANGED_ACCURACY_BONUS, -1) != accuracyPct
+                || watchedAttrs.GetInt(WATCHED_RANGED_DISTANCE_BONUS, -1) != distancePct
+                || watchedAttrs.GetBool("sitHasVanillaFocused") != hasVanillaFocused
+                || watchedAttrs.GetBool("sitHasNearsighted") != hasNearsighted
+                || watchedAttrs.GetInt(WATCHED_NEARSIGHTED_REMAINING, -1) != nearsightedRemaining
+                || watchedAttrs.GetBool("sitHasFrail") != hasFrail
+                || watchedAttrs.GetInt(WATCHED_FRAIL_DISTANCE_REMAINING, -1) != frailDistanceRemaining
+                || watchedAttrs.GetFloat(WATCHED_FRAIL_HP_REMAINING, -1f) != frailHpRemaining;
 
             // Only update WatchedAttributes if values changed
             if (valuesChanged)
@@ -9220,6 +9177,7 @@ namespace SeraphLeveling
             // The single-process guards must reset with the unpatch, or the next
             // world load in the same process would skip re-patching.
             BowDrawSpeedPatches.PatchedInProcess = false;
+            SeraphLevelingModSystem.ResetCharacterSystemCache();
             MeleeAttackSpeedPatches.ResetPatchGuard();
 
             MiningProgress.Clear();
@@ -12040,6 +11998,40 @@ namespace SeraphLeveling
         }
 
         /// <summary>
+        /// Points a death drains from a per-tool skill. The documented curve is
+        /// baseIncrement * DeathPenaltyFraction * sqrt(credits) points, but the cost of a
+        /// credit grows with every level, so above roughly level 5 that many points stop
+        /// reaching a credit boundary and the death costs nothing. The drain is raised to
+        /// whatever guarantees floor(DeathPenaltyFraction * sqrt(credits)) credits are lost,
+        /// the figure the no-tool fallback and the death message already use.
+        /// </summary>
+        private static double DeathPenaltyPointsForTools(
+            List<(string key, double accumulator, int incrementSize)> toolEntries,
+            int oldCredits, int baseIncrement, int incrementStep)
+        {
+            double curvePoints = baseIncrement * DeathPenaltyFraction * Math.Sqrt(Math.Max(1, oldCredits));
+            int intendedLoss = (int)Math.Floor(DeathPenaltyFraction * Math.Sqrt(Math.Max(1, oldCredits)));
+            intendedLoss = Math.Min(intendedLoss, oldCredits);
+            if (intendedLoss <= 0) return curvePoints;
+            var absPositions = new List<(string key, double value)>();
+            foreach (var entry in toolEntries)
+                absPositions.Add((entry.key, ToolToAbsolutePosition(entry.accumulator, entry.incrementSize, baseIncrement, incrementStep)));
+            double guaranteed = ComputeDeathPenaltyRawPenalty(absPositions, intendedLoss, baseIncrement, incrementStep);
+            return Math.Max(curvePoints, guaranteed);
+        }
+
+        /// <summary>Single-accumulator twin of DeathPenaltyPointsForTools.</summary>
+        private static double DeathPenaltyPointsForSingle(double currentAccumulator, int oldCredits, int baseIncrement, int incrementStep)
+        {
+            double curvePoints = baseIncrement * DeathPenaltyFraction * Math.Sqrt(Math.Max(1, oldCredits));
+            int intendedLoss = (int)Math.Floor(DeathPenaltyFraction * Math.Sqrt(Math.Max(1, oldCredits)));
+            intendedLoss = Math.Min(intendedLoss, oldCredits);
+            if (intendedLoss <= 0) return curvePoints;
+            double guaranteed = ComputeMinSingleAccumulatorPenalty(currentAccumulator, oldCredits, intendedLoss, baseIncrement, incrementStep);
+            return Math.Max(curvePoints, guaranteed);
+        }
+
+        /// <summary>
         /// DeathPenaltyFullReset: wipe every progression system back to zero, keeping
         /// only the systems the admin listed in DeathPenaltyExemptSkills (or disabled
         /// outright). Implemented as snapshot, full reset via the same routine
@@ -12138,7 +12130,7 @@ namespace SeraphLeveling
 
                     if (toolEntries.Count > 0)
                     {
-                        double rawPenalty = BaseBlocksPerIncrement * DeathPenaltyFraction * Math.Sqrt(Math.Max(1, oldCredits));
+                        double rawPenalty = DeathPenaltyPointsForTools(toolEntries, oldCredits, BaseBlocksPerIncrement, IncrementStep);
                         var (newCr, _) = ApplyAbsolutePositionDecay(toolEntries, rawPenalty,
                             BaseBlocksPerIncrement, IncrementStep, oldCredits,
                             (k, a, s) => { if (miningProg.PickaxeProgress.TryGetValue(k, out var p)) {
@@ -12189,7 +12181,7 @@ namespace SeraphLeveling
 
                     if (toolEntries.Count > 0)
                     {
-                        double rawPenalty = BaseDamagePerIncrement * DeathPenaltyFraction * Math.Sqrt(Math.Max(1, oldCredits));
+                        double rawPenalty = DeathPenaltyPointsForTools(toolEntries, oldCredits, BaseDamagePerIncrement, MeleeIncrementStep);
                         var (newCr, _) = ApplyAbsolutePositionDecay(toolEntries, rawPenalty,
                             BaseDamagePerIncrement, MeleeIncrementStep, oldCredits,
                             (k, a, s) => { if (meleeProg.WeaponProgress.TryGetValue(k, out var p)) {
@@ -12240,7 +12232,7 @@ namespace SeraphLeveling
 
                     if (toolEntries.Count > 0)
                     {
-                        double rawPenalty = BaseRangedDamagePerIncrement * DeathPenaltyFraction * Math.Sqrt(Math.Max(1, oldCredits));
+                        double rawPenalty = DeathPenaltyPointsForTools(toolEntries, oldCredits, BaseRangedDamagePerIncrement, RangedIncrementStep);
                         var (newCr, _) = ApplyAbsolutePositionDecay(toolEntries, rawPenalty,
                             BaseRangedDamagePerIncrement, RangedIncrementStep, oldCredits,
                             (k, a, s) => { if (rangedProg.WeaponProgress.TryGetValue(k, out var p)) {
@@ -12291,7 +12283,7 @@ namespace SeraphLeveling
 
                     if (toolEntries.Count > 0)
                     {
-                        double rawPenalty = BasePreciseDamagePerIncrement * DeathPenaltyFraction * Math.Sqrt(Math.Max(1, oldCredits));
+                        double rawPenalty = DeathPenaltyPointsForTools(toolEntries, oldCredits, BasePreciseDamagePerIncrement, PreciseIncrementStep);
                         var (newCr, _) = ApplyAbsolutePositionDecay(toolEntries, rawPenalty,
                             BasePreciseDamagePerIncrement, PreciseIncrementStep, oldCredits,
                             (k, a, s) => { if (preciseProg.WeaponProgress.TryGetValue(k, out var p)) {
@@ -12339,7 +12331,7 @@ namespace SeraphLeveling
                 {
                     int oldCredits = walkingProg.TotalCredits;
                     float oldAcc = walkingProg.BlocksInIncrement; int oldInc = walkingProg.CurrentIncrementSize;
-                    double rawPenalty = BaseBlocksWalkedPerIncrement * DeathPenaltyFraction * Math.Sqrt(Math.Max(1, oldCredits));
+                    double rawPenalty = DeathPenaltyPointsForSingle(oldAcc, oldCredits, BaseBlocksWalkedPerIncrement, WalkingIncrementStep);
                     var (newCr, newAcc, newInc, lost) = ApplySingleAccumulatorDecay(
                         oldAcc, oldInc, oldCredits, rawPenalty, BaseBlocksWalkedPerIncrement, WalkingIncrementStep, null, "Walking");
                     walkingProg.TotalCredits = newCr; walkingProg.BlocksInIncrement = (float)newAcc; walkingProg.CurrentIncrementSize = newInc;
@@ -12356,7 +12348,7 @@ namespace SeraphLeveling
                 {
                     int oldCredits = hungerProg.TotalCredits;
                     float oldAcc = hungerProg.SecondsInIncrement; int oldInc = hungerProg.CurrentIncrementSize;
-                    double rawPenalty = BaseSecondsPerIncrement * DeathPenaltyFraction * Math.Sqrt(Math.Max(1, oldCredits));
+                    double rawPenalty = DeathPenaltyPointsForSingle(oldAcc, oldCredits, BaseSecondsPerIncrement, HungerIncrementStep);
                     var (newCr, newAcc, newInc, lost) = ApplySingleAccumulatorDecay(
                         oldAcc, oldInc, oldCredits, rawPenalty, BaseSecondsPerIncrement, HungerIncrementStep, null, "Hunger");
                     hungerProg.TotalCredits = newCr; hungerProg.SecondsInIncrement = (float)newAcc; hungerProg.CurrentIncrementSize = newInc;
@@ -12373,7 +12365,7 @@ namespace SeraphLeveling
                 {
                     int oldCredits = menderProg.TotalCredits;
                     int oldAcc = menderProg.RepairsInIncrement; int oldInc = menderProg.CurrentIncrementSize;
-                    double rawPenalty = BaseMenderRepairsPerIncrement * DeathPenaltyFraction * Math.Sqrt(Math.Max(1, oldCredits));
+                    double rawPenalty = DeathPenaltyPointsForSingle(oldAcc, oldCredits, BaseMenderRepairsPerIncrement, MenderIncrementStep);
                     var (newCr, newAcc, newInc, lost) = ApplySingleAccumulatorDecay(
                         oldAcc, oldInc, oldCredits, rawPenalty, BaseMenderRepairsPerIncrement, MenderIncrementStep, null, "Mender");
                     menderProg.TotalCredits = newCr; menderProg.RepairsInIncrement = (int)Math.Floor(newAcc); menderProg.CurrentIncrementSize = newInc;
@@ -12390,7 +12382,7 @@ namespace SeraphLeveling
                 {
                     int oldCredits = pilfererProg.TotalCredits;
                     int oldAcc = pilfererProg.PointsInIncrement; int oldInc = pilfererProg.CurrentIncrementSize;
-                    double rawPenalty = BasePilfererPointsPerIncrement * DeathPenaltyFraction * Math.Sqrt(Math.Max(1, oldCredits));
+                    double rawPenalty = DeathPenaltyPointsForSingle(oldAcc, oldCredits, BasePilfererPointsPerIncrement, PilfererIncrementStep);
                     var (newCr, newAcc, newInc, lost) = ApplySingleAccumulatorDecay(
                         oldAcc, oldInc, oldCredits, rawPenalty, BasePilfererPointsPerIncrement, PilfererIncrementStep, null, "Pilferer");
                     pilfererProg.TotalCredits = newCr; pilfererProg.PointsInIncrement = (int)Math.Floor(newAcc); pilfererProg.CurrentIncrementSize = newInc;
@@ -12407,7 +12399,7 @@ namespace SeraphLeveling
                 {
                     int oldCredits = resourcefulProg.TotalCredits;
                     int oldAcc = resourcefulProg.AnimalsInIncrement; int oldInc = resourcefulProg.CurrentIncrementSize;
-                    double rawPenalty = BaseResourcefulAnimalsPerIncrement * DeathPenaltyFraction * Math.Sqrt(Math.Max(1, oldCredits));
+                    double rawPenalty = DeathPenaltyPointsForSingle(oldAcc, oldCredits, BaseResourcefulAnimalsPerIncrement, ResourcefulIncrementStep);
                     var (newCr, newAcc, newInc, lost) = ApplySingleAccumulatorDecay(
                         oldAcc, oldInc, oldCredits, rawPenalty, BaseResourcefulAnimalsPerIncrement, ResourcefulIncrementStep, null, "Resourceful");
                     resourcefulProg.TotalCredits = newCr; resourcefulProg.AnimalsInIncrement = (int)Math.Floor(newAcc); resourcefulProg.CurrentIncrementSize = newInc;
@@ -12424,7 +12416,7 @@ namespace SeraphLeveling
                 {
                     int oldCredits = foragerProg.TotalCredits;
                     int oldAcc = foragerProg.CropsInIncrement; int oldInc = foragerProg.CurrentIncrementSize;
-                    double rawPenalty = BaseForagerCropsPerIncrement * DeathPenaltyFraction * Math.Sqrt(Math.Max(1, oldCredits));
+                    double rawPenalty = DeathPenaltyPointsForSingle(oldAcc, oldCredits, BaseForagerCropsPerIncrement, ForagerIncrementStep);
                     var (newCr, newAcc, newInc, lost) = ApplySingleAccumulatorDecay(
                         oldAcc, oldInc, oldCredits, rawPenalty, BaseForagerCropsPerIncrement, ForagerIncrementStep, null, "Forager");
                     foragerProg.TotalCredits = newCr; foragerProg.CropsInIncrement = (int)Math.Floor(newAcc); foragerProg.CurrentIncrementSize = newInc;
@@ -12441,7 +12433,7 @@ namespace SeraphLeveling
                 {
                     int oldCredits = furtiveProg.TotalCredits;
                     float oldAcc = furtiveProg.BlocksInIncrement; int oldInc = furtiveProg.CurrentIncrementSize;
-                    double rawPenalty = BaseFurtiveSneakBlocksPerIncrement * DeathPenaltyFraction * Math.Sqrt(Math.Max(1, oldCredits));
+                    double rawPenalty = DeathPenaltyPointsForSingle(oldAcc, oldCredits, BaseFurtiveSneakBlocksPerIncrement, FurtiveIncrementStep);
                     var (newCr, newAcc, newInc, lost) = ApplySingleAccumulatorDecay(
                         oldAcc, oldInc, oldCredits, rawPenalty, BaseFurtiveSneakBlocksPerIncrement, FurtiveIncrementStep, null, "Furtive");
                     furtiveProg.TotalCredits = newCr; furtiveProg.BlocksInIncrement = (float)newAcc; furtiveProg.CurrentIncrementSize = newInc;
@@ -12469,7 +12461,7 @@ namespace SeraphLeveling
 
                             if (toolEntries.Count > 0)
                             {
-                                double rawPenalty = COBaseDamagePerIncrement * DeathPenaltyFraction * Math.Sqrt(Math.Max(1, oldProfCredits));
+                                double rawPenalty = DeathPenaltyPointsForTools(toolEntries, oldProfCredits, COBaseDamagePerIncrement, COIncrementStep);
                                 var (newCr, _) = ApplyAbsolutePositionDecay(toolEntries, rawPenalty,
                                     COBaseDamagePerIncrement, COIncrementStep, oldProfCredits,
                                     (k, a, s) => { if (profKvp.Value.WeaponProgress.TryGetValue(k, out var p)) {
@@ -13605,7 +13597,7 @@ namespace SeraphLeveling
                 // Only set defaults if not already initialized (avoids overwriting earned progress)
                 if (watchedAttrs.GetFloat(WATCHED_CO_TREMBLING_AIM_REMAINING, -1f) < 0)
                 {
-                    watchedAttrs.SetFloat(WATCHED_CO_TREMBLING_AIM_REMAINING, 1.0f);
+                    watchedAttrs.SetFloat(WATCHED_CO_TREMBLING_AIM_REMAINING, CO_TREMBLING_AIM_PENALTY);
                     watchedAttrs.SetBool(WATCHED_CO_HAS_TREMBLING_AIM, true);
                     watchedAttrs.MarkPathDirty(WATCHED_CO_TREMBLING_AIM_REMAINING);
                 }
@@ -14332,6 +14324,8 @@ namespace SeraphLeveling
                 });
 
                 // Skip all processing if already at max
+                // A capped skill is still in use; keep its decay clock fresh.
+                UpdateSkillActivityDay(playerUid, "furtive");
                 if (playerProgress.TotalCredits >= MaxFurtivePercent) continue;
 
                 int oldCredits = playerProgress.TotalCredits;
@@ -14439,16 +14433,8 @@ namespace SeraphLeveling
         /// </summary>
         private static bool PlayerHasVanillaTraitOrClassStatic(EntityPlayer entity, string traitCode, string classCode)
         {
-            if (entity == null) return false;
-
-            string[] traits = entity.WatchedAttributes.GetStringArray("characterTraits", null) ?? Array.Empty<string>();
-            foreach (string trait in traits)
-            {
-                if (string.Equals(trait, traitCode, StringComparison.OrdinalIgnoreCase)) return true;
-            }
-
-            string charClass = entity.WatchedAttributes.GetString("characterClass", "")?.ToLowerInvariant() ?? "";
-            return charClass == classCode;
+            // classCode is kept for the callers; the class table already answers it.
+            return PlayerHasGameTrait(entity, traitCode);
         }
 
         // =========================================================================
@@ -14654,9 +14640,14 @@ namespace SeraphLeveling
         /// </summary>
         private static void ApplyHardyHealthBonusStatic(IServerPlayer player, bool unlocked)
         {
-            if (unlocked)
+            // Blackguard already has vanilla Hardy (+5 health). By default every class
+            // ends at the same total, so the vanilla points count against the bonus;
+            // with EnableClassCapOffsets the class keeps its head start.
+            int vanillaHardyHp = PlayerHasGameTrait(player.Entity, "hardy") ? VANILLA_HARDY_HP_BONUS : 0;
+            int hardyHealthPoints = Math.Max(0, HardyHealthBonus - CapCounted(vanillaHardyHp));
+            if (unlocked && hardyHealthPoints > 0)
             {
-                player.Entity.Stats.Set("maxhealthExtraPoints", HARDY_HEALTH_STAT_CODE, HardyHealthBonus, false);
+                player.Entity.Stats.Set("maxhealthExtraPoints", HARDY_HEALTH_STAT_CODE, hardyHealthPoints, false);
             }
             else
             {
@@ -14712,7 +14703,11 @@ namespace SeraphLeveling
 
             // Set the temporal gear repair cost reduction stat
             // -1 means one fewer temporal gear needed to repair translocators
-            float gearCostReduction = unlocked ? -1f : 0f;
+            // Clockmaker already has vanilla Technical (-1 gear). The stat is a flat sum,
+            // so a second -1 would advance a repair two stages per gear. By default the
+            // class ends level with everyone else; with EnableClassCapOffsets it stacks.
+            int vanillaTechnical = PlayerHasGameTrait(player.Entity, "technical") ? 1 : 0;
+            float gearCostReduction = unlocked ? -Math.Max(0, 1 - CapCounted(vanillaTechnical)) : 0f;
             player.Entity.Stats.Set("temporalGearTLRepairCost", TECHNICAL_STAT_CODE, gearCostReduction, false);
         }
 
@@ -15076,22 +15071,7 @@ namespace SeraphLeveling
         /// </summary>
         private static bool PlayerHasVanillaMenderStatic(EntityPlayer entity)
         {
-            if (entity == null) return false;
-            string[] classTraits = entity.WatchedAttributes.GetStringArray("characterTraits", null);
-            if (classTraits != null)
-            {
-                foreach (string trait in classTraits)
-                {
-                    if (trait.Equals("mender", StringComparison.OrdinalIgnoreCase))
-                    {
-                        return true;
-                    }
-                }
-            }
-            // Class fallback for Tailor (vanilla Mender) — keeps server-side Apply consistent
-            // with client-side ClientHasVanillaTrait when characterTraits isn't populated.
-            string characterClass = entity.WatchedAttributes.GetString("characterClass", "");
-            return characterClass.Equals("tailor", StringComparison.OrdinalIgnoreCase);
+            return PlayerHasGameTrait(entity, "mender");
         }
 
         /// <summary>
@@ -15321,20 +15301,7 @@ namespace SeraphLeveling
         /// </summary>
         private static bool PlayerHasVanillaPilfererStatic(EntityPlayer entity)
         {
-            if (entity == null) return false;
-            string[] classTraits = entity.WatchedAttributes.GetStringArray("characterTraits", null);
-            if (classTraits != null)
-            {
-                foreach (string trait in classTraits)
-                {
-                    if (trait.Equals("pilferer", StringComparison.OrdinalIgnoreCase))
-                    {
-                        return true;
-                    }
-                }
-            }
-            string characterClass = entity.WatchedAttributes.GetString("characterClass", "");
-            return characterClass.Equals("malefactor", StringComparison.OrdinalIgnoreCase);
+            return PlayerHasGameTrait(entity, "pilferer");
         }
 
         /// <summary>
@@ -15391,6 +15358,11 @@ namespace SeraphLeveling
                 else
                     player.Entity.Stats.Remove("vesselContentsDropRate", "sitHeavyhandedVesselCancel");
             }
+            else
+            {
+                // Trait gone (class change, or cancellation switched off): drop the counter.
+                player.Entity.Stats.Remove("vesselContentsDropRate", "sitHeavyhandedVesselCancel");
+            }
 
             // Sync to WatchedAttributes
             player.Entity.WatchedAttributes.SetInt(WATCHED_PILFERER_LEVEL, level);
@@ -15428,6 +15400,8 @@ namespace SeraphLeveling
             // Get the player-specific max credits (accounts for Heavyhanded penalty)
             int maxCredits = GetMaxPilfererCredits(player.Entity);
 
+            // A capped skill is still in use; keep its decay clock fresh.
+            UpdateSkillActivityDay(playerUid, "pilferer");
             if (progress.TotalCredits >= maxCredits) return;
 
             int oldCredits = progress.TotalCredits;
@@ -15633,25 +15607,7 @@ namespace SeraphLeveling
         /// </summary>
         private static bool PlayerHasVanillaResourcefulStatic(EntityPlayer entity)
         {
-            if (entity == null) return false;
-            string[] classTraits = entity.WatchedAttributes.GetStringArray("characterTraits", null);
-            if (classTraits != null)
-            {
-                foreach (string trait in classTraits)
-                {
-                    if (trait.Equals("resourceful", StringComparison.OrdinalIgnoreCase))
-                    {
-                        return true;
-                    }
-                }
-            }
-            // Fallback to characterClass — keeps server-side Apply consistent with the
-            // client-side ClientHasVanillaTrait check (otherwise Apply computes a higher
-            // earnable cap when characterTraits hasn't been populated, then the postfix
-            // adds the vanilla bonus on top and the displayed value exceeds the actual cap).
-            string characterClass = entity.WatchedAttributes.GetString("characterClass", "");
-            return characterClass.Equals("hunter", StringComparison.OrdinalIgnoreCase) ||
-                   characterClass.Equals("malefactor", StringComparison.OrdinalIgnoreCase);
+            return PlayerHasGameTrait(entity, "resourceful");
         }
 
         /// <summary>
@@ -15726,6 +15682,12 @@ namespace SeraphLeveling
                 else
                     player.Entity.Stats.Remove("animalHarvestingTime", "sitKindSpeedCancel");
             }
+            else
+            {
+                // Trait gone (class change, or cancellation switched off): drop the counter.
+                player.Entity.Stats.Remove("animalLootDropRate", "sitKindLootCancel");
+                player.Entity.Stats.Remove("animalHarvestingTime", "sitKindSpeedCancel");
+            }
 
             // Sync to WatchedAttributes
             player.Entity.WatchedAttributes.SetInt(WATCHED_RESOURCEFUL_LEVEL, level);
@@ -15760,6 +15722,8 @@ namespace SeraphLeveling
             // Get the player-specific max credits (accounts for Kind penalty)
             int maxCredits = GetMaxResourcefulCredits(player.Entity);
 
+            // A capped skill is still in use; keep its decay clock fresh.
+            UpdateSkillActivityDay(playerUid, "resourceful");
             if (progress.TotalCredits >= maxCredits) return;
 
             int oldCredits = progress.TotalCredits;
@@ -15959,21 +15923,7 @@ namespace SeraphLeveling
         /// </summary>
         private static bool PlayerHasVanillaForagerStatic(EntityPlayer entity)
         {
-            if (entity == null) return false;
-            string[] classTraits = entity.WatchedAttributes.GetStringArray("characterTraits", null);
-            if (classTraits != null)
-            {
-                foreach (string trait in classTraits)
-                {
-                    if (trait.Equals("forager", StringComparison.OrdinalIgnoreCase))
-                    {
-                        return true;
-                    }
-                }
-            }
-            string characterClass = entity.WatchedAttributes.GetString("characterClass", "");
-            return characterClass.Equals("hunter", StringComparison.OrdinalIgnoreCase) ||
-                   characterClass.Equals("malefactor", StringComparison.OrdinalIgnoreCase);
+            return PlayerHasGameTrait(entity, "forager");
         }
 
         /// <summary>
@@ -16074,6 +16024,11 @@ namespace SeraphLeveling
                 else
                     player.Entity.Stats.Remove("forageDropRate", "sitCivilForagingCancel");
             }
+            else
+            {
+                // Trait gone (class change, or cancellation switched off): drop the counter.
+                player.Entity.Stats.Remove("forageDropRate", "sitCivilForagingCancel");
+            }
             if (hasHeavyhanded)
             {
                 if (heavyhandedForagingRemaining == 0)
@@ -16085,6 +16040,12 @@ namespace SeraphLeveling
                     player.Entity.Stats.Set("wildCropDropRate", "sitHeavyhandedWildCropCancel", VANILLA_HEAVYHANDED_WILD_CROP_PENALTY * 0.01f, false);
                 else
                     player.Entity.Stats.Remove("wildCropDropRate", "sitHeavyhandedWildCropCancel");
+            }
+            else
+            {
+                // Trait gone (class change, or cancellation switched off): drop the counter.
+                player.Entity.Stats.Remove("forageDropRate", "sitHeavyhandedForagingCancel");
+                player.Entity.Stats.Remove("wildCropDropRate", "sitHeavyhandedWildCropCancel");
             }
 
             // Sync to WatchedAttributes
@@ -16119,6 +16080,8 @@ namespace SeraphLeveling
             // Get the player-specific max credits (accounts for Civil/Heavyhanded penalties)
             int maxCredits = GetMaxForagerCredits(player.Entity);
 
+            // A capped skill is still in use; keep its decay clock fresh.
+            UpdateSkillActivityDay(playerUid, "forager");
             if (progress.TotalCredits >= maxCredits) return;
 
             int oldCredits = progress.TotalCredits;
@@ -20869,6 +20832,7 @@ namespace SeraphLeveling
 
             // See the server Dispose: the guards must reset with the unpatch.
             BowDrawSpeedPatches.PatchedInProcess = false;
+            SeraphLevelingModSystem.ResetCharacterSystemCache();
             MeleeAttackSpeedPatches.ResetPatchGuard();
 
             // Unhook from character dialog: put the vanilla handler back in the same
@@ -21317,7 +21281,7 @@ namespace SeraphLeveling
             int resourcefulLevel = eplr.WatchedAttributes.GetInt(SeraphLevelingModSystem.WATCHED_RESOURCEFUL_LEVEL, 0);
             int resourcefulLootBonus = eplr.WatchedAttributes.GetInt(SeraphLevelingModSystem.WATCHED_RESOURCEFUL_LOOT_BONUS, 0);
             int resourcefulSpeedBonus = eplr.WatchedAttributes.GetInt(SeraphLevelingModSystem.WATCHED_RESOURCEFUL_SPEED_BONUS, 0);
-            bool hasVanillaResourceful = ClientHasVanillaTrait(eplr, "resourceful", "hunter", "malefactor");
+            bool hasVanillaResourceful = ClientHasVanillaTrait(eplr, "resourceful", "hunter");
             // Only show Resourceful when any bonus > 0 (after Kind penalty is cancelled)
             if (resourcefulLootBonus > 0 || resourcefulSpeedBonus > 0)
             {
@@ -21359,7 +21323,7 @@ namespace SeraphLeveling
             int foragerLevel = eplr.WatchedAttributes.GetInt(SeraphLevelingModSystem.WATCHED_FORAGER_LEVEL, 0);
             int foragerLootBonus = eplr.WatchedAttributes.GetInt(SeraphLevelingModSystem.WATCHED_FORAGER_LOOT_BONUS, 0);
             int foragerWildCropBonus = eplr.WatchedAttributes.GetInt(SeraphLevelingModSystem.WATCHED_FORAGER_WILD_CROP_BONUS, 0);
-            bool hasVanillaForager = ClientHasVanillaTrait(eplr, "forager", "hunter", "malefactor");
+            bool hasVanillaForager = ClientHasVanillaTrait(eplr, "forager", "malefactor");
             // Only show Forager when any bonus > 0 (after Civil/Heavyhanded penalties are cancelled)
             if (foragerLootBonus > 0 || foragerWildCropBonus > 0)
             {
@@ -21711,8 +21675,12 @@ namespace SeraphLeveling
             // Display negative traits with remaining penalty, or remove when cancelled
             // =========================================================================
 
+            // With CancelNegativeTraits off the server never pays a penalty down, so the
+            // vanilla lines must stay exactly as the game wrote them.
+            bool cancelOn = SeraphLevelingModSystem.CancelNegativeTraits;
+
             // Civil trait (Tailor) - foraging loot penalty
-            bool hasCivil = ClientHasVanillaTrait(eplr, "civil", "tailor");
+            bool hasCivil = cancelOn && ClientHasVanillaTrait(eplr, "civil", "tailor");
             int civilRemaining = eplr.WatchedAttributes.GetInt(SeraphLevelingModSystem.WATCHED_CIVIL_REMAINING, 0);
             if (hasCivil)
             {
@@ -21729,7 +21697,7 @@ namespace SeraphLeveling
 
             // Weak trait (Tailor) - HP and mining speed penalty.
             // Both penalties cancelled together at mining level 10.
-            bool hasWeak = ClientHasVanillaTrait(eplr, "weak", "tailor");
+            bool hasWeak = cancelOn && ClientHasVanillaTrait(eplr, "weak", "tailor");
             int weakMiningRemaining = eplr.WatchedAttributes.GetInt(SeraphLevelingModSystem.WATCHED_WEAK_MINING_REMAINING, 0);
             int weakHpRemaining = eplr.WatchedAttributes.GetInt(SeraphLevelingModSystem.WATCHED_WEAK_HP_REMAINING, 0);
             if (hasWeak)
@@ -21746,7 +21714,7 @@ namespace SeraphLeveling
             }
 
             // Kind trait (Tailor) - animal loot and harvesting speed penalty.
-            bool hasKind = ClientHasVanillaTrait(eplr, "kind", "tailor");
+            bool hasKind = cancelOn && ClientHasVanillaTrait(eplr, "kind", "tailor");
             int kindLootRemaining = eplr.WatchedAttributes.GetInt(SeraphLevelingModSystem.WATCHED_KIND_LOOT_REMAINING, 0);
             int kindSpeedRemaining = eplr.WatchedAttributes.GetInt(SeraphLevelingModSystem.WATCHED_KIND_SPEED_REMAINING, 0);
             if (hasKind)
@@ -21775,7 +21743,7 @@ namespace SeraphLeveling
             }
 
             // Farsighted trait (Hunter) - melee damage penalty
-            bool hasFarsighted = ClientHasVanillaTrait(eplr, "farsighted", "hunter");
+            bool hasFarsighted = cancelOn && ClientHasVanillaTrait(eplr, "farsighted", "hunter");
             int farsightedRemaining = eplr.WatchedAttributes.GetInt(SeraphLevelingModSystem.WATCHED_FARSIGHTED_REMAINING, 0);
             if (hasFarsighted)
             {
@@ -21791,7 +21759,7 @@ namespace SeraphLeveling
             }
 
             // Nervous trait (Malefactor, Clockmaker) - melee damage penalty
-            bool hasNervous = ClientHasVanillaTrait(eplr, "nervous", "malefactor", "clockmaker");
+            bool hasNervous = cancelOn && ClientHasVanillaTrait(eplr, "nervous", "malefactor", "clockmaker");
             int nervousRemaining = eplr.WatchedAttributes.GetInt(SeraphLevelingModSystem.WATCHED_NERVOUS_REMAINING, 0);
             if (hasNervous)
             {
@@ -21807,7 +21775,7 @@ namespace SeraphLeveling
             }
 
             // Nearsighted trait (Blackguard) - ranged damage penalty
-            bool hasNearsighted = ClientHasVanillaTrait(eplr, "nearsighted", "blackguard");
+            bool hasNearsighted = cancelOn && ClientHasVanillaTrait(eplr, "nearsighted", "blackguard");
             int nearsightedRemaining = eplr.WatchedAttributes.GetInt(SeraphLevelingModSystem.WATCHED_NEARSIGHTED_REMAINING, 0);
             if (hasNearsighted)
             {
@@ -21824,7 +21792,7 @@ namespace SeraphLeveling
 
             // Frail trait (Malefactor, Clockmaker) - HP and ranged distance penalty.
             // Both penalties cancelled together at ranged level 25.
-            bool hasFrail = ClientHasVanillaTrait(eplr, "frail", "malefactor", "clockmaker");
+            bool hasFrail = cancelOn && ClientHasVanillaTrait(eplr, "frail", "malefactor", "clockmaker");
             int frailDistanceRemaining = eplr.WatchedAttributes.GetInt(SeraphLevelingModSystem.WATCHED_FRAIL_DISTANCE_REMAINING, 0);
             float frailHpRemaining = eplr.WatchedAttributes.GetFloat(SeraphLevelingModSystem.WATCHED_FRAIL_HP_REMAINING, 0f);
             if (hasFrail)
@@ -21841,7 +21809,7 @@ namespace SeraphLeveling
             }
 
             // Heavyhanded trait (Blackguard) - vessel, foraging, wild crop penalties.
-            bool hasHeavyhanded = ClientHasVanillaTrait(eplr, "heavyhanded", "blackguard");
+            bool hasHeavyhanded = cancelOn && ClientHasVanillaTrait(eplr, "heavyhanded", "blackguard");
             int heavyhandedVesselRemaining = eplr.WatchedAttributes.GetInt(SeraphLevelingModSystem.WATCHED_HEAVYHANDED_VESSEL_REMAINING, 0);
             int heavyhandedForagingRemaining = eplr.WatchedAttributes.GetInt(SeraphLevelingModSystem.WATCHED_HEAVYHANDED_FORAGING_REMAINING, 0);
             int heavyhandedWildCropRemaining = eplr.WatchedAttributes.GetInt(SeraphLevelingModSystem.WATCHED_HEAVYHANDED_WILD_CROP_REMAINING, 0);
@@ -21879,7 +21847,7 @@ namespace SeraphLeveling
             }
 
             // Ravenous trait (Blackguard) - hunger rate penalty
-            bool hasRavenous = ClientHasVanillaTrait(eplr, "ravenous", "blackguard");
+            bool hasRavenous = cancelOn && ClientHasVanillaTrait(eplr, "ravenous", "blackguard");
             int ravenousRemaining = eplr.WatchedAttributes.GetInt(SeraphLevelingModSystem.WATCHED_RAVENOUS_REMAINING, 0);
             if (hasRavenous)
             {
@@ -21897,7 +21865,7 @@ namespace SeraphLeveling
             // Claustrophobic trait (Hunter) - ore drop and mining speed penalties.
             // Mining penalty decreases progressively with mining level (1-10).
             // At level 10, both mining and ore penalties are cancelled, and Hardy bonus shows instead.
-            bool hasClaustrophobic = ClientHasVanillaTrait(eplr, "claustrophobic", "hunter");
+            bool hasClaustrophobic = cancelOn && ClientHasVanillaTrait(eplr, "claustrophobic", "hunter");
             int claustrophobicMiningRemaining = eplr.WatchedAttributes.GetInt(SeraphLevelingModSystem.WATCHED_CLAUSTROPHOBIC_MINING_REMAINING, 0);
 
             if (hasClaustrophobic)
@@ -21925,7 +21893,7 @@ namespace SeraphLeveling
             // unloaded (via the IsCombatOverhaulLoaded gate in PopulateVanillaTraitsCache),
             // but skipping the entire section also avoids any future code path leaking a
             // phantom CO debuff through.
-            if (SeraphLevelingModSystem.IsCombatOverhaulLoaded)
+            if (SeraphLevelingModSystem.IsCOCompatEnabled)
             {
 
             // Check if CO is enabled by looking for any CO credits
@@ -22257,37 +22225,13 @@ namespace SeraphLeveling
         }
 
         /// <summary>
-        /// Reliable client-side check for whether the player has a vanilla trait. Reads from
-        /// `characterTraits` and `characterClass` watched attributes (both reliably synced by
-        /// vanilla VS) instead of our own `sitHasVanillaX` bools, which depend on a MarkPathDirty
-        /// call that doesn't always cover sibling attributes and can leave the client reading
-        /// the default `false` even when the player's class genuinely has the trait.
+        /// Does the game give this player the trait? Reads the class trait list and
+        /// extraTraits through SeraphLevelingModSystem.PlayerHasGameTrait. The class
+        /// fallbacks are kept for readability only; the class table already covers them.
         /// </summary>
         private static bool ClientHasVanillaTrait(EntityPlayer eplr, string traitCode, params string[] classFallbacks)
         {
-            if (eplr == null) return false;
-
-            string[] traits = eplr.WatchedAttributes.GetStringArray("characterTraits", null);
-            if (traits != null)
-            {
-                for (int i = 0; i < traits.Length; i++)
-                {
-                    if (string.Equals(traits[i], traitCode, StringComparison.OrdinalIgnoreCase))
-                        return true;
-                }
-            }
-
-            if (classFallbacks != null && classFallbacks.Length > 0)
-            {
-                string charClass = eplr.WatchedAttributes.GetString("characterClass", "")?.ToLowerInvariant() ?? "";
-                for (int i = 0; i < classFallbacks.Length; i++)
-                {
-                    if (string.Equals(charClass, classFallbacks[i], StringComparison.OrdinalIgnoreCase))
-                        return true;
-                }
-            }
-
-            return false;
+            return SeraphLevelingModSystem.PlayerHasGameTrait(eplr, traitCode);
         }
 
         // Cache for locale-aware vanilla trait line regexes. Built lazily per trait code from

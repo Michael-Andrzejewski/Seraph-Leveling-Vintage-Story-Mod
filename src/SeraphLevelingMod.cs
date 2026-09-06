@@ -2709,6 +2709,7 @@ namespace SeraphLeveling
                 foreach (var p in api.World.AllOnlinePlayers)
                     if (p is IServerPlayer sp && sp.Entity != null) PushProgressReport(sp);
             }, 15000);
+            api.Event.RegisterGameTickListener(_ => FlushProgressReports(), 100);
 
             serverSoundChannel = api.Network.RegisterChannel("seraphleveling")
                 .RegisterMessageType<LevelUpSoundMessage>()
@@ -3853,6 +3854,28 @@ namespace SeraphLeveling
         // saved attribute survived restarts and made the push think the client
         // already had the report when the client had nothing.
         private static readonly ConcurrentDictionary<string, string> LastSentProgressReport = new ConcurrentDictionary<string, string>();
+
+        // Players whose progress changed since the last push. A 100 ms server tick
+        // flushes them, so a mined block is on the handbook page before the player
+        // can open it (the single-player pause stops the server, so waiting for the
+        // page to ask would be too late), and one hit that trains several skills
+        // sends one packet instead of three.
+        private static readonly ConcurrentDictionary<string, IServerPlayer> ProgressReportDirty = new ConcurrentDictionary<string, IServerPlayer>();
+
+        /// <summary>Progress changed for this player: push the report on the next flush.</summary>
+        public static void MarkProgressChanged(IServerPlayer player)
+        {
+            if (player?.PlayerUID != null) ProgressReportDirty[player.PlayerUID] = player;
+        }
+
+        private static void FlushProgressReports()
+        {
+            if (ProgressReportDirty.IsEmpty) return;
+            foreach (var key in ProgressReportDirty.Keys.ToList())
+            {
+                if (ProgressReportDirty.TryRemove(key, out var player) && player?.Entity != null) PushProgressReport(player);
+            }
+        }
 
         /// <summary>
         /// Send the progression report to the player's client over the mod
@@ -6710,6 +6733,12 @@ namespace SeraphLeveling
         /// </summary>
         public static void ProcessArmorDamageBlocked(IServerPlayer player, float damageBlocked, string armorCode)
         {
+            ProcessArmorDamageBlockedCore(player, damageBlocked, armorCode);
+            MarkProgressChanged(player);   // handbook page: push the new numbers within 100 ms
+        }
+
+        public static void ProcessArmorDamageBlockedCore(IServerPlayer player, float damageBlocked, string armorCode)
+        {
             if (player?.Entity == null || string.IsNullOrEmpty(armorCode)) return;
 
             string playerUid = player.PlayerUID;
@@ -6758,6 +6787,12 @@ namespace SeraphLeveling
         /// Process armor repair. Called from Harmony patch when armor is repaired.
         /// </summary>
         public static void ProcessArmorRepair(IServerPlayer player, string armorCode)
+        {
+            ProcessArmorRepairCore(player, armorCode);
+            MarkProgressChanged(player);   // handbook page: push the new numbers within 100 ms
+        }
+
+        public static void ProcessArmorRepairCore(IServerPlayer player, string armorCode)
         {
             if (player?.Entity == null || string.IsNullOrEmpty(armorCode)) return;
 
@@ -6858,6 +6893,12 @@ namespace SeraphLeveling
         /// - Each pickaxe type tracks its own increment progress independently
         /// </summary>
         private void OnBlockBroken(IServerPlayer byPlayer, int oldblockId, BlockSelection blockSel)
+        {
+            OnBlockBrokenCore(byPlayer, oldblockId, blockSel);
+            MarkProgressChanged(byPlayer);   // handbook page: push the new numbers within 100 ms
+        }
+
+        private void OnBlockBrokenCore(IServerPlayer byPlayer, int oldblockId, BlockSelection blockSel)
         {
             if (byPlayer?.Entity == null) return;
 
@@ -7186,6 +7227,7 @@ namespace SeraphLeveling
             playerEquippedClothing.TryRemove(playerUid, out _);
             LastSleepBuffApplyTick.TryRemove(playerUid, out _);
             LastSentProgressReport.TryRemove(playerUid, out _);
+            ProgressReportDirty.TryRemove(playerUid, out _);
             foreach (var key in TrackedItemDurabilities.Keys.Where(k => k.StartsWith(playerUid + "_", StringComparison.Ordinal)).ToList())
                 TrackedItemDurabilities.TryRemove(key, out _);
             if (classChangeListeners.TryRemove(playerUid, out var classListener))
@@ -8188,6 +8230,12 @@ namespace SeraphLeveling
         /// </summary>
         public static void ProcessMeleeDamage(IServerPlayer attackerPlayer, string weaponType, float damage)
         {
+            ProcessMeleeDamageCore(attackerPlayer, weaponType, damage);
+            MarkProgressChanged(attackerPlayer);   // handbook page: push the new numbers within 100 ms
+        }
+
+        public static void ProcessMeleeDamageCore(IServerPlayer attackerPlayer, string weaponType, float damage)
+        {
             if (attackerPlayer?.Entity == null || string.IsNullOrEmpty(weaponType)) return;
 
             // Check if melee skill is disabled
@@ -8558,6 +8606,12 @@ namespace SeraphLeveling
         /// Process ranged damage dealt by a player. Called from Harmony patch.
         /// </summary>
         public static void ProcessRangedDamage(IServerPlayer attackerPlayer, string weaponCombo, float damage)
+        {
+            ProcessRangedDamageCore(attackerPlayer, weaponCombo, damage);
+            MarkProgressChanged(attackerPlayer);   // handbook page: push the new numbers within 100 ms
+        }
+
+        public static void ProcessRangedDamageCore(IServerPlayer attackerPlayer, string weaponCombo, float damage)
         {
             if (attackerPlayer?.Entity == null || string.IsNullOrEmpty(weaponCombo)) return;
 
@@ -12964,6 +13018,12 @@ namespace SeraphLeveling
         /// </summary>
         public static void ProcessCOProficiencyDamage(IServerPlayer attackerPlayer, string proficiencyStat, string weaponCode, float damage)
         {
+            ProcessCOProficiencyDamageCore(attackerPlayer, proficiencyStat, weaponCode, damage);
+            MarkProgressChanged(attackerPlayer);   // handbook page: push the new numbers within 100 ms
+        }
+
+        public static void ProcessCOProficiencyDamageCore(IServerPlayer attackerPlayer, string proficiencyStat, string weaponCode, float damage)
+        {
             if (attackerPlayer?.Entity == null || string.IsNullOrEmpty(proficiencyStat) || string.IsNullOrEmpty(weaponCode)) return;
 
             // Skip if CO compat is disabled
@@ -14457,6 +14517,12 @@ namespace SeraphLeveling
         /// </summary>
         public static void ProcessPreciseDamage(IServerPlayer attackerPlayer, string weaponType, float damage)
         {
+            ProcessPreciseDamageCore(attackerPlayer, weaponType, damage);
+            MarkProgressChanged(attackerPlayer);   // handbook page: push the new numbers within 100 ms
+        }
+
+        public static void ProcessPreciseDamageCore(IServerPlayer attackerPlayer, string weaponType, float damage)
+        {
             if (attackerPlayer?.Entity == null || damage <= 0) return;
             if (string.IsNullOrEmpty(weaponType)) return;
 
@@ -15092,6 +15158,12 @@ namespace SeraphLeveling
         /// </summary>
         public static void ProcessMenderRepair(IServerPlayer player)
         {
+            ProcessMenderRepairCore(player);
+            MarkProgressChanged(player);   // handbook page: push the new numbers within 100 ms
+        }
+
+        public static void ProcessMenderRepairCore(IServerPlayer player)
+        {
             if (player?.Entity == null) return;
 
             // Check if mender skill is disabled
@@ -15377,6 +15449,12 @@ namespace SeraphLeveling
         /// Only cracked vessels count - they can't be re-placed by players.
         /// </summary>
         public static void ProcessVesselBreak(IServerPlayer player)
+        {
+            ProcessVesselBreakCore(player);
+            MarkProgressChanged(player);   // handbook page: push the new numbers within 100 ms
+        }
+
+        public static void ProcessVesselBreakCore(IServerPlayer player)
         {
             if (player?.Entity == null) return;
 
@@ -15696,6 +15774,12 @@ namespace SeraphLeveling
         /// Process animal harvested (called from Harmony patch when player harvests an animal).
         /// </summary>
         public static void ProcessAnimalHarvested(IServerPlayer player)
+        {
+            ProcessAnimalHarvestedCore(player);
+            MarkProgressChanged(player);   // handbook page: push the new numbers within 100 ms
+        }
+
+        public static void ProcessAnimalHarvestedCore(IServerPlayer player)
         {
             if (player?.Entity == null) return;
 
@@ -16058,6 +16142,12 @@ namespace SeraphLeveling
         /// </summary>
         public static void ProcessWildCropBroken(IServerPlayer player)
         {
+            ProcessWildCropBrokenCore(player);
+            MarkProgressChanged(player);   // handbook page: push the new numbers within 100 ms
+        }
+
+        public static void ProcessWildCropBrokenCore(IServerPlayer player)
+        {
             if (player?.Entity == null) return;
 
             string playerUid = player.PlayerUID;
@@ -16378,6 +16468,12 @@ namespace SeraphLeveling
         /// Gives progress toward Technical trait unlock.
         /// </summary>
         public static void ProcessTranslocatorRepair(IServerPlayer player)
+        {
+            ProcessTranslocatorRepairCore(player);
+            MarkProgressChanged(player);   // handbook page: push the new numbers within 100 ms
+        }
+
+        public static void ProcessTranslocatorRepairCore(IServerPlayer player)
         {
             if (player?.Entity == null) return;
 

@@ -1497,6 +1497,18 @@ namespace SeraphLeveling
     }
 
     /// <summary>
+    /// Server to client: the full progression report shown on the handbook
+    /// page "Seraph Leveling: My Progress". Sent on join, on every level-up,
+    /// and every 15 s when it changed.
+    /// </summary>
+    [ProtoContract]
+    public class ProgressReportMessage
+    {
+        [ProtoMember(1)]
+        public string Report { get; set; }
+    }
+
+    /// <summary>
     /// Network message sent from server to client to play a level-up sound.
     /// </summary>
     [ProtoContract]
@@ -2675,7 +2687,8 @@ namespace SeraphLeveling
 
             serverSoundChannel = api.Network.RegisterChannel("seraphleveling")
                 .RegisterMessageType<LevelUpSoundMessage>()
-                .RegisterMessageType<ExperimentalFeatureConfigMessage>();
+                .RegisterMessageType<ExperimentalFeatureConfigMessage>()
+                .RegisterMessageType<ProgressReportMessage>();
 
             // Load config file (sets defaults for new worlds)
             LoadConfigFile(api);
@@ -3763,22 +3776,26 @@ namespace SeraphLeveling
             return sb.ToString().TrimEnd();
         }
 
-        public const string WATCHED_PROGRESS_REPORT = "seraphleveling:progressReport";
+        // Last report sent to each online player this session, so the 15 s
+        // refresh only sends when something changed. In memory on purpose: a
+        // saved attribute survived restarts and made the push think the client
+        // already had the report when the client had nothing.
+        private static readonly ConcurrentDictionary<string, string> LastSentProgressReport = new ConcurrentDictionary<string, string>();
 
         /// <summary>
-        /// Sync the progression report to the player's client (watched attributes
-        /// replicate automatically). Only writes when the text changed, so the
-        /// 15 second refresh costs nothing when nothing happened.
+        /// Send the progression report to the player's client over the mod
+        /// channel for the handbook page "Seraph Leveling: My Progress".
+        /// force = true always sends (join); otherwise only when it changed.
         /// </summary>
-        public static void PushProgressReport(IServerPlayer player)
+        public static void PushProgressReport(IServerPlayer player, bool force = false)
         {
             try
             {
-                if (player?.Entity == null) return;
+                if (player?.Entity == null || serverSoundChannel == null) return;
                 string report = BuildProgressReport(player);
-                if (player.Entity.WatchedAttributes.GetString(WATCHED_PROGRESS_REPORT) == report) return;
-                player.Entity.WatchedAttributes.SetString(WATCHED_PROGRESS_REPORT, report);
-                player.Entity.WatchedAttributes.MarkPathDirty(WATCHED_PROGRESS_REPORT);
+                if (!force && LastSentProgressReport.TryGetValue(player.PlayerUID, out string last) && last == report) return;
+                LastSentProgressReport[player.PlayerUID] = report;
+                serverSoundChannel.SendPacket(new ProgressReportMessage { Report = report }, player);
             }
             catch (Exception ex)
             {
@@ -7294,6 +7311,10 @@ namespace SeraphLeveling
         private void OnPlayerJoin(IServerPlayer byPlayer)
         {
             if (byPlayer?.Entity == null) return;
+
+            // Hand the handbook progress page its first report a few seconds after
+            // join, once the client has its channel handlers in place.
+            ServerApi?.Event.RegisterCallback(_ => PushProgressReport(byPlayer, force: true), 4000);
 
             string playerUid = byPlayer.PlayerUID;
 
@@ -20469,9 +20490,12 @@ namespace SeraphLeveling
             Init(capi);
         }
 
+        /// <summary>Last report received over the network channel.</summary>
+        public static string LatestReport;
+
         private string CurrentVtml()
         {
-            string report = capi.World?.Player?.Entity?.WatchedAttributes?.GetString(SeraphLevelingModSystem.WATCHED_PROGRESS_REPORT);
+            string report = LatestReport;
             var sb = new StringBuilder();
             sb.Append("<strong>").Append(Lang.Get("sl-progress-title")).Append("</strong><br><br>");
             if (string.IsNullOrEmpty(report))
@@ -20549,8 +20573,14 @@ namespace SeraphLeveling
             api.Network.RegisterChannel("seraphleveling")
                 .RegisterMessageType<LevelUpSoundMessage>()
                 .RegisterMessageType<ExperimentalFeatureConfigMessage>()
+                .RegisterMessageType<ProgressReportMessage>()
                 .SetMessageHandler<LevelUpSoundMessage>(OnLevelUpSoundReceived)
-                .SetMessageHandler<ExperimentalFeatureConfigMessage>(SeraphLevelingModSystem.ApplyFeatureConfigMessage);
+                .SetMessageHandler<ExperimentalFeatureConfigMessage>(SeraphLevelingModSystem.ApplyFeatureConfigMessage)
+                .SetMessageHandler<ProgressReportMessage>(msg =>
+                {
+                    SeraphProgressPage.LatestReport = msg?.Report;
+                    api.Logger.Notification("[SeraphLeveling] progress report received ({0} chars)", msg?.Report?.Length ?? 0);
+                });
 
             // Apply Harmony patches manually for better control
             harmony = new Harmony("seraphleveling");

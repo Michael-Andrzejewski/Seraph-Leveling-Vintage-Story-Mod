@@ -11998,40 +11998,6 @@ namespace SeraphLeveling
         }
 
         /// <summary>
-        /// Points a death drains from a per-tool skill. The documented curve is
-        /// baseIncrement * DeathPenaltyFraction * sqrt(credits) points, but the cost of a
-        /// credit grows with every level, so above roughly level 5 that many points stop
-        /// reaching a credit boundary and the death costs nothing. The drain is raised to
-        /// whatever guarantees floor(DeathPenaltyFraction * sqrt(credits)) credits are lost,
-        /// the figure the no-tool fallback and the death message already use.
-        /// </summary>
-        private static double DeathPenaltyPointsForTools(
-            List<(string key, double accumulator, int incrementSize)> toolEntries,
-            int oldCredits, int baseIncrement, int incrementStep)
-        {
-            double curvePoints = baseIncrement * DeathPenaltyFraction * Math.Sqrt(Math.Max(1, oldCredits));
-            int intendedLoss = (int)Math.Floor(DeathPenaltyFraction * Math.Sqrt(Math.Max(1, oldCredits)));
-            intendedLoss = Math.Min(intendedLoss, oldCredits);
-            if (intendedLoss <= 0) return curvePoints;
-            var absPositions = new List<(string key, double value)>();
-            foreach (var entry in toolEntries)
-                absPositions.Add((entry.key, ToolToAbsolutePosition(entry.accumulator, entry.incrementSize, baseIncrement, incrementStep)));
-            double guaranteed = ComputeDeathPenaltyRawPenalty(absPositions, intendedLoss, baseIncrement, incrementStep);
-            return Math.Max(curvePoints, guaranteed);
-        }
-
-        /// <summary>Single-accumulator twin of DeathPenaltyPointsForTools.</summary>
-        private static double DeathPenaltyPointsForSingle(double currentAccumulator, int oldCredits, int baseIncrement, int incrementStep)
-        {
-            double curvePoints = baseIncrement * DeathPenaltyFraction * Math.Sqrt(Math.Max(1, oldCredits));
-            int intendedLoss = (int)Math.Floor(DeathPenaltyFraction * Math.Sqrt(Math.Max(1, oldCredits)));
-            intendedLoss = Math.Min(intendedLoss, oldCredits);
-            if (intendedLoss <= 0) return curvePoints;
-            double guaranteed = ComputeMinSingleAccumulatorPenalty(currentAccumulator, oldCredits, intendedLoss, baseIncrement, incrementStep);
-            return Math.Max(curvePoints, guaranteed);
-        }
-
-        /// <summary>
         /// DeathPenaltyFullReset: wipe every progression system back to zero, keeping
         /// only the systems the admin listed in DeathPenaltyExemptSkills (or disabled
         /// outright). Implemented as snapshot, full reset via the same routine
@@ -12099,7 +12065,12 @@ namespace SeraphLeveling
 
         /// <summary>
         /// Apply death penalty to all skills for a player.
-        /// Uses binary-search to guarantee credit loss for per-tool dictionary skills.
+        /// Drains BaseIncrement * DeathPenaltyFraction * sqrt(credits) raw points from each
+        /// skill (a few minutes of play at the defaults), so a death costs at most one credit
+        /// and usually only progress inside the current increment. Deliberately gentle:
+        /// a credit at level 40 is 4,000 blocks, so taking whole credits would cost hours.
+        /// ComputeDeathPenaltyRawPenalty / ComputeMinSingleAccumulatorPenalty implement a
+        /// stricter credit-based drain and are kept unwired on purpose.
         /// </summary>
         public static void ApplyDeathPenalty(IServerPlayer player)
         {
@@ -12130,7 +12101,7 @@ namespace SeraphLeveling
 
                     if (toolEntries.Count > 0)
                     {
-                        double rawPenalty = DeathPenaltyPointsForTools(toolEntries, oldCredits, BaseBlocksPerIncrement, IncrementStep);
+                        double rawPenalty = BaseBlocksPerIncrement * DeathPenaltyFraction * Math.Sqrt(Math.Max(1, oldCredits));
                         var (newCr, _) = ApplyAbsolutePositionDecay(toolEntries, rawPenalty,
                             BaseBlocksPerIncrement, IncrementStep, oldCredits,
                             (k, a, s) => { if (miningProg.PickaxeProgress.TryGetValue(k, out var p)) {
@@ -12181,7 +12152,7 @@ namespace SeraphLeveling
 
                     if (toolEntries.Count > 0)
                     {
-                        double rawPenalty = DeathPenaltyPointsForTools(toolEntries, oldCredits, BaseDamagePerIncrement, MeleeIncrementStep);
+                        double rawPenalty = BaseDamagePerIncrement * DeathPenaltyFraction * Math.Sqrt(Math.Max(1, oldCredits));
                         var (newCr, _) = ApplyAbsolutePositionDecay(toolEntries, rawPenalty,
                             BaseDamagePerIncrement, MeleeIncrementStep, oldCredits,
                             (k, a, s) => { if (meleeProg.WeaponProgress.TryGetValue(k, out var p)) {
@@ -12232,7 +12203,7 @@ namespace SeraphLeveling
 
                     if (toolEntries.Count > 0)
                     {
-                        double rawPenalty = DeathPenaltyPointsForTools(toolEntries, oldCredits, BaseRangedDamagePerIncrement, RangedIncrementStep);
+                        double rawPenalty = BaseRangedDamagePerIncrement * DeathPenaltyFraction * Math.Sqrt(Math.Max(1, oldCredits));
                         var (newCr, _) = ApplyAbsolutePositionDecay(toolEntries, rawPenalty,
                             BaseRangedDamagePerIncrement, RangedIncrementStep, oldCredits,
                             (k, a, s) => { if (rangedProg.WeaponProgress.TryGetValue(k, out var p)) {
@@ -12283,7 +12254,7 @@ namespace SeraphLeveling
 
                     if (toolEntries.Count > 0)
                     {
-                        double rawPenalty = DeathPenaltyPointsForTools(toolEntries, oldCredits, BasePreciseDamagePerIncrement, PreciseIncrementStep);
+                        double rawPenalty = BasePreciseDamagePerIncrement * DeathPenaltyFraction * Math.Sqrt(Math.Max(1, oldCredits));
                         var (newCr, _) = ApplyAbsolutePositionDecay(toolEntries, rawPenalty,
                             BasePreciseDamagePerIncrement, PreciseIncrementStep, oldCredits,
                             (k, a, s) => { if (preciseProg.WeaponProgress.TryGetValue(k, out var p)) {
@@ -12331,7 +12302,7 @@ namespace SeraphLeveling
                 {
                     int oldCredits = walkingProg.TotalCredits;
                     float oldAcc = walkingProg.BlocksInIncrement; int oldInc = walkingProg.CurrentIncrementSize;
-                    double rawPenalty = DeathPenaltyPointsForSingle(oldAcc, oldCredits, BaseBlocksWalkedPerIncrement, WalkingIncrementStep);
+                    double rawPenalty = BaseBlocksWalkedPerIncrement * DeathPenaltyFraction * Math.Sqrt(Math.Max(1, oldCredits));
                     var (newCr, newAcc, newInc, lost) = ApplySingleAccumulatorDecay(
                         oldAcc, oldInc, oldCredits, rawPenalty, BaseBlocksWalkedPerIncrement, WalkingIncrementStep, null, "Walking");
                     walkingProg.TotalCredits = newCr; walkingProg.BlocksInIncrement = (float)newAcc; walkingProg.CurrentIncrementSize = newInc;
@@ -12348,7 +12319,7 @@ namespace SeraphLeveling
                 {
                     int oldCredits = hungerProg.TotalCredits;
                     float oldAcc = hungerProg.SecondsInIncrement; int oldInc = hungerProg.CurrentIncrementSize;
-                    double rawPenalty = DeathPenaltyPointsForSingle(oldAcc, oldCredits, BaseSecondsPerIncrement, HungerIncrementStep);
+                    double rawPenalty = BaseSecondsPerIncrement * DeathPenaltyFraction * Math.Sqrt(Math.Max(1, oldCredits));
                     var (newCr, newAcc, newInc, lost) = ApplySingleAccumulatorDecay(
                         oldAcc, oldInc, oldCredits, rawPenalty, BaseSecondsPerIncrement, HungerIncrementStep, null, "Hunger");
                     hungerProg.TotalCredits = newCr; hungerProg.SecondsInIncrement = (float)newAcc; hungerProg.CurrentIncrementSize = newInc;
@@ -12365,7 +12336,7 @@ namespace SeraphLeveling
                 {
                     int oldCredits = menderProg.TotalCredits;
                     int oldAcc = menderProg.RepairsInIncrement; int oldInc = menderProg.CurrentIncrementSize;
-                    double rawPenalty = DeathPenaltyPointsForSingle(oldAcc, oldCredits, BaseMenderRepairsPerIncrement, MenderIncrementStep);
+                    double rawPenalty = BaseMenderRepairsPerIncrement * DeathPenaltyFraction * Math.Sqrt(Math.Max(1, oldCredits));
                     var (newCr, newAcc, newInc, lost) = ApplySingleAccumulatorDecay(
                         oldAcc, oldInc, oldCredits, rawPenalty, BaseMenderRepairsPerIncrement, MenderIncrementStep, null, "Mender");
                     menderProg.TotalCredits = newCr; menderProg.RepairsInIncrement = (int)Math.Floor(newAcc); menderProg.CurrentIncrementSize = newInc;
@@ -12382,7 +12353,7 @@ namespace SeraphLeveling
                 {
                     int oldCredits = pilfererProg.TotalCredits;
                     int oldAcc = pilfererProg.PointsInIncrement; int oldInc = pilfererProg.CurrentIncrementSize;
-                    double rawPenalty = DeathPenaltyPointsForSingle(oldAcc, oldCredits, BasePilfererPointsPerIncrement, PilfererIncrementStep);
+                    double rawPenalty = BasePilfererPointsPerIncrement * DeathPenaltyFraction * Math.Sqrt(Math.Max(1, oldCredits));
                     var (newCr, newAcc, newInc, lost) = ApplySingleAccumulatorDecay(
                         oldAcc, oldInc, oldCredits, rawPenalty, BasePilfererPointsPerIncrement, PilfererIncrementStep, null, "Pilferer");
                     pilfererProg.TotalCredits = newCr; pilfererProg.PointsInIncrement = (int)Math.Floor(newAcc); pilfererProg.CurrentIncrementSize = newInc;
@@ -12399,7 +12370,7 @@ namespace SeraphLeveling
                 {
                     int oldCredits = resourcefulProg.TotalCredits;
                     int oldAcc = resourcefulProg.AnimalsInIncrement; int oldInc = resourcefulProg.CurrentIncrementSize;
-                    double rawPenalty = DeathPenaltyPointsForSingle(oldAcc, oldCredits, BaseResourcefulAnimalsPerIncrement, ResourcefulIncrementStep);
+                    double rawPenalty = BaseResourcefulAnimalsPerIncrement * DeathPenaltyFraction * Math.Sqrt(Math.Max(1, oldCredits));
                     var (newCr, newAcc, newInc, lost) = ApplySingleAccumulatorDecay(
                         oldAcc, oldInc, oldCredits, rawPenalty, BaseResourcefulAnimalsPerIncrement, ResourcefulIncrementStep, null, "Resourceful");
                     resourcefulProg.TotalCredits = newCr; resourcefulProg.AnimalsInIncrement = (int)Math.Floor(newAcc); resourcefulProg.CurrentIncrementSize = newInc;
@@ -12416,7 +12387,7 @@ namespace SeraphLeveling
                 {
                     int oldCredits = foragerProg.TotalCredits;
                     int oldAcc = foragerProg.CropsInIncrement; int oldInc = foragerProg.CurrentIncrementSize;
-                    double rawPenalty = DeathPenaltyPointsForSingle(oldAcc, oldCredits, BaseForagerCropsPerIncrement, ForagerIncrementStep);
+                    double rawPenalty = BaseForagerCropsPerIncrement * DeathPenaltyFraction * Math.Sqrt(Math.Max(1, oldCredits));
                     var (newCr, newAcc, newInc, lost) = ApplySingleAccumulatorDecay(
                         oldAcc, oldInc, oldCredits, rawPenalty, BaseForagerCropsPerIncrement, ForagerIncrementStep, null, "Forager");
                     foragerProg.TotalCredits = newCr; foragerProg.CropsInIncrement = (int)Math.Floor(newAcc); foragerProg.CurrentIncrementSize = newInc;
@@ -12433,7 +12404,7 @@ namespace SeraphLeveling
                 {
                     int oldCredits = furtiveProg.TotalCredits;
                     float oldAcc = furtiveProg.BlocksInIncrement; int oldInc = furtiveProg.CurrentIncrementSize;
-                    double rawPenalty = DeathPenaltyPointsForSingle(oldAcc, oldCredits, BaseFurtiveSneakBlocksPerIncrement, FurtiveIncrementStep);
+                    double rawPenalty = BaseFurtiveSneakBlocksPerIncrement * DeathPenaltyFraction * Math.Sqrt(Math.Max(1, oldCredits));
                     var (newCr, newAcc, newInc, lost) = ApplySingleAccumulatorDecay(
                         oldAcc, oldInc, oldCredits, rawPenalty, BaseFurtiveSneakBlocksPerIncrement, FurtiveIncrementStep, null, "Furtive");
                     furtiveProg.TotalCredits = newCr; furtiveProg.BlocksInIncrement = (float)newAcc; furtiveProg.CurrentIncrementSize = newInc;
@@ -12461,7 +12432,7 @@ namespace SeraphLeveling
 
                             if (toolEntries.Count > 0)
                             {
-                                double rawPenalty = DeathPenaltyPointsForTools(toolEntries, oldProfCredits, COBaseDamagePerIncrement, COIncrementStep);
+                                double rawPenalty = COBaseDamagePerIncrement * DeathPenaltyFraction * Math.Sqrt(Math.Max(1, oldProfCredits));
                                 var (newCr, _) = ApplyAbsolutePositionDecay(toolEntries, rawPenalty,
                                     COBaseDamagePerIncrement, COIncrementStep, oldProfCredits,
                                     (k, a, s) => { if (profKvp.Value.WeaponProgress.TryGetValue(k, out var p)) {

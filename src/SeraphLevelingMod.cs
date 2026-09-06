@@ -11635,6 +11635,7 @@ namespace SeraphLeveling
         /// </summary>
         private void ReapplyAllBonuses(IServerPlayer player)
         {
+            SyncTemporalTraitsToClient(player);
             string playerUid = player.PlayerUID;
 
             if (MiningProgress.TryGetValue(playerUid, out var miningProg))
@@ -21592,6 +21593,22 @@ namespace SeraphLeveling
                 }
             }
 
+            // Experimental temporal traits. The server mirrors the percent as 0 while a
+            // trait is disabled and the join packet carries the switches, so a disabled
+            // trait never shows in the list.
+            int temporalResistPct = eplr.WatchedAttributes.GetInt(SeraphLevelingModSystem.WATCHED_TEMPORAL_RESISTANCE_PERCENT, 0);
+            if (SeraphLevelingModSystem.TemporalResistanceEnabled && temporalResistPct > 0)
+            {
+                AppendSeraphOnlyTrait(ref __result, ref hasNoTraits, noTraitsMsg,
+                    SeraphLevelingModSystem.TEMPORAL_RESISTANCE_TRAIT_CODE, "seraphleveling:trait-temporalresistance-dynamic", temporalResistPct);
+            }
+            int temporalRechargePct = eplr.WatchedAttributes.GetInt(SeraphLevelingModSystem.WATCHED_TEMPORAL_RECHARGE_PERCENT, 0);
+            if (SeraphLevelingModSystem.TemporalRechargeEnabled && temporalRechargePct > 0)
+            {
+                AppendSeraphOnlyTrait(ref __result, ref hasNoTraits, noTraitsMsg,
+                    SeraphLevelingModSystem.TEMPORAL_RECHARGE_TRAIT_CODE, "seraphleveling:trait-temporalrecharge-dynamic", temporalRechargePct);
+            }
+
             // Process Hunger trait (reduces hunger rate).
             // For Ravenous classes (Blackguard) the raw `hungerBonus` value includes credits
             // spent cancelling the +30% Ravenous penalty. The actual stat applied (negative
@@ -22495,6 +22512,28 @@ namespace SeraphLeveling
         /// values. The seraphleveling lang values store only the inner description text — the
         /// trait label and font wrapper come from this helper.
         /// </summary>
+        /// <summary>
+        /// Add a trait that has no vanilla counterpart (the temporal traits). Replaces the
+        /// "no traits" message or the bare name vanilla printed for the extraTraits entry,
+        /// otherwise appends a new line.
+        /// </summary>
+        private static void AppendSeraphOnlyTrait(ref string result, ref bool hasNoTraits, string noTraitsMsg,
+            string traitCode, string descLangKey, params object[] descArgs)
+        {
+            string plainName = Lang.Get("seraphleveling:trait-" + traitCode);
+            string line = Lang.Get("traitwithattributes",
+                Lang.Get("seraphleveling:traitname-" + traitCode), Lang.Get(descLangKey, descArgs));
+
+            hasNoTraits = string.IsNullOrEmpty(result) ||
+                          result.Trim() == noTraitsMsg.Trim() ||
+                          result.Contains(noTraitsMsg) ||
+                          result.Contains("No positive or negative traits");
+            if (hasNoTraits) result = line;
+            else if (ContainsOrphanTraitName(result, plainName)) result = ReplaceOrphanTraitName(result, plainName, line);
+            else result = result + "\n" + line;
+            hasNoTraits = false;
+        }
+
         private static string BuildLocalizedTraitLine(string vanillaTraitCode, string seraphDescLangKey, params object[] descArgs)
         {
             string traitName = Lang.Get("trait-" + vanillaTraitCode);

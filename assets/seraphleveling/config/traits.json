@@ -98,5 +98,15 @@
     "code": "sitclaustrophobicremoved",
     "type": "positive",
     "attributes": {}
+  },
+  {
+    "code": "sittemporalresistancemastery",
+    "type": "positive",
+    "attributes": {}
+  },
+  {
+    "code": "sittemporalrechargemastery",
+    "type": "positive",
+    "attributes": {}
   }
 ]

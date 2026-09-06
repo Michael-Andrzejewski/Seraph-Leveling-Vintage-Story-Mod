@@ -53,6 +53,10 @@ namespace SeraphLeveling
         [ProtoMember(9)] public bool CancelNegativeTraits { get; set; } = true;
         /// <summary>Combat Overhaul compatibility switch; the sheet hides CO lines when off.</summary>
         [ProtoMember(10)] public bool CombatOverhaulCompatEnabled { get; set; } = true;
+
+        /// <summary>Temporal trait switches, so the character dialog lists them only when enabled.</summary>
+        [ProtoMember(11)] public bool TemporalResistanceEnabled { get; set; }
+        [ProtoMember(12)] public bool TemporalRechargeEnabled { get; set; }
     }
 
     // Temporal traits, bow draw speed, and the knife gear-trick recharge bump,
@@ -108,6 +112,8 @@ namespace SeraphLeveling
                 MeleeAttackSpeedAtLevel = MeleeAttackSpeedAtLevel,
                 CancelNegativeTraits = CancelNegativeTraits,
                 CombatOverhaulCompatEnabled = COEnableCompat,
+                TemporalResistanceEnabled = TemporalResistanceEnabled,
+                TemporalRechargeEnabled = TemporalRechargeEnabled,
             };
         }
 
@@ -143,6 +149,8 @@ namespace SeraphLeveling
             MeleeAttackSpeedAtLevel = msg.MeleeAttackSpeedAtLevel;
             CancelNegativeTraits = msg.CancelNegativeTraits;
             COEnableCompat = msg.CombatOverhaulCompatEnabled;
+            TemporalResistanceEnabled = msg.TemporalResistanceEnabled;
+            TemporalRechargeEnabled = msg.TemporalRechargeEnabled;
         }
 
         // ===================================================================
@@ -252,6 +260,7 @@ namespace SeraphLeveling
                 api.Event.SaveGameLoaded += LoadTemporalResistanceProgress;
                 api.Event.SaveGameLoaded += LoadTemporalRechargeProgress;
                 api.Event.GameWorldSave += SaveTemporalProgressOnWorldSave;
+                api.Event.PlayerJoin += SyncTemporalTraitsToClient;
 
                 // 1 second cadence: matches the per-tick second we add while at low stability.
                 RegisterSafeTickListener(api, OnTemporalTick, 1000, "the temporal traits tick");
@@ -356,6 +365,7 @@ namespace SeraphLeveling
             int before = p.PermanentPercent;
             p.PermanentPercent = Math.Min(maxPercent, p.PermanentPercent + gain);
             if (p.PermanentPercent <= before) return false;
+            SyncTemporalTraitsToClient(player);
 
             if (isRecharge)
             {
@@ -372,6 +382,45 @@ namespace SeraphLeveling
         // ===================================================================
         // EFFECT HELPERS (read by the Harmony patches)
         // ===================================================================
+
+        // Client-visible copies for the character dialog's trait list. Mirrored as 0
+        // (and removed from extraTraits) while the trait is disabled, so a disabled
+        // trait never shows even if the player levelled it earlier.
+        public const string WATCHED_TEMPORAL_RESISTANCE_PERCENT = "sitTemporalResistancePercent";
+        public const string WATCHED_TEMPORAL_RECHARGE_PERCENT = "sitTemporalRechargePercent";
+        public const string TEMPORAL_RESISTANCE_TRAIT_CODE = "sittemporalresistancemastery";
+        public const string TEMPORAL_RECHARGE_TRAIT_CODE = "sittemporalrechargemastery";
+
+        /// <summary>
+        /// Mirror the temporal trait levels to the client: watched percents for the
+        /// dialog text and extraTraits entries so the trait list has a slot for them.
+        /// Called on join, on every level gain, on the admin set commands and from
+        /// ReapplyAllBonuses (config reload).
+        /// </summary>
+        public static void SyncTemporalTraitsToClient(IServerPlayer player)
+        {
+            var entity = player?.Entity;
+            if (entity == null) return;
+            string uid = player.PlayerUID;
+            int resist = TemporalResistanceEnabled && TemporalResistanceProgress.TryGetValue(uid, out var r)
+                ? Math.Min(TemporalResistanceMaxPercent, r.PermanentPercent) : 0;
+            int recharge = TemporalRechargeEnabled && TemporalRechargeProgress.TryGetValue(uid, out var c)
+                ? Math.Min(TemporalRechargeMaxPercent, c.PermanentPercent) : 0;
+
+            var wa = entity.WatchedAttributes;
+            if (wa.GetInt(WATCHED_TEMPORAL_RESISTANCE_PERCENT, -1) != resist)
+            {
+                wa.SetInt(WATCHED_TEMPORAL_RESISTANCE_PERCENT, resist);
+                wa.MarkPathDirty(WATCHED_TEMPORAL_RESISTANCE_PERCENT);
+            }
+            if (wa.GetInt(WATCHED_TEMPORAL_RECHARGE_PERCENT, -1) != recharge)
+            {
+                wa.SetInt(WATCHED_TEMPORAL_RECHARGE_PERCENT, recharge);
+                wa.MarkPathDirty(WATCHED_TEMPORAL_RECHARGE_PERCENT);
+            }
+            UpdateExtraTraitStatic(entity, TEMPORAL_RESISTANCE_TRAIT_CODE, resist > 0);
+            UpdateExtraTraitStatic(entity, TEMPORAL_RECHARGE_TRAIT_CODE, recharge > 0);
+        }
 
         public static double GetTemporalResistanceFraction(string uid)
         {
@@ -412,6 +461,7 @@ namespace SeraphLeveling
             p.PermanentPercent = Math.Min(TemporalRechargeMaxPercent, p.PermanentPercent + TemporalRechargeGearTrickPercent);
             if (p.PermanentPercent <= before) return;
             pendingTemporalRechargeSave = true;
+            SyncTemporalTraitsToClient(player);
             double mult = 1.0 + p.PermanentPercent / 100.0;
             NotifyLevelUp(player, $"Temporal Recharge increased to {p.PermanentPercent}% from a temporal gear. Recovery is now {mult:F2}x as fast.");
         }
@@ -695,6 +745,7 @@ namespace SeraphLeveling
             int v = Math.Clamp(lvl.Value, 0, TemporalResistanceMaxPercent);
             p.PermanentPercent = v;
             pendingTemporalResistanceSave = true;
+            SyncTemporalTraitsToClient(player);
             return TextCommandResult.Success($"Temporal Resistance set to {v}% (temporal drain {v}% slower).");
         }
 
@@ -712,6 +763,7 @@ namespace SeraphLeveling
             int v = Math.Clamp(lvl.Value, 0, TemporalRechargeMaxPercent);
             p.PermanentPercent = v;
             pendingTemporalRechargeSave = true;
+            SyncTemporalTraitsToClient(player);
             double mult = 1.0 + v / 100.0;
             return TextCommandResult.Success($"Temporal Recharge set to {v}% (recovery {mult:F2}x as fast).");
         }

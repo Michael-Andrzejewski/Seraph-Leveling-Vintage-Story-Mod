@@ -4179,7 +4179,7 @@ namespace SeraphLeveling
                 {
                     string pickaxeName = kvp.Key;
                     // Simplify the display name (remove "game:" prefix if present)
-                    if (pickaxeName.StartsWith("game:"))
+                    if (pickaxeName.StartsWith("game:", StringComparison.Ordinal))
                         pickaxeName = pickaxeName.Substring(5);
 
                     var pickProgress = kvp.Value;
@@ -4779,7 +4779,7 @@ namespace SeraphLeveling
             string blockCode = block.Code?.ToString() ?? "";
 
             // Remove "game:" prefix if present for consistent matching
-            string codeToCheck = blockCode.StartsWith("game:") ? blockCode.Substring(5) : blockCode;
+            string codeToCheck = blockCode.StartsWith("game:", StringComparison.Ordinal) ? blockCode.Substring(5) : blockCode;
 
             // Ore blocks: code contains "ore-" (e.g., "ore-lignite-chalk", "ore-copper-granite")
             if (codeToCheck.Contains("ore-"))
@@ -4788,15 +4788,15 @@ namespace SeraphLeveling
             }
 
             // Meteoric iron blocks (treat same as ore - high value)
-            if (codeToCheck.StartsWith("meteorite") ||
+            if (codeToCheck.StartsWith("meteorite", StringComparison.Ordinal) ||
                 codeToCheck.Contains("meteoriciron"))
             {
                 return OreMultiplier;
             }
 
             // Stone/rock blocks that should count for mining XP
-            if (codeToCheck.StartsWith("rock-") ||           // Regular rock (rock-granite)
-                codeToCheck.StartsWith("crackedrock-"))      // Cracked rock (crackedrock-granite)
+            if (codeToCheck.StartsWith("rock-", StringComparison.Ordinal) ||           // Regular rock (rock-granite)
+                codeToCheck.StartsWith("crackedrock-", StringComparison.Ordinal))      // Cracked rock (crackedrock-granite)
             {
                 return 1;
             }
@@ -4868,7 +4868,7 @@ namespace SeraphLeveling
                 {
                     string weaponName = kvp.Key;
                     // Simplify the display name (remove "game:" prefix if present)
-                    if (weaponName.StartsWith("game:"))
+                    if (weaponName.StartsWith("game:", StringComparison.Ordinal))
                         weaponName = weaponName.Substring(5);
 
                     var weaponProgress = kvp.Value;
@@ -5642,7 +5642,7 @@ namespace SeraphLeveling
                 foreach (var kvp in progress.ArmorProgress.OrderByDescending(p => p.Value.TimeCredits + p.Value.DamageCredits + p.Value.RepairCredits))
                 {
                     string armorName = kvp.Key;
-                    if (armorName.StartsWith("game:"))
+                    if (armorName.StartsWith("game:", StringComparison.Ordinal))
                         armorName = armorName.Substring(5);
 
                     var armorProg = kvp.Value;
@@ -8498,13 +8498,13 @@ namespace SeraphLeveling
             // =================================================================
 
             // Two-handed swords
-            if (lowerCode.StartsWith("greatsword-") || lowerCode.StartsWith("zweihander-") ||
-                lowerCode.StartsWith("claymore-") || lowerCode.StartsWith("flamberge-") ||
-                lowerCode.StartsWith("montante-") || lowerCode.StartsWith("nodachi-") ||
-                lowerCode.StartsWith("2hsword-") || lowerCode.StartsWith("2h-sword-") ||
-                lowerCode.StartsWith("twohandedsword-") || lowerCode.StartsWith("twohanded-sword-") ||
-                lowerCode.StartsWith("sword-great-") || lowerCode.StartsWith("sword-long-") ||
-                lowerCode.StartsWith("longsword-") ||
+            if (lowerCode.StartsWith("greatsword-", StringComparison.Ordinal) || lowerCode.StartsWith("zweihander-", StringComparison.Ordinal) ||
+                lowerCode.StartsWith("claymore-", StringComparison.Ordinal) || lowerCode.StartsWith("flamberge-", StringComparison.Ordinal) ||
+                lowerCode.StartsWith("montante-", StringComparison.Ordinal) || lowerCode.StartsWith("nodachi-", StringComparison.Ordinal) ||
+                lowerCode.StartsWith("2hsword-", StringComparison.Ordinal) || lowerCode.StartsWith("2h-sword-", StringComparison.Ordinal) ||
+                lowerCode.StartsWith("twohandedsword-", StringComparison.Ordinal) || lowerCode.StartsWith("twohanded-sword-", StringComparison.Ordinal) ||
+                lowerCode.StartsWith("sword-great-", StringComparison.Ordinal) || lowerCode.StartsWith("sword-long-", StringComparison.Ordinal) ||
+                lowerCode.StartsWith("longsword-", StringComparison.Ordinal) ||
                 (lowerCode.Contains("twohanded") && lowerCode.Contains("sword")) ||
                 (lowerCode.Contains("2h") && lowerCode.Contains("sword")))
             {
@@ -8512,23 +8512,23 @@ namespace SeraphLeveling
             }
 
             // One-handed swords, blades, and similar
-            if (lowerCode.StartsWith("sword-") || lowerCode.StartsWith("blade-") ||
-                lowerCode.StartsWith("shortsword-") || lowerCode.StartsWith("sword-short-") ||
-                lowerCode.StartsWith("sword-arming-") ||
-                lowerCode.StartsWith("saber-") || lowerCode.StartsWith("sabre-") ||
-                lowerCode.StartsWith("rapier-") || lowerCode.StartsWith("scimitar-") ||
-                lowerCode.StartsWith("cutlass-") || lowerCode.StartsWith("falx-") ||
-                lowerCode.StartsWith("falchion-") || lowerCode.StartsWith("kopis-") ||
-                lowerCode.StartsWith("gladius-") || lowerCode.StartsWith("messer-"))
+            if (lowerCode.StartsWith("sword-", StringComparison.Ordinal) || lowerCode.StartsWith("blade-", StringComparison.Ordinal) ||
+                lowerCode.StartsWith("shortsword-", StringComparison.Ordinal) || lowerCode.StartsWith("sword-short-", StringComparison.Ordinal) ||
+                lowerCode.StartsWith("sword-arming-", StringComparison.Ordinal) ||
+                lowerCode.StartsWith("saber-", StringComparison.Ordinal) || lowerCode.StartsWith("sabre-", StringComparison.Ordinal) ||
+                lowerCode.StartsWith("rapier-", StringComparison.Ordinal) || lowerCode.StartsWith("scimitar-", StringComparison.Ordinal) ||
+                lowerCode.StartsWith("cutlass-", StringComparison.Ordinal) || lowerCode.StartsWith("falx-", StringComparison.Ordinal) ||
+                lowerCode.StartsWith("falchion-", StringComparison.Ordinal) || lowerCode.StartsWith("kopis-", StringComparison.Ordinal) ||
+                lowerCode.StartsWith("gladius-", StringComparison.Ordinal) || lowerCode.StartsWith("messer-", StringComparison.Ordinal))
             {
                 return itemCode;
             }
 
             // Daggers and knives (combat)
-            if (lowerCode.StartsWith("dagger-") || lowerCode.StartsWith("knife-") ||
-                lowerCode.StartsWith("stiletto-") || lowerCode.StartsWith("khanjar-") ||
-                lowerCode.StartsWith("baselard-") || lowerCode.StartsWith("dirk-") ||
-                lowerCode.StartsWith("tanto-") || lowerCode.StartsWith("kukri-"))
+            if (lowerCode.StartsWith("dagger-", StringComparison.Ordinal) || lowerCode.StartsWith("knife-", StringComparison.Ordinal) ||
+                lowerCode.StartsWith("stiletto-", StringComparison.Ordinal) || lowerCode.StartsWith("khanjar-", StringComparison.Ordinal) ||
+                lowerCode.StartsWith("baselard-", StringComparison.Ordinal) || lowerCode.StartsWith("dirk-", StringComparison.Ordinal) ||
+                lowerCode.StartsWith("tanto-", StringComparison.Ordinal) || lowerCode.StartsWith("kukri-", StringComparison.Ordinal))
             {
                 return itemCode;
             }
@@ -8538,17 +8538,17 @@ namespace SeraphLeveling
             // =================================================================
 
             // Spears (melee)
-            if (lowerCode.StartsWith("spear-") || lowerCode.StartsWith("pike-") ||
-                lowerCode.StartsWith("lance-") || lowerCode.StartsWith("trident-") ||
-                lowerCode.StartsWith("pilum-") || lowerCode.StartsWith("sarissa-"))
+            if (lowerCode.StartsWith("spear-", StringComparison.Ordinal) || lowerCode.StartsWith("pike-", StringComparison.Ordinal) ||
+                lowerCode.StartsWith("lance-", StringComparison.Ordinal) || lowerCode.StartsWith("trident-", StringComparison.Ordinal) ||
+                lowerCode.StartsWith("pilum-", StringComparison.Ordinal) || lowerCode.StartsWith("sarissa-", StringComparison.Ordinal))
             {
                 return itemCode;
             }
 
             // Javelins (can be used in melee too)
-            if (lowerCode.StartsWith("javelin-") || lowerCode.StartsWith("throwing-spear-") ||
-                lowerCode.StartsWith("thrown-spear-") || lowerCode.StartsWith("dart-") ||
-                lowerCode.StartsWith("plumbata-") ||
+            if (lowerCode.StartsWith("javelin-", StringComparison.Ordinal) || lowerCode.StartsWith("throwing-spear-", StringComparison.Ordinal) ||
+                lowerCode.StartsWith("thrown-spear-", StringComparison.Ordinal) || lowerCode.StartsWith("dart-", StringComparison.Ordinal) ||
+                lowerCode.StartsWith("plumbata-", StringComparison.Ordinal) ||
                 lowerCode.Contains("javelin") || lowerCode.Contains("throwingspear") ||
                 lowerCode.Contains("thrownspear"))
             {
@@ -8556,18 +8556,18 @@ namespace SeraphLeveling
             }
 
             // Halberds and poleaxes
-            if (lowerCode.StartsWith("halberd-") || lowerCode.StartsWith("poleaxe-") ||
-                lowerCode.StartsWith("glaive-") || lowerCode.StartsWith("bardiche-") ||
-                lowerCode.StartsWith("voulge-") || lowerCode.StartsWith("guisarme-") ||
-                lowerCode.StartsWith("billhook-") || lowerCode.StartsWith("partisan-") ||
-                lowerCode.StartsWith("naginata-") || lowerCode.StartsWith("sovnya-"))
+            if (lowerCode.StartsWith("halberd-", StringComparison.Ordinal) || lowerCode.StartsWith("poleaxe-", StringComparison.Ordinal) ||
+                lowerCode.StartsWith("glaive-", StringComparison.Ordinal) || lowerCode.StartsWith("bardiche-", StringComparison.Ordinal) ||
+                lowerCode.StartsWith("voulge-", StringComparison.Ordinal) || lowerCode.StartsWith("guisarme-", StringComparison.Ordinal) ||
+                lowerCode.StartsWith("billhook-", StringComparison.Ordinal) || lowerCode.StartsWith("partisan-", StringComparison.Ordinal) ||
+                lowerCode.StartsWith("naginata-", StringComparison.Ordinal) || lowerCode.StartsWith("sovnya-", StringComparison.Ordinal))
             {
                 return itemCode;
             }
 
             // Quarterstaves
-            if (lowerCode.StartsWith("quarterstaff-") || lowerCode.StartsWith("staff-") ||
-                lowerCode.StartsWith("bo-") || lowerCode.Contains("bo-staff"))
+            if (lowerCode.StartsWith("quarterstaff-", StringComparison.Ordinal) || lowerCode.StartsWith("staff-", StringComparison.Ordinal) ||
+                lowerCode.StartsWith("bo-", StringComparison.Ordinal) || lowerCode.Contains("bo-staff"))
             {
                 return itemCode;
             }
@@ -8577,18 +8577,18 @@ namespace SeraphLeveling
             // =================================================================
 
             // Maces and warhammers
-            if (lowerCode.StartsWith("mace-") || lowerCode.StartsWith("morningstar-") ||
-                lowerCode.StartsWith("flail-") || lowerCode.StartsWith("warhammer-") ||
-                lowerCode.StartsWith("maul-") || lowerCode.StartsWith("hammer-") ||
-                lowerCode.StartsWith("flangedmace-") || lowerCode.StartsWith("spikedmace-"))
+            if (lowerCode.StartsWith("mace-", StringComparison.Ordinal) || lowerCode.StartsWith("morningstar-", StringComparison.Ordinal) ||
+                lowerCode.StartsWith("flail-", StringComparison.Ordinal) || lowerCode.StartsWith("warhammer-", StringComparison.Ordinal) ||
+                lowerCode.StartsWith("maul-", StringComparison.Ordinal) || lowerCode.StartsWith("hammer-", StringComparison.Ordinal) ||
+                lowerCode.StartsWith("flangedmace-", StringComparison.Ordinal) || lowerCode.StartsWith("spikedmace-", StringComparison.Ordinal))
             {
                 return itemCode;
             }
 
             // Clubs
-            if (lowerCode.StartsWith("club-") || lowerCode.StartsWith("cudgel-") ||
-                lowerCode.StartsWith("baton-") || lowerCode.StartsWith("truncheon-") ||
-                lowerCode.StartsWith("shillelagh-") || lowerCode.StartsWith("blackjack-"))
+            if (lowerCode.StartsWith("club-", StringComparison.Ordinal) || lowerCode.StartsWith("cudgel-", StringComparison.Ordinal) ||
+                lowerCode.StartsWith("baton-", StringComparison.Ordinal) || lowerCode.StartsWith("truncheon-", StringComparison.Ordinal) ||
+                lowerCode.StartsWith("shillelagh-", StringComparison.Ordinal) || lowerCode.StartsWith("blackjack-", StringComparison.Ordinal))
             {
                 return itemCode;
             }
@@ -8596,12 +8596,12 @@ namespace SeraphLeveling
             // =================================================================
             // AXES (combat, not tools)
             // =================================================================
-            if (lowerCode.StartsWith("battleaxe-") || lowerCode.StartsWith("waraxe-") ||
-                lowerCode.StartsWith("handaxe-") || lowerCode.StartsWith("hatchet-") ||
-                lowerCode.StartsWith("tomahawk-") || lowerCode.StartsWith("francisca-") ||
-                lowerCode.StartsWith("dane-axe-") || lowerCode.StartsWith("daneaxe-") ||
-                lowerCode.StartsWith("broadaxe-") || lowerCode.StartsWith("labrys-") ||
-                (lowerCode.StartsWith("axe-") && !lowerCode.Contains("pickaxe")))
+            if (lowerCode.StartsWith("battleaxe-", StringComparison.Ordinal) || lowerCode.StartsWith("waraxe-", StringComparison.Ordinal) ||
+                lowerCode.StartsWith("handaxe-", StringComparison.Ordinal) || lowerCode.StartsWith("hatchet-", StringComparison.Ordinal) ||
+                lowerCode.StartsWith("tomahawk-", StringComparison.Ordinal) || lowerCode.StartsWith("francisca-", StringComparison.Ordinal) ||
+                lowerCode.StartsWith("dane-axe-", StringComparison.Ordinal) || lowerCode.StartsWith("daneaxe-", StringComparison.Ordinal) ||
+                lowerCode.StartsWith("broadaxe-", StringComparison.Ordinal) || lowerCode.StartsWith("labrys-", StringComparison.Ordinal) ||
+                (lowerCode.StartsWith("axe-", StringComparison.Ordinal) && !lowerCode.Contains("pickaxe")))
             {
                 return itemCode;
             }
@@ -8611,31 +8611,31 @@ namespace SeraphLeveling
             // =================================================================
 
             // aa-blade: gladius, arming, claymore, sabre, longsword, falchion (swords)
-            if (lowerCode.StartsWith("aa-blade-"))
+            if (lowerCode.StartsWith("aa-blade-", StringComparison.Ordinal))
             {
                 return itemCode;
             }
 
             // aa-axe: bearded, battle, bardiche (battle axes)
-            if (lowerCode.StartsWith("aa-axe-"))
+            if (lowerCode.StartsWith("aa-axe-", StringComparison.Ordinal))
             {
                 return itemCode;
             }
 
             // aa-club: flanged, morningstar, spiked, warhammer (maces)
-            if (lowerCode.StartsWith("aa-club-"))
+            if (lowerCode.StartsWith("aa-club-", StringComparison.Ordinal))
             {
                 return itemCode;
             }
 
             // aa-knife: dagger, stiletto, khanjar, baselard (combat knives)
-            if (lowerCode.StartsWith("aa-knife-"))
+            if (lowerCode.StartsWith("aa-knife-", StringComparison.Ordinal))
             {
                 return itemCode;
             }
 
             // aa-spear: boar, voulge, fork, ranseur (polearms)
-            if (lowerCode.StartsWith("aa-spear-"))
+            if (lowerCode.StartsWith("aa-spear-", StringComparison.Ordinal))
             {
                 return itemCode;
             }
@@ -8733,7 +8733,7 @@ namespace SeraphLeveling
             if (string.IsNullOrEmpty(weaponCombo)) return false;
             string lower = weaponCombo.ToLowerInvariant();
             return lower.Contains("bow-simple") || lower.Contains("bow-long") ||
-                   lower.StartsWith("simple") || lower.StartsWith("long");
+                   lower.StartsWith("simple", StringComparison.Ordinal) || lower.StartsWith("long", StringComparison.Ordinal);
         }
 
         /// <summary>
@@ -8744,7 +8744,7 @@ namespace SeraphLeveling
             if (string.IsNullOrEmpty(weaponCombo)) return false;
             string lower = weaponCombo.ToLowerInvariant();
             return lower.Contains("stone-") || lower.Contains("sling+stone") ||
-                   lower.StartsWith("stone") || lower.Contains("thrownstone") ||
+                   lower.StartsWith("stone", StringComparison.Ordinal) || lower.Contains("thrownstone") ||
                    (lower.Contains("stone") && !lower.Contains("whetstone"));
         }
 
@@ -9005,13 +9005,13 @@ namespace SeraphLeveling
             string heldCheck = heldItemCode.Contains(":") ? heldItemCode.Substring(heldItemCode.IndexOf(':') + 1) : heldItemCode;
 
             // Check for arrow projectiles (bows)
-            if (projCheck.StartsWith("arrow-") || projCheck == "arrow" || projCheck.Contains("arrow"))
+            if (projCheck.StartsWith("arrow-", StringComparison.Ordinal) || projCheck == "arrow" || projCheck.Contains("arrow"))
             {
                 // Get bow type from held item (if still holding a bow)
                 string bowCode = "unknown-bow";
-                if (heldCheck.StartsWith("bow-") || heldCheck == "bow" ||
-                    heldCheck.StartsWith("longbow") || heldCheck.StartsWith("recurvebow") ||
-                    heldCheck.StartsWith("crudebow") || heldCheck.StartsWith("simplebow") ||
+                if (heldCheck.StartsWith("bow-", StringComparison.Ordinal) || heldCheck == "bow" ||
+                    heldCheck.StartsWith("longbow", StringComparison.Ordinal) || heldCheck.StartsWith("recurvebow", StringComparison.Ordinal) ||
+                    heldCheck.StartsWith("crudebow", StringComparison.Ordinal) || heldCheck.StartsWith("simplebow", StringComparison.Ordinal) ||
                     heldCheck.Contains("bow"))
                 {
                     bowCode = heldCheck;
@@ -9020,12 +9020,12 @@ namespace SeraphLeveling
             }
 
             // Check for crossbow bolts/quarrels
-            if (projCheck.StartsWith("bolt-") || projCheck == "bolt" || projCheck.Contains("bolt") ||
-                projCheck.StartsWith("quarrel-") || projCheck == "quarrel" || projCheck.Contains("quarrel"))
+            if (projCheck.StartsWith("bolt-", StringComparison.Ordinal) || projCheck == "bolt" || projCheck.Contains("bolt") ||
+                projCheck.StartsWith("quarrel-", StringComparison.Ordinal) || projCheck == "quarrel" || projCheck.Contains("quarrel"))
             {
                 // Get crossbow type from held item
                 string crossbowCode = "unknown-crossbow";
-                if (heldCheck.StartsWith("crossbow") || heldCheck.Contains("crossbow"))
+                if (heldCheck.StartsWith("crossbow", StringComparison.Ordinal) || heldCheck.Contains("crossbow"))
                 {
                     crossbowCode = heldCheck;
                 }
@@ -9033,14 +9033,14 @@ namespace SeraphLeveling
             }
 
             // Check for firearm projectiles (bullets, musket balls, etc.)
-            if (projCheck.StartsWith("bullet-") || projCheck == "bullet" || projCheck.Contains("bullet") ||
-                projCheck.StartsWith("musketball") || projCheck.Contains("musketball") ||
-                projCheck.StartsWith("shot-") || projCheck.Contains("shot"))
+            if (projCheck.StartsWith("bullet-", StringComparison.Ordinal) || projCheck == "bullet" || projCheck.Contains("bullet") ||
+                projCheck.StartsWith("musketball", StringComparison.Ordinal) || projCheck.Contains("musketball") ||
+                projCheck.StartsWith("shot-", StringComparison.Ordinal) || projCheck.Contains("shot"))
             {
                 // Get firearm type from held item
                 string firearmCode = "unknown-firearm";
-                if (heldCheck.StartsWith("musket") || heldCheck.StartsWith("pistol") ||
-                    heldCheck.StartsWith("rifle") || heldCheck.StartsWith("blunderbuss") ||
+                if (heldCheck.StartsWith("musket", StringComparison.Ordinal) || heldCheck.StartsWith("pistol", StringComparison.Ordinal) ||
+                    heldCheck.StartsWith("rifle", StringComparison.Ordinal) || heldCheck.StartsWith("blunderbuss", StringComparison.Ordinal) ||
                     heldCheck.Contains("gun") || heldCheck.Contains("firearm"))
                 {
                     firearmCode = heldCheck;
@@ -9049,12 +9049,12 @@ namespace SeraphLeveling
             }
 
             // Check for sling stones (slung from sling — entity is thrownstone-{rock})
-            if (projCheck.StartsWith("stone-") || projCheck == "stone" || projCheck.StartsWith("thrownstone") ||
+            if (projCheck.StartsWith("stone-", StringComparison.Ordinal) || projCheck == "stone" || projCheck.StartsWith("thrownstone", StringComparison.Ordinal) ||
                 projCheck.Contains("slingstone") || projCheck.Contains("sling-stone"))
             {
                 // Check if holding a sling
                 string slingCode = "thrown";
-                if (heldCheck.StartsWith("sling") || heldCheck.Contains("sling"))
+                if (heldCheck.StartsWith("sling", StringComparison.Ordinal) || heldCheck.Contains("sling"))
                 {
                     slingCode = heldCheck;
                 }
@@ -9065,7 +9065,7 @@ namespace SeraphLeveling
             // stones, bones, etc. as a single shared `game:thrownitem` projectile entity — the
             // actual item is in ProjectileStack. Peek there to figure out what was thrown so
             // Improviser etc. can recognize it as a stone.
-            if (projCheck == "thrownitem" || projCheck.StartsWith("thrownitem-") || projCheck.StartsWith("thrownitem+"))
+            if (projCheck == "thrownitem" || projCheck.StartsWith("thrownitem-", StringComparison.Ordinal) || projCheck.StartsWith("thrownitem+", StringComparison.Ordinal))
             {
                 string stackCode = "";
                 if (projectile is IProjectile proj && proj.ProjectileStack?.Collectible?.Code != null)
@@ -9083,19 +9083,19 @@ namespace SeraphLeveling
             }
 
             // Check for spear/javelin throws (thrown spears deal ranged damage)
-            if (projCheck.StartsWith("spear-") || projCheck.StartsWith("thrownspear") ||
-                projCheck.StartsWith("javelin-") || projCheck.Contains("javelin") ||
-                projCheck.StartsWith("pilum-") || projCheck.Contains("throwingspear"))
+            if (projCheck.StartsWith("spear-", StringComparison.Ordinal) || projCheck.StartsWith("thrownspear", StringComparison.Ordinal) ||
+                projCheck.StartsWith("javelin-", StringComparison.Ordinal) || projCheck.Contains("javelin") ||
+                projCheck.StartsWith("pilum-", StringComparison.Ordinal) || projCheck.Contains("throwingspear"))
             {
                 return $"thrown+{projCheck}";
             }
 
             // Check for Atlatl darts (Return of the Atlatl mod)
             // Projectile entities are "atlatl:apdart-{material}", projCheck will be "apdart-{material}"
-            if (projCheck.StartsWith("apdart") || projectileCode.Contains("atlatl:apdart"))
+            if (projCheck.StartsWith("apdart", StringComparison.Ordinal) || projectileCode.Contains("atlatl:apdart"))
             {
                 string launcherCode = "unknown-atlatl";
-                if (heldCheck.StartsWith("aplauncher") || heldCheck.Contains("aplauncher") ||
+                if (heldCheck.StartsWith("aplauncher", StringComparison.Ordinal) || heldCheck.Contains("aplauncher") ||
                     heldItemCode.Contains("atlatl:aplauncher"))
                 {
                     launcherCode = heldCheck;
@@ -12917,30 +12917,30 @@ namespace SeraphLeveling
             string lowerCode = codeToCheck.ToLowerInvariant();
 
             // Crossbows (check before bows)
-            if (lowerCode.StartsWith("crossbow-") || lowerCode.StartsWith("crossbow") ||
+            if (lowerCode.StartsWith("crossbow-", StringComparison.Ordinal) || lowerCode.StartsWith("crossbow", StringComparison.Ordinal) ||
                 lowerCode.Contains("crossbow"))
                 return (CO_CROSSBOWS_PROFICIENCY, itemCode);
 
             // Firearms
-            if (lowerCode.StartsWith("musket-") || lowerCode.StartsWith("pistol-") ||
-                lowerCode.StartsWith("rifle-") || lowerCode.StartsWith("blunderbuss-") ||
-                lowerCode.StartsWith("arquebus-") || lowerCode.Contains("firearm") ||
+            if (lowerCode.StartsWith("musket-", StringComparison.Ordinal) || lowerCode.StartsWith("pistol-", StringComparison.Ordinal) ||
+                lowerCode.StartsWith("rifle-", StringComparison.Ordinal) || lowerCode.StartsWith("blunderbuss-", StringComparison.Ordinal) ||
+                lowerCode.StartsWith("arquebus-", StringComparison.Ordinal) || lowerCode.Contains("firearm") ||
                 lowerCode.Contains("gun-"))
                 return (CO_FIREARMS_PROFICIENCY, itemCode);
 
             // Two-Handed Swords (check before one-handed)
             // Combat Armory uses "sword-great-" and "sword-long-" formats
             // Ancient Armory uses "aa-blade-claymore-" and "aa-blade-longsword-" formats
-            if (lowerCode.StartsWith("greatsword-") || lowerCode.StartsWith("zweihander-") ||
-                lowerCode.StartsWith("claymore-") || lowerCode.StartsWith("flamberge-") ||
-                lowerCode.StartsWith("montante-") || lowerCode.StartsWith("nodachi-") ||
-                lowerCode.StartsWith("2hsword-") || lowerCode.StartsWith("2h-sword-") ||
-                lowerCode.StartsWith("twohandedsword-") || lowerCode.StartsWith("twohanded-sword-") ||
-                lowerCode.StartsWith("sword-great-") || // Combat Armory greatswords
-                lowerCode.StartsWith("sword-long-") ||  // Combat Armory longswords
-                lowerCode.StartsWith("longsword-") ||   // Standard longsword prefix
-                lowerCode.StartsWith("aa-blade-claymore-") ||  // Ancient Armory claymore
-                lowerCode.StartsWith("aa-blade-longsword-") || // Ancient Armory longsword
+            if (lowerCode.StartsWith("greatsword-", StringComparison.Ordinal) || lowerCode.StartsWith("zweihander-", StringComparison.Ordinal) ||
+                lowerCode.StartsWith("claymore-", StringComparison.Ordinal) || lowerCode.StartsWith("flamberge-", StringComparison.Ordinal) ||
+                lowerCode.StartsWith("montante-", StringComparison.Ordinal) || lowerCode.StartsWith("nodachi-", StringComparison.Ordinal) ||
+                lowerCode.StartsWith("2hsword-", StringComparison.Ordinal) || lowerCode.StartsWith("2h-sword-", StringComparison.Ordinal) ||
+                lowerCode.StartsWith("twohandedsword-", StringComparison.Ordinal) || lowerCode.StartsWith("twohanded-sword-", StringComparison.Ordinal) ||
+                lowerCode.StartsWith("sword-great-", StringComparison.Ordinal) || // Combat Armory greatswords
+                lowerCode.StartsWith("sword-long-", StringComparison.Ordinal) ||  // Combat Armory longswords
+                lowerCode.StartsWith("longsword-", StringComparison.Ordinal) ||   // Standard longsword prefix
+                lowerCode.StartsWith("aa-blade-claymore-", StringComparison.Ordinal) ||  // Ancient Armory claymore
+                lowerCode.StartsWith("aa-blade-longsword-", StringComparison.Ordinal) || // Ancient Armory longsword
                 (lowerCode.Contains("twohanded") && lowerCode.Contains("sword")) ||
                 (lowerCode.Contains("2h") && lowerCode.Contains("sword")))
                 return (CO_TWO_HANDED_SWORDS_PROFICIENCY, itemCode);
@@ -12948,86 +12948,86 @@ namespace SeraphLeveling
             // One-Handed Swords
             // Note: sword-long- and longsword- are handled above as two-handed
             // Ancient Armory: aa-blade-gladius, aa-blade-arming, aa-blade-sabre, aa-blade-falchion, aa-knife-*
-            if (lowerCode.StartsWith("sword-") || lowerCode.StartsWith("blade-") ||
-                lowerCode.StartsWith("shortsword-") || lowerCode.StartsWith("sword-short-") ||
-                lowerCode.StartsWith("sword-arming-") || // Combat Armory arming swords
-                lowerCode.StartsWith("saber-") || lowerCode.StartsWith("sabre-") || // Both spellings
-                lowerCode.StartsWith("rapier-") || lowerCode.StartsWith("scimitar-") ||
-                lowerCode.StartsWith("cutlass-") || lowerCode.StartsWith("falx-") ||
-                lowerCode.StartsWith("falchion-") || lowerCode.StartsWith("dagger-") ||
-                lowerCode.StartsWith("knife-") || lowerCode.StartsWith("kopis-") ||
-                lowerCode.StartsWith("gladius-") || lowerCode.StartsWith("messer-") ||
-                lowerCode.StartsWith("aa-blade-gladius-") ||   // Ancient Armory gladius
-                lowerCode.StartsWith("aa-blade-arming-") ||    // Ancient Armory arming sword
-                lowerCode.StartsWith("aa-blade-sabre-") ||     // Ancient Armory sabre
-                lowerCode.StartsWith("aa-blade-falchion-") ||  // Ancient Armory falchion
-                lowerCode.StartsWith("aa-knife-"))             // Ancient Armory knives (dagger, stiletto, khanjar, baselard)
+            if (lowerCode.StartsWith("sword-", StringComparison.Ordinal) || lowerCode.StartsWith("blade-", StringComparison.Ordinal) ||
+                lowerCode.StartsWith("shortsword-", StringComparison.Ordinal) || lowerCode.StartsWith("sword-short-", StringComparison.Ordinal) ||
+                lowerCode.StartsWith("sword-arming-", StringComparison.Ordinal) || // Combat Armory arming swords
+                lowerCode.StartsWith("saber-", StringComparison.Ordinal) || lowerCode.StartsWith("sabre-", StringComparison.Ordinal) || // Both spellings
+                lowerCode.StartsWith("rapier-", StringComparison.Ordinal) || lowerCode.StartsWith("scimitar-", StringComparison.Ordinal) ||
+                lowerCode.StartsWith("cutlass-", StringComparison.Ordinal) || lowerCode.StartsWith("falx-", StringComparison.Ordinal) ||
+                lowerCode.StartsWith("falchion-", StringComparison.Ordinal) || lowerCode.StartsWith("dagger-", StringComparison.Ordinal) ||
+                lowerCode.StartsWith("knife-", StringComparison.Ordinal) || lowerCode.StartsWith("kopis-", StringComparison.Ordinal) ||
+                lowerCode.StartsWith("gladius-", StringComparison.Ordinal) || lowerCode.StartsWith("messer-", StringComparison.Ordinal) ||
+                lowerCode.StartsWith("aa-blade-gladius-", StringComparison.Ordinal) ||   // Ancient Armory gladius
+                lowerCode.StartsWith("aa-blade-arming-", StringComparison.Ordinal) ||    // Ancient Armory arming sword
+                lowerCode.StartsWith("aa-blade-sabre-", StringComparison.Ordinal) ||     // Ancient Armory sabre
+                lowerCode.StartsWith("aa-blade-falchion-", StringComparison.Ordinal) ||  // Ancient Armory falchion
+                lowerCode.StartsWith("aa-knife-", StringComparison.Ordinal))             // Ancient Armory knives (dagger, stiletto, khanjar, baselard)
                 return (CO_ONE_HANDED_SWORDS_PROFICIENCY, itemCode);
 
             // Poleaxes: the CO fork tracks these under a separate poleaxeProficiency
             // stat. The original CO has no such stat, so there we fall back to
             // halberds, preserving the previous behavior.
-            if (lowerCode.StartsWith("poleaxe-"))
+            if (lowerCode.StartsWith("poleaxe-", StringComparison.Ordinal))
                 return (IsCombatOverhaulForkLoaded ? CO_POLEAXE_PROFICIENCY : CO_HALBERDS_PROFICIENCY, itemCode);
 
             // Halberds (polearms with axe heads)
             // Ancient Armory: aa-spear-voulge is a halberd-type weapon
-            if (lowerCode.StartsWith("halberd-") ||
-                lowerCode.StartsWith("glaive-") || lowerCode.StartsWith("bardiche-") ||
-                lowerCode.StartsWith("voulge-") || lowerCode.StartsWith("guisarme-") ||
-                lowerCode.StartsWith("aa-spear-voulge-"))  // Ancient Armory voulge
+            if (lowerCode.StartsWith("halberd-", StringComparison.Ordinal) ||
+                lowerCode.StartsWith("glaive-", StringComparison.Ordinal) || lowerCode.StartsWith("bardiche-", StringComparison.Ordinal) ||
+                lowerCode.StartsWith("voulge-", StringComparison.Ordinal) || lowerCode.StartsWith("guisarme-", StringComparison.Ordinal) ||
+                lowerCode.StartsWith("aa-spear-voulge-", StringComparison.Ordinal))  // Ancient Armory voulge
                 return (CO_HALBERDS_PROFICIENCY, itemCode);
 
             // Quarterstaff
-            if (lowerCode.StartsWith("quarterstaff-") || lowerCode.StartsWith("staff-") ||
-                lowerCode.StartsWith("bo-") || lowerCode.Contains("bo-staff"))
+            if (lowerCode.StartsWith("quarterstaff-", StringComparison.Ordinal) || lowerCode.StartsWith("staff-", StringComparison.Ordinal) ||
+                lowerCode.StartsWith("bo-", StringComparison.Ordinal) || lowerCode.Contains("bo-staff"))
                 return (CO_QUARTERSTAFF_PROFICIENCY, itemCode);
 
             // Maces
             // Ancient Armory: aa-club-* (flanged, morningstar, spiked, warhammer)
-            if (lowerCode.StartsWith("mace-") || lowerCode.StartsWith("morningstar-") ||
-                lowerCode.StartsWith("flail-") || lowerCode.StartsWith("warhammer-") ||
-                lowerCode.StartsWith("aa-club-"))  // Ancient Armory clubs/maces
+            if (lowerCode.StartsWith("mace-", StringComparison.Ordinal) || lowerCode.StartsWith("morningstar-", StringComparison.Ordinal) ||
+                lowerCode.StartsWith("flail-", StringComparison.Ordinal) || lowerCode.StartsWith("warhammer-", StringComparison.Ordinal) ||
+                lowerCode.StartsWith("aa-club-", StringComparison.Ordinal))  // Ancient Armory clubs/maces
                 return (CO_MACES_PROFICIENCY, itemCode);
 
             // Clubs
-            if (lowerCode.StartsWith("club-") || lowerCode.StartsWith("cudgel-") ||
-                lowerCode.StartsWith("baton-") || lowerCode.StartsWith("truncheon-"))
+            if (lowerCode.StartsWith("club-", StringComparison.Ordinal) || lowerCode.StartsWith("cudgel-", StringComparison.Ordinal) ||
+                lowerCode.StartsWith("baton-", StringComparison.Ordinal) || lowerCode.StartsWith("truncheon-", StringComparison.Ordinal))
                 return (CO_CLUBS_PROFICIENCY, itemCode);
 
             // Axes (combat axes, not tool axes)
             // Ancient Armory: aa-axe-* (bearded, battle, bardiche)
-            if (lowerCode.StartsWith("battleaxe-") || lowerCode.StartsWith("waraxe-") ||
-                lowerCode.StartsWith("handaxe-") || lowerCode.StartsWith("hatchet-") ||
-                lowerCode.StartsWith("aa-axe-") ||  // Ancient Armory battle axes
-                (lowerCode.StartsWith("axe-") && !lowerCode.Contains("pickaxe")))
+            if (lowerCode.StartsWith("battleaxe-", StringComparison.Ordinal) || lowerCode.StartsWith("waraxe-", StringComparison.Ordinal) ||
+                lowerCode.StartsWith("handaxe-", StringComparison.Ordinal) || lowerCode.StartsWith("hatchet-", StringComparison.Ordinal) ||
+                lowerCode.StartsWith("aa-axe-", StringComparison.Ordinal) ||  // Ancient Armory battle axes
+                (lowerCode.StartsWith("axe-", StringComparison.Ordinal) && !lowerCode.Contains("pickaxe")))
                 return (CO_AXES_PROFICIENCY, itemCode);
 
             // Javelins (thrown spears)
-            if (lowerCode.StartsWith("javelin-") || lowerCode.StartsWith("pilum-") ||
-                lowerCode.StartsWith("throwing-spear-") || lowerCode.StartsWith("thrown-spear-") ||
-                lowerCode.StartsWith("dart-") || lowerCode.StartsWith("plumbata-") ||
+            if (lowerCode.StartsWith("javelin-", StringComparison.Ordinal) || lowerCode.StartsWith("pilum-", StringComparison.Ordinal) ||
+                lowerCode.StartsWith("throwing-spear-", StringComparison.Ordinal) || lowerCode.StartsWith("thrown-spear-", StringComparison.Ordinal) ||
+                lowerCode.StartsWith("dart-", StringComparison.Ordinal) || lowerCode.StartsWith("plumbata-", StringComparison.Ordinal) ||
                 lowerCode.Contains("javelin") || lowerCode.Contains("throwingspear") ||
                 lowerCode.Contains("thrownspear") || lowerCode.Contains("throwing-spear"))
                 return (CO_JAVELINS_PROFICIENCY, itemCode);
 
             // Spears (melee)
             // Ancient Armory: aa-spear-boar, aa-spear-fork, aa-spear-ranseur (but NOT voulge - that's a halberd)
-            if (lowerCode.StartsWith("spear-") || lowerCode.StartsWith("pike-") ||
-                lowerCode.StartsWith("lance-") || lowerCode.StartsWith("trident-") ||
-                lowerCode.StartsWith("aa-spear-boar-") ||     // Ancient Armory boar spear
-                lowerCode.StartsWith("aa-spear-fork-") ||     // Ancient Armory fork
-                lowerCode.StartsWith("aa-spear-ranseur-"))    // Ancient Armory ranseur
+            if (lowerCode.StartsWith("spear-", StringComparison.Ordinal) || lowerCode.StartsWith("pike-", StringComparison.Ordinal) ||
+                lowerCode.StartsWith("lance-", StringComparison.Ordinal) || lowerCode.StartsWith("trident-", StringComparison.Ordinal) ||
+                lowerCode.StartsWith("aa-spear-boar-", StringComparison.Ordinal) ||     // Ancient Armory boar spear
+                lowerCode.StartsWith("aa-spear-fork-", StringComparison.Ordinal) ||     // Ancient Armory fork
+                lowerCode.StartsWith("aa-spear-ranseur-", StringComparison.Ordinal))    // Ancient Armory ranseur
                 return (CO_SPEARS_PROFICIENCY, itemCode);
 
             // Bows (standard - after crossbows check)
-            if (lowerCode.StartsWith("bow-") || lowerCode.StartsWith("longbow-") ||
-                lowerCode.StartsWith("shortbow-") || lowerCode.StartsWith("recurvebow-") ||
-                lowerCode.StartsWith("recurve-") || lowerCode.StartsWith("composite-bow"))
+            if (lowerCode.StartsWith("bow-", StringComparison.Ordinal) || lowerCode.StartsWith("longbow-", StringComparison.Ordinal) ||
+                lowerCode.StartsWith("shortbow-", StringComparison.Ordinal) || lowerCode.StartsWith("recurvebow-", StringComparison.Ordinal) ||
+                lowerCode.StartsWith("recurve-", StringComparison.Ordinal) || lowerCode.StartsWith("composite-bow", StringComparison.Ordinal))
                 return (CO_BOWS_PROFICIENCY, itemCode);
 
             // Slings
-            if (lowerCode.StartsWith("sling-") || lowerCode == "sling")
+            if (lowerCode.StartsWith("sling-", StringComparison.Ordinal) || lowerCode == "sling")
                 return (CO_SLINGS_PROFICIENCY, itemCode);
 
             // Debug logging for unmatched weapons - helps identify missing item codes
@@ -20699,7 +20699,7 @@ namespace SeraphLeveling
                     string line = raw.Trim();
                     if (line.Length == 0) { sb.Append("<br>"); continue; }
                     string safe = line.Replace("&", "&amp;").Replace("<", "&lt;").Replace(">", "&gt;");
-                    if (line.StartsWith("===") || line.StartsWith("---"))
+                    if (line.StartsWith("===", StringComparison.Ordinal) || line.StartsWith("---", StringComparison.Ordinal))
                         sb.Append("<strong>").Append(safe.Trim('=', '-', ' ')).Append("</strong><br>");
                     else
                         sb.Append(safe).Append("<br>");
@@ -22503,7 +22503,7 @@ namespace SeraphLeveling
         {
             if (string.IsNullOrEmpty(text) || string.IsNullOrEmpty(plainName)) return text;
             return GetOrphanTraitPattern(plainName).Replace(text, m =>
-                m.Value.StartsWith("\n") ? "\n" + replacement : replacement);
+                m.Value.StartsWith("\n", StringComparison.Ordinal) ? "\n" + replacement : replacement);
         }
 
         /// <summary>
@@ -22568,7 +22568,7 @@ namespace SeraphLeveling
         {
             var regex = GetVanillaTraitLineRegex(traitCode);
             if (regex == null) return text;
-            return regex.Replace(text, m => m.Value.StartsWith("\n") ? "\n" + replacement : replacement);
+            return regex.Replace(text, m => m.Value.StartsWith("\n", StringComparison.Ordinal) ? "\n" + replacement : replacement);
         }
 
         /// <summary>

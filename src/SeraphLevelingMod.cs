@@ -187,8 +187,9 @@ namespace SeraphLeveling
 
         // Auto-save settings
         /// <summary>
-        /// Interval in seconds for automatic progress saving. Default 300 (5 minutes).
-        /// Set to 0 to disable auto-save (saves only on world save).
+        /// No longer used (kept so existing config files still load). Progress
+        /// is written to disk by the game's own world save, which calls the mod's
+        /// save hook first; a separate mod timer only rewrote the in-memory copy.
         /// </summary>
         public int AutoSaveIntervalSeconds { get; set; } = 300;
 
@@ -7296,18 +7297,21 @@ namespace SeraphLeveling
                 try { byPlayer.Entity?.WatchedAttributes.UnregisterListener(classListener); } catch { }
             }
 
-            // Save all pending progress data to prevent data loss on disconnect
-            SaveAllPendingProgress();
+            // No save here. SaveGame.StoreData only updates the game's in-memory
+            // ModData table; the disk write happens in the game's own world save
+            // (autosave and shutdown), which calls OnGameWorldSave first. Saving
+            // here re-serialized every player of every skill on each logout and
+            // protected nothing.
         }
 
         /// <summary>
-        /// Called periodically by auto-save timer to persist all pending progress.
-        /// Only saves when players are online to avoid waking up idle dedicated servers.
-        /// </summary>
-        /// <summary>
-        /// (Re)register the auto-save tick at the configured interval. Called at
-        /// startup and after reloadconfig / resetconfig, so a changed
-        /// AutoSaveIntervalSeconds takes effect without a restart.
+        /// The mod used to run its own auto-save tick here. It is gone:
+        /// SaveGame.StoreData only fills the game's in-memory ModData, and the
+        /// game's own autosave (serverconfig, default 5 min) and shutdown call
+        /// OnGameWorldSave just before they write to disk, so the mod timer
+        /// re-serialized everything on the main thread for no added safety.
+        /// Still called at startup and on reloadconfig / resetconfig, so it
+        /// also removes a timer left by an older build.
         /// </summary>
         private void RestartAutoSaveTimer(ICoreServerAPI api)
         {
@@ -7316,26 +7320,11 @@ namespace SeraphLeveling
                 try { api.Event.UnregisterGameTickListener(autoSaveTimerId); } catch { }
                 autoSaveTimerId = 0;
             }
-            if (AutoSaveIntervalSeconds > 0)
-            {
-                autoSaveTimerId = RegisterSafeTickListener(api, OnAutoSaveTick, AutoSaveIntervalSeconds * 1000, "the auto save tick");
-                api.Logger.Notification($"[SeraphLeveling] Auto-save enabled every {AutoSaveIntervalSeconds} seconds");
-            }
-        }
-
-        private void OnAutoSaveTick(float dt)
-        {
-            // Don't save if no players are online - this prevents waking up idle dedicated servers
-            if (ServerApi?.World?.AllOnlinePlayers == null || ServerApi.World.AllOnlinePlayers.Length == 0)
-            {
-                return;
-            }
-
-            SaveAllPendingProgress();
         }
 
         /// <summary>
-        /// Saves all pending progress data. Called on player disconnect and auto-save tick.
+        /// Serializes all progress into the save game's mod data. Used by the
+        /// reset commands so a wipe is in the save the game writes next.
         /// </summary>
         private void SaveAllPendingProgress()
         {

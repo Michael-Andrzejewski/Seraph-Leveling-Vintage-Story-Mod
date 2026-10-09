@@ -20663,24 +20663,26 @@ namespace SeraphLeveling
         }
 
         /// <summary>
-        /// Swap only the report text of the open page. ReloadPage rebuilds the
-        /// whole handbook dialog (background, title bar, tabs, buttons) and the
-        /// report changes about once a second while the page is open, so this
-        /// keeps the open page from hitching. Returns false if the vanilla
-        /// layout is not what we expect, and the caller falls back to ReloadPage.
+        /// Update the open page without rebuilding it. ReloadPage rebuilds the
+        /// whole handbook dialog, and the report changes about once a second
+        /// while the page is open (hunger and armour counters tick). The page
+        /// text is drawn per report section (SeraphReportRichtext), so only the
+        /// sections whose text changed are laid out and drawn again. Returns
+        /// false if the layout is not what we expect (or the section count
+        /// changed), and the caller falls back to ReloadPage.
         /// </summary>
         private bool TryUpdateTextInPlace(GuiDialogHandbook dlg)
         {
             try
             {
                 if (!(detailViewGuiField?.GetValue(dlg) is GuiComposer composer)) return false;
-                var richtext = composer.GetRichtext("richtext");
+                var richtext = composer.GetRichtext("richtext") as SeraphReportRichtext;
                 var scrollbar = composer.GetScrollbar("scrollbar");
                 if (richtext == null || scrollbar == null) return false;
 
                 float scrollY = scrollbar.CurrentYPosition;
+                if (!richtext.Update(CurrentSections())) return false;
                 shownReport = LatestReport;
-                richtext.SetNewText(VtmlUtil.Richtextify(capi, CurrentVtml(), CairoFont.WhiteSmallText().WithLineHeightMultiplier(1.2)));
                 scrollbar.SetNewTotalHeight((float)richtext.Bounds.fixedHeight);
                 scrollbar.CurrentYPosition = scrollY;   // the handle position is stored relative to the total height
                 return true;
@@ -20692,9 +20694,16 @@ namespace SeraphLeveling
             }
         }
 
-        private string CurrentVtml()
+        private string CurrentVtml() => string.Concat(CurrentSections());
+
+        /// <summary>
+        /// The page as VTML, one string per report section: the title, then a
+        /// new section at every === / --- header line, then the footer.
+        /// </summary>
+        private List<string> CurrentSections()
         {
             string report = LatestReport;
+            var sections = new List<string>();
             var sb = new StringBuilder();
             sb.Append("<strong>").Append(Lang.Get("sl-progress-title")).Append("</strong><br><br>");
             if (string.IsNullOrEmpty(report))
@@ -20709,27 +20718,121 @@ namespace SeraphLeveling
                     if (line.Length == 0) { sb.Append("<br>"); continue; }
                     string safe = line.Replace("&", "&amp;").Replace("<", "&lt;").Replace(">", "&gt;");
                     if (line.StartsWith("===", StringComparison.Ordinal) || line.StartsWith("---", StringComparison.Ordinal))
+                    {
+                        if (sb.Length > 0) { sections.Add(sb.ToString()); sb.Clear(); }
                         sb.Append("<strong>").Append(safe.Trim('=', '-', ' ')).Append("</strong><br>");
+                    }
                     else
                         sb.Append(safe).Append("<br>");
                 }
             }
-            sb.Append("<br>").Append(Lang.Get("sl-progress-footer"));
-            return sb.ToString();
+            if (sb.Length > 0) sections.Add(sb.ToString());
+            sections.Add("<br>" + Lang.Get("sl-progress-footer"));
+            return sections;
         }
 
         public override void ComposePage(GuiComposer detailViewGui, ElementBounds textBounds, ItemStack[] allstacks, ActionConsumable<string> openDetailPageFor)
         {
             shownReport = LatestReport;
-            var comps = VtmlUtil.Richtextify(capi, CurrentVtml(), CairoFont.WhiteSmallText().WithLineHeightMultiplier(1.2));
-            detailViewGui.AddRichtext(comps, textBounds, "richtext");
+            detailViewGui.AddInteractiveElement(new SeraphReportRichtext(capi, CurrentSections(), PageFont(), textBounds), "richtext");
             // Page just opened (or redrawn): make sure the numbers are current.
             RequestReport(force: shownReport == null);
         }
 
+        private static CairoFont PageFont() => CairoFont.WhiteSmallText().WithLineHeightMultiplier(1.2);
+
         public override PageText GetPageText()
         {
             return new PageText { Title = Lang.Get("sl-progress-title").ToSearchFriendly(), Text = CurrentVtml() };
+        }
+    }
+
+    /// <summary>
+    /// The progress page text, drawn as one texture per report section instead
+    /// of one texture for the whole ~4000 px report. A report update lays out
+    /// and draws only the sections whose text changed (laying out and drawing
+    /// the whole report took about 40 ms, a visible hitch every second while
+    /// the page was open). It is still a GuiElementRichtext keyed "richtext",
+    /// so the handbook's own scrolling (which moves this element's bounds; the
+    /// section bounds are its children and follow) and scroll range (this
+    /// element's fixedHeight) work unchanged.
+    /// </summary>
+    public class SeraphReportRichtext : GuiElementRichtext
+    {
+        private readonly CairoFont font;
+        private readonly List<GuiElementRichtext> sections = new List<GuiElementRichtext>();
+        private readonly List<string> sectionVtml = new List<string>();
+
+        public SeraphReportRichtext(ICoreClientAPI capi, IList<string> vtml, CairoFont font, ElementBounds bounds)
+            : base(capi, new RichTextComponentBase[0], bounds)
+        {
+            this.font = font;
+            foreach (string v in vtml)
+            {
+                var b = ElementBounds.Fixed(0, 0, bounds.fixedWidth, 0);
+                bounds.WithChild(b);
+                sections.Add(new GuiElementRichtext(capi, VtmlUtil.Richtextify(capi, v, font), b));
+                sectionVtml.Add(v);
+            }
+        }
+
+        /// <summary>Stack the sections top to bottom; this element's height is their sum.</summary>
+        private void Restack()
+        {
+            double y = 0;
+            foreach (var s in sections)
+            {
+                s.Bounds.fixedY = y;
+                y += s.Bounds.fixedHeight;
+            }
+            Bounds.fixedHeight = y;
+        }
+
+        public override void BeforeCalcBounds()
+        {
+            foreach (var s in sections) s.CalcHeightAndPositions();
+            Restack();
+        }
+
+        public override void ComposeElements(Cairo.Context ctxStatic, Cairo.ImageSurface surfaceStatic)
+        {
+            Bounds.CalcWorldBounds();
+            foreach (var s in sections) s.Compose();
+        }
+
+        public override void RenderInteractiveElements(float deltaTime)
+        {
+            foreach (var s in sections) s.RenderInteractiveElements(deltaTime);
+        }
+
+        /// <summary>
+        /// Swap in new section texts, redrawing only the changed ones. Returns
+        /// false when the number of sections differs (the caller rebuilds).
+        /// </summary>
+        public bool Update(IList<string> vtml)
+        {
+            if (vtml.Count != sections.Count) return false;
+            bool moved = false;
+            for (int i = 0; i < sections.Count; i++)
+            {
+                if (vtml[i] == sectionVtml[i]) continue;
+                double before = sections[i].Bounds.fixedHeight;
+                sections[i].SetNewText(VtmlUtil.Richtextify(api, vtml[i], font));
+                sectionVtml[i] = vtml[i];
+                if (sections[i].Bounds.fixedHeight != before) moved = true;
+            }
+            if (moved)
+            {
+                Restack();
+                Bounds.CalcWorldBounds();
+            }
+            return true;
+        }
+
+        public override void Dispose()
+        {
+            foreach (var s in sections) s.Dispose();
+            base.Dispose();
         }
     }
 

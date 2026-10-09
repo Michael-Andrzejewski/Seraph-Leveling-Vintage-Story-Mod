@@ -6488,7 +6488,7 @@ namespace SeraphLeveling
             if (colon >= 0) codeToCheck = itemCode.Substring(colon + 1);
 
             // Check if it's armor (starts with "armor-")
-            if (!codeToCheck.StartsWith("armor-")) return null;
+            if (!codeToCheck.StartsWith("armor-", StringComparison.Ordinal)) return null;
 
             // Determine armor type from code
             if (codeToCheck.Contains("-plate-")) return "plate";
@@ -6559,8 +6559,9 @@ namespace SeraphLeveling
                 {
                     if (slot?.Itemstack?.Collectible != null)
                     {
-                        string itemCode = slot.Itemstack.Collectible.Code?.ToString();
-                        string armorType = GetArmorType(itemCode);
+                        var gear = GearInfoOf(slot.Itemstack.Collectible);
+                        string itemCode = gear?.Code;
+                        string armorType = gear?.ArmorType;
                         if (armorType != null)
                         {
                             string slotId = slot.Inventory?.InventoryID + "_" + slot.Inventory?.GetSlotId(slot);
@@ -6627,8 +6628,9 @@ namespace SeraphLeveling
                     {
                         if (slot?.Itemstack?.Collectible != null)
                         {
-                            string itemCode = slot.Itemstack.Collectible.Code?.ToString();
-                            string armorType = GetArmorType(itemCode);
+                            var gear = GearInfoOf(slot.Itemstack.Collectible);
+                            string itemCode = gear?.Code;
+                            string armorType = gear?.ArmorType;
                             if (armorType != null)
                             {
                                 string slotId = slot.Inventory?.InventoryID + "_" + slot.Inventory?.GetSlotId(slot);
@@ -9321,6 +9323,7 @@ namespace SeraphLeveling
             playerEquippedArmor.Clear();
             playerEquippedClothing.Clear();
             TrackedItemDurabilities.Clear();
+            GearInfoCache.Clear();   // holds the old world's item types
             SleepMountHours.Clear();
             classChangeListeners.Clear();
             pendingClassChangeReapply.Clear();
@@ -14167,8 +14170,9 @@ namespace SeraphLeveling
                     {
                         if (slot?.Itemstack?.Collectible != null)
                         {
-                            string itemCode = slot.Itemstack.Collectible.Code?.ToString();
-                            if (IsClothingItem(itemCode))
+                            var gear = GearInfoOf(slot.Itemstack.Collectible);
+                            string itemCode = gear?.Code;
+                            if (gear != null && gear.IsClothing)
                             {
                                 if (clothierProgress.UniqueClothesWorn.Add(itemCode))
                                 {
@@ -14290,11 +14294,12 @@ namespace SeraphLeveling
                     slotIndex++;
                     if (slot?.Itemstack?.Collectible == null) continue;
 
-                    string itemCode = slot.Itemstack.Collectible.Code?.ToString();
-                    if (string.IsNullOrEmpty(itemCode)) continue;
+                    var gear = GearInfoOf(slot.Itemstack.Collectible);
+                    if (gear == null || string.IsNullOrEmpty(gear.Code)) continue;
+                    string itemCode = gear.Code;
 
                     // Only track clothing and armor
-                    if (!IsClothingItem(itemCode) && !IsArmorItem(itemCode)) continue;
+                    if (!gear.IsClothing && !gear.IsArmor) continue;
 
                     // Get current durability
                     int currentDurability = slot.Itemstack.Collectible.GetRemainingDurability(slot.Itemstack);
@@ -14341,6 +14346,46 @@ namespace SeraphLeveling
                     TrackedItemDurabilities[trackingKey] = (trackId, currentDurability);
                 }
             }
+        }
+
+        /// <summary>What the worn-gear ticks need to know about one item type.</summary>
+        internal sealed class GearInfo
+        {
+            public string Code;        // Collectible.Code.ToString(), e.g. "game:armor-body-plate-iron"
+            public string ArmorType;   // GetArmorType(Code), null if not armor
+            public bool IsArmor;       // IsArmorItem(Code)
+            public bool IsClothing;    // IsClothingItem(Code), honours the Clothier blacklist
+        }
+
+        // The armour, clothing and mender ticks look at every worn slot of every
+        // player several times a second. Classifying an item means a ToString,
+        // lower-casing and dozens of substring checks, and the answer never
+        // changes for a given item type, so it is worked out once per type.
+        // Keyed by the CollectibleObject itself (one instance per item type per
+        // world); rebuilt if the Clothier blacklist is replaced by a config load.
+        private static readonly ConcurrentDictionary<CollectibleObject, GearInfo> GearInfoCache = new ConcurrentDictionary<CollectibleObject, GearInfo>();
+        private static string[] gearInfoCacheBlacklist;
+
+        internal static GearInfo GearInfoOf(CollectibleObject collectible)
+        {
+            if (collectible?.Code == null) return null;
+            var blacklist = ClothierBlacklistedItems;
+            if (!ReferenceEquals(blacklist, gearInfoCacheBlacklist))
+            {
+                GearInfoCache.Clear();
+                gearInfoCacheBlacklist = blacklist;
+            }
+            if (GearInfoCache.TryGetValue(collectible, out var info)) return info;
+            string code = collectible.Code.ToString();
+            info = new GearInfo
+            {
+                Code = code,
+                ArmorType = GetArmorType(code),
+                IsArmor = IsArmorItem(code),
+                IsClothing = IsClothingItem(code),
+            };
+            GearInfoCache[collectible] = info;
+            return info;
         }
 
         /// <summary>
@@ -22826,8 +22871,9 @@ namespace SeraphLeveling
             {
                 if (slot?.Itemstack?.Collectible == null) continue;
 
-                string itemCode = slot.Itemstack.Collectible.Code?.ToString();
-                string armorType = SeraphLevelingModSystem.GetArmorType(itemCode);
+                var gear = SeraphLevelingModSystem.GearInfoOf(slot.Itemstack.Collectible);
+                string itemCode = gear?.Code;
+                string armorType = gear?.ArmorType;
 
                 if (armorType == null) continue; // Not armor
 
@@ -22981,10 +23027,19 @@ namespace SeraphLeveling
                 // Only process server-side
                 if (world?.Side != EnumAppSide.Server) return;
 
+                // Vanilla calls this on every MarkDirty of every slot in every
+                // inventory (each chute and hopper transfer, each tool hit), so
+                // the cheapest filters go first and nothing allocates before them.
+                // Only the player's own character and backpack inventories can
+                // ever credit a repair below; others were tracked for nothing.
+                string invClass = slot?.Inventory?.ClassName;
+                if (invClass != GlobalConstants.characterInvClassName && invClass != GlobalConstants.backpackInvClassName) return;
+
                 // Only track wearable items (clothing and armor)
-                string itemCode = __instance.Code?.ToString();
-                if (itemCode == null) return;
-                if (!itemCode.Contains("clothes-") && !itemCode.Contains("armor-")) return;
+                string path = __instance.Code?.Path;
+                if (path == null) return;
+                if (!path.Contains("clothes-", StringComparison.Ordinal) && !path.Contains("armor-", StringComparison.Ordinal)) return;
+                string itemCode = __instance.Code.ToString();
 
                 // Get the current durability
                 var currentStack = slot?.Itemstack;

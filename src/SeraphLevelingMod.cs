@@ -6042,7 +6042,27 @@ namespace SeraphLeveling
         public static bool PlayerHasGameTrait(EntityPlayer entity, string traitCode)
         {
             if (entity == null || string.IsNullOrEmpty(traitCode)) return false;
-            foreach (string trait in GameTraitsOf(entity))
+            // Same sources as GameTraitsOf, read in place: this runs on hunger
+            // ticks, hits and level checks, so it should not build a list each call.
+            var wa = entity.WatchedAttributes;
+            string cls = wa.GetString("characterClass", "") ?? "";
+            var cs = CharacterSystemFor(entity.Api);
+            if (cs != null && cls.Length > 0 && cs.characterClassesByCode.TryGetValue(cls, out var cc) && cc?.Traits != null)
+            {
+                if (ContainsTrait(cc.Traits, traitCode)) return true;
+            }
+            else if (VanillaClassTraitTable.TryGetValue(cls, out var fallback))
+            {
+                if (ContainsTrait(fallback, traitCode)) return true;
+            }
+            return ContainsTrait(wa.GetStringArray("extraTraits", null), traitCode)
+                || ContainsTrait(wa.GetStringArray("characterTraits", null), traitCode);
+        }
+
+        private static bool ContainsTrait(string[] traits, string traitCode)
+        {
+            if (traits == null) return false;
+            foreach (string trait in traits)
             {
                 if (string.Equals(trait, traitCode, StringComparison.OrdinalIgnoreCase)) return true;
             }

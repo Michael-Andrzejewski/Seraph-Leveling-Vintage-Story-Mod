@@ -2707,7 +2707,7 @@ namespace SeraphLeveling
             api.Event.RegisterGameTickListener(dt =>
             {
                 foreach (var p in api.World.AllOnlinePlayers)
-                    if (p is IServerPlayer sp && sp.Entity != null) PushProgressReport(sp);
+                    if (p is IServerPlayer sp && sp.Entity != null && ShouldPushUnasked(sp)) PushProgressReport(sp);
             }, 15000);
             api.Event.RegisterGameTickListener(_ => FlushProgressReports(), 100);
 
@@ -2716,7 +2716,7 @@ namespace SeraphLeveling
                 .RegisterMessageType<ExperimentalFeatureConfigMessage>()
                 .RegisterMessageType<ProgressReportMessage>()
                 .RegisterMessageType<ProgressReportRequestMessage>()
-                .SetMessageHandler<ProgressReportRequestMessage>((player, msg) => PushProgressReport(player, force: msg?.Force ?? false));
+                .SetMessageHandler<ProgressReportRequestMessage>(OnProgressReportRequest);
 
             // Load config file (sets defaults for new worlds)
             LoadConfigFile(api);
@@ -3862,10 +3862,45 @@ namespace SeraphLeveling
         // sends one packet instead of three.
         private static readonly ConcurrentDictionary<string, IServerPlayer> ProgressReportDirty = new ConcurrentDictionary<string, IServerPlayer>();
 
+        // When each player's handbook page last asked for the report
+        // (Environment.TickCount64). The open page asks once a second.
+        private static readonly ConcurrentDictionary<string, long> ProgressPageLastRequestMs = new ConcurrentDictionary<string, long>();
+        private const long ProgressPageOpenWindowMs = 3000;   // three missed polls = page closed
+        private const long ProgressRequestMinGapMs = 250;     // honest clients ask once a second
+
+        /// <summary>
+        /// Whether to push the report without being asked. Single player and
+        /// LAN hosts: always, because opening the handbook pauses the server
+        /// before the page's request can be answered. Dedicated servers never
+        /// pause, so they push only to players whose page is open; a closed page
+        /// asks when it opens and gets the fresh report one round trip later.
+        /// Building the report runs every /trait status handler (several KB of
+        /// text), so this keeps a busy server from rebuilding and sending it for
+        /// every block and hit of every player.
+        /// </summary>
+        private static bool ShouldPushUnasked(IServerPlayer player)
+        {
+            if (ServerApi?.Server?.IsDedicated != true) return true;
+            return player?.PlayerUID != null
+                && ProgressPageLastRequestMs.TryGetValue(player.PlayerUID, out long last)
+                && Environment.TickCount64 - last < ProgressPageOpenWindowMs;
+        }
+
+        /// <summary>Network handler: the handbook page asks for the report (on open, then once a second).</summary>
+        private static void OnProgressReportRequest(IServerPlayer player, ProgressReportRequestMessage msg)
+        {
+            if (player?.PlayerUID == null) return;
+            long now = Environment.TickCount64;
+            bool tooSoon = ProgressPageLastRequestMs.TryGetValue(player.PlayerUID, out long last) && now - last < ProgressRequestMinGapMs;
+            ProgressPageLastRequestMs[player.PlayerUID] = now;
+            if (tooSoon) return;   // a spamming client must not force a full build per packet
+            PushProgressReport(player, force: msg?.Force ?? false);
+        }
+
         /// <summary>Progress changed for this player: push the report on the next flush.</summary>
         public static void MarkProgressChanged(IServerPlayer player)
         {
-            if (player?.PlayerUID != null) ProgressReportDirty[player.PlayerUID] = player;
+            if (player?.PlayerUID != null && ShouldPushUnasked(player)) ProgressReportDirty[player.PlayerUID] = player;
         }
 
         private static void FlushProgressReports()
@@ -6894,8 +6929,10 @@ namespace SeraphLeveling
         /// </summary>
         private void OnBlockBroken(IServerPlayer byPlayer, int oldblockId, BlockSelection blockSel)
         {
+            // Mining marks the handbook report changed itself, only when points land;
+            // wild crops and vessels mark it in their own Process* wrappers. Most
+            // broken blocks (dirt, grass, logs, hand breaks) change nothing.
             OnBlockBrokenCore(byPlayer, oldblockId, blockSel);
-            MarkProgressChanged(byPlayer);   // handbook page: push the new numbers within 100 ms
         }
 
         private void OnBlockBrokenCore(IServerPlayer byPlayer, int oldblockId, BlockSelection blockSel)
@@ -6961,6 +6998,7 @@ namespace SeraphLeveling
             }
 
             pendingMiningProgressSave = true;
+            MarkProgressChanged(byPlayer);   // handbook page: push the new numbers within 100 ms
 
             // Update last activity day for skill decay
             UpdateSkillActivityDay(playerUid, "mining");
@@ -7228,6 +7266,7 @@ namespace SeraphLeveling
             LastSleepBuffApplyTick.TryRemove(playerUid, out _);
             LastSentProgressReport.TryRemove(playerUid, out _);
             ProgressReportDirty.TryRemove(playerUid, out _);
+            ProgressPageLastRequestMs.TryRemove(playerUid, out _);
             foreach (var key in TrackedItemDurabilities.Keys.Where(k => k.StartsWith(playerUid + "_", StringComparison.Ordinal)).ToList())
                 TrackedItemDurabilities.TryRemove(key, out _);
             if (classChangeListeners.TryRemove(playerUid, out var classListener))
@@ -20508,6 +20547,8 @@ namespace SeraphLeveling
 
         private static readonly System.Reflection.FieldInfo browseHistoryField =
             typeof(GuiDialogHandbook).GetField("browseHistory", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+        private static readonly System.Reflection.FieldInfo detailViewGuiField =
+            typeof(GuiDialogHandbook).GetField("detailViewGui", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
 
         public SeraphProgressPage(ICoreClientAPI capi)
         {
@@ -20563,7 +20604,38 @@ namespace SeraphLeveling
             if (LatestReport == shownReport) return;
             var dlg = DialogShowingThis();
             if (dlg == null) return;
-            dlg.ReloadPage();   // recomposes this page; the scroll position lives in the history entry and survives
+            if (TryUpdateTextInPlace(dlg)) return;
+            dlg.ReloadPage();   // fallback: recomposes the whole dialog; the scroll position lives in the history entry and survives
+        }
+
+        /// <summary>
+        /// Swap only the report text of the open page. ReloadPage rebuilds the
+        /// whole handbook dialog (background, title bar, tabs, buttons) and the
+        /// report changes about once a second while the page is open, so this
+        /// keeps the open page from hitching. Returns false if the vanilla
+        /// layout is not what we expect, and the caller falls back to ReloadPage.
+        /// </summary>
+        private bool TryUpdateTextInPlace(GuiDialogHandbook dlg)
+        {
+            try
+            {
+                if (!(detailViewGuiField?.GetValue(dlg) is GuiComposer composer)) return false;
+                var richtext = composer.GetRichtext("richtext");
+                var scrollbar = composer.GetScrollbar("scrollbar");
+                if (richtext == null || scrollbar == null) return false;
+
+                float scrollY = scrollbar.CurrentYPosition;
+                shownReport = LatestReport;
+                richtext.SetNewText(VtmlUtil.Richtextify(capi, CurrentVtml(), CairoFont.WhiteSmallText().WithLineHeightMultiplier(1.2)));
+                scrollbar.SetNewTotalHeight((float)richtext.Bounds.fixedHeight);
+                scrollbar.CurrentYPosition = scrollY;   // the handle position is stored relative to the total height
+                return true;
+            }
+            catch (Exception ex)
+            {
+                capi?.Logger?.Debug("[SeraphLeveling] in-place progress page update failed, reloading the page: {0}", ex.Message);
+                return false;
+            }
         }
 
         private string CurrentVtml()
@@ -20660,7 +20732,8 @@ namespace SeraphLeveling
                 .SetMessageHandler<ExperimentalFeatureConfigMessage>(SeraphLevelingModSystem.ApplyFeatureConfigMessage)
                 .SetMessageHandler<ProgressReportMessage>(msg =>
                 {
-                    api.Logger.Debug("[SeraphLeveling] progress report received ({0} chars)", msg?.Report?.Length ?? 0);
+                    if (SeraphLevelingModSystem.DebugLoggingEnabled)
+                        api.Logger.Debug("[SeraphLeveling] progress report received ({0} chars)", msg?.Report?.Length ?? 0);
                     SeraphProgressPage.OnReportReceived(msg?.Report);
                 });
 

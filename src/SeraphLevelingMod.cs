@@ -1904,8 +1904,101 @@ namespace SeraphLeveling
         private static IServerPlayer[] onlinePlayers = new IServerPlayer[0];
         internal static IServerPlayer[] OnlinePlayers => onlinePlayers;
 
+        // A player's own inventories, looked up once. GetOwnInventory builds a
+        // "class-uid" name string per call (twice), and Entity.RightHandItemSlot
+        // does PlayerByUid plus the same string build; the timers and the hit
+        // paths ask for these many times a second.
+        internal sealed class PlayerInventories
+        {
+            public IServerPlayer Player;
+            public IInventory Character, Hotbar, Backpack;
+
+            // Worn gear changed since the clothing / mender scan last looked (set by
+            // the character inventory's SlotModified event). Vanilla marks the slot
+            // dirty for every change that matters (equip, unequip, durability loss,
+            // repair), so the scans run on change, plus a slow safety rescan.
+            public volatile bool ClothingDirty = true, MenderDirty = true;
+            public long ClothingScanMs, MenderScanMs;
+            public Action<int> OnSlotModified;
+        }
+
+        // A full gear rescan at least this often even with no slot event, for a
+        // change some mod makes without marking the slot dirty.
+        private const long GearRescanMs = 10000;
+
+        private static void DropInventories(string uid)
+        {
+            if (uid != null && playerInventories.TryRemove(uid, out var old) && old.OnSlotModified != null && old.Character is InventoryBase ib)
+                ib.SlotModified -= old.OnSlotModified;
+        }
+
+        /// <summary>
+        /// Whether a gear scan should run now for this player. Clears the dirty
+        /// flag it is given. True when the gear changed or the rescan is due.
+        /// </summary>
+        private static bool GearScanDue(PlayerInventories inv, bool clothing)
+        {
+            if (inv == null) return true;
+            long now = ServerApi?.World?.ElapsedMilliseconds ?? 0;
+            if (clothing)
+            {
+                if (!inv.ClothingDirty && now - inv.ClothingScanMs < GearRescanMs) return false;
+                inv.ClothingDirty = false; inv.ClothingScanMs = now;
+            }
+            else
+            {
+                if (!inv.MenderDirty && now - inv.MenderScanMs < GearRescanMs) return false;
+                inv.MenderDirty = false; inv.MenderScanMs = now;
+            }
+            return true;
+        }
+        private static readonly ConcurrentDictionary<string, PlayerInventories> playerInventories = new ConcurrentDictionary<string, PlayerInventories>();
+
+        internal static PlayerInventories InventoriesOf(IServerPlayer player)
+        {
+            string uid = player?.PlayerUID;
+            if (uid == null || player.InventoryManager == null) return null;
+            if (playerInventories.TryGetValue(uid, out var inv) && ReferenceEquals(inv.Player, player)) return inv;
+            inv = new PlayerInventories
+            {
+                Player = player,
+                Character = player.InventoryManager.GetOwnInventory(GlobalConstants.characterInvClassName),
+                Hotbar = player.InventoryManager.GetOwnInventory(GlobalConstants.hotBarInvClassName),
+                Backpack = player.InventoryManager.GetOwnInventory(GlobalConstants.backpackInvClassName),
+            };
+            if (inv.Character is InventoryBase ib)
+            {
+                var self = inv;
+                inv.OnSlotModified = _ => { self.ClothingDirty = true; self.MenderDirty = true; };
+                ib.SlotModified += inv.OnSlotModified;
+            }
+            DropInventories(uid);
+            playerInventories[uid] = inv;
+            return inv;
+        }
+
+        internal static IInventory CharacterInventoryOf(IServerPlayer player) =>
+            InventoriesOf(player)?.Character ?? player?.InventoryManager?.GetOwnInventory(GlobalConstants.characterInvClassName);
+
+        /// <summary>
+        /// The player's active hotbar slot, exactly as PlayerInventoryManager.ActiveHotbarSlot
+        /// works it out (slot 10 of the hotbar is the offhand; past it the number runs into
+        /// the backpack), over the cached inventories.
+        /// </summary>
+        internal static ItemSlot HeldSlotOf(IServerPlayer player)
+        {
+            var inv = InventoriesOf(player);
+            if (inv == null) return player?.Entity?.RightHandItemSlot;
+            var hotbar = inv.Hotbar;
+            int offhand = (hotbar != null && hotbar.Count > 10 && !hotbar[10].Empty) ? 1 : 0;
+            int n = player.InventoryManager.ActiveHotbarSlotNumber;
+            if (n >= 10 + offhand) return inv.Backpack?[n - 10 - offhand];
+            return hotbar != null && n >= 0 && n < hotbar.Count ? hotbar[n] : null;
+        }
+
         internal static void RefreshOnlinePlayers(IServerPlayer leaving = null)
         {
+            if (leaving?.PlayerUID != null) DropInventories(leaving.PlayerUID);
             var all = ServerApi?.World?.AllOnlinePlayers;
             if (all == null) { onlinePlayers = new IServerPlayer[0]; return; }
             var list = new List<IServerPlayer>(all.Length);
@@ -2111,7 +2204,7 @@ namespace SeraphLeveling
         // Mender grid-repair backup: per player, the durability last seen for each
         // (character slot, item type), like the old "uid_slot_code" string keys but
         // without building a string per slot per tick. Values are updated in place.
-        private sealed class TrackedDurability { public long Id; public int Durability; }
+        private sealed class TrackedDurability { public long Id; public int Durability; public double RawAttr; public bool Seen; }
         private static ConcurrentDictionary<string, Dictionary<(int, CollectibleObject), TrackedDurability>> TrackedItemDurabilities =
             new ConcurrentDictionary<string, Dictionary<(int, CollectibleObject), TrackedDurability>>();
         private const string TRACK_ID_ATTR = "sitTrackId";
@@ -3530,7 +3623,7 @@ namespace SeraphLeveling
 
             // Hook into player join to apply saved bonuses
             api.Event.PlayerJoin += OnPlayerJoin;
-            api.Event.PlayerJoin += _ => RefreshOnlinePlayers();
+            api.Event.PlayerJoin += p => { DropInventories(p?.PlayerUID); RefreshOnlinePlayers(); };
             api.Event.PlayerNowPlaying += _ => RefreshOnlinePlayers();
             api.Event.PlayerDisconnect += leaving => RefreshOnlinePlayers(leaving);
 
@@ -3908,18 +4001,17 @@ namespace SeraphLeveling
         private const long ProgressRequestMinGapMs = 250;     // honest clients ask once a second
 
         /// <summary>
-        /// Whether to push the report without being asked. Single player and
-        /// LAN hosts: always, because opening the handbook pauses the server
-        /// before the page's request can be answered. Dedicated servers never
-        /// pause, so they push only to players whose page is open; a closed page
-        /// asks when it opens and gets the fresh report one round trip later.
-        /// Building the report runs every /trait status handler (several KB of
-        /// text), so this keeps a busy server from rebuilding and sending it for
-        /// every block and hit of every player.
+        /// Whether to push the report without being asked: only to players whose
+        /// handbook page asked in the last few seconds (an open page asks once a
+        /// second). A closed page asks when it opens and gets the fresh report one
+        /// round trip later. In single player the handbook pauses the server, so
+        /// the page builds the report itself in-process instead
+        /// (SeraphProgressPage.BuildInProcess). Building the report runs every
+        /// /trait status handler (several KB of text), so nobody pays for it per
+        /// block or hit unless they are looking at it.
         /// </summary>
         private static bool ShouldPushUnasked(IServerPlayer player)
         {
-            if (ServerApi?.Server?.IsDedicated != true) return true;
             return player?.PlayerUID != null
                 && ProgressPageLastRequestMs.TryGetValue(player.PlayerUID, out long last)
                 && Environment.TickCount64 - last < ProgressPageOpenWindowMs;
@@ -3939,12 +4031,21 @@ namespace SeraphLeveling
         /// <summary>Progress changed for this player: push the report on the next flush.</summary>
         public static void MarkProgressChanged(IServerPlayer player)
         {
-            if (player?.PlayerUID != null && ShouldPushUnasked(player)) ProgressReportDirty[player.PlayerUID] = player;
+            if (player?.PlayerUID != null && ShouldPushUnasked(player))
+            {
+                ProgressReportDirty[player.PlayerUID] = player;
+                reportsQueued = true;
+            }
         }
+
+        // Set when a report is queued. The 100 ms flush checks only this flag:
+        // ConcurrentDictionary.IsEmpty takes every lock of the table.
+        private static volatile bool reportsQueued;
 
         private static void FlushProgressReports()
         {
-            if (ProgressReportDirty.IsEmpty) return;
+            if (!reportsQueued) return;
+            reportsQueued = false;
             foreach (var key in ProgressReportDirty.Keys.ToList())
             {
                 if (ProgressReportDirty.TryRemove(key, out var player) && player?.Entity != null) PushProgressReport(player);
@@ -4787,14 +4888,14 @@ namespace SeraphLeveling
         {
             if (player?.Entity == null) return null;
 
-            var heldItem = player.Entity.RightHandItemSlot?.Itemstack?.Collectible;
+            var heldItem = HeldSlotOf(player)?.Itemstack?.Collectible;
             if (heldItem == null) return null;
 
             // Check if it's a pickaxe (Tool property = Pickaxe)
             if (heldItem.Tool != EnumTool.Pickaxe) return null;
 
-            // Return the item code as the pickaxe identifier
-            return heldItem.Code?.ToString();
+            // Return the item code as the pickaxe identifier (cached per item type)
+            return GearInfoOf(heldItem)?.Code;
         }
 
         /// <summary>
@@ -4810,36 +4911,11 @@ namespace SeraphLeveling
         /// </summary>
         private int GetBlockPoints(int blockId)
         {
-            if (ServerApi == null) return 0;
-
-            var block = ServerApi.World.GetBlock(blockId);
-            if (block == null) return 0;
-
-            string blockCode = block.Code?.ToString() ?? "";
-
-            // Remove "game:" prefix if present for consistent matching
-            string codeToCheck = blockCode.StartsWith("game:", StringComparison.Ordinal) ? blockCode.Substring(5) : blockCode;
-
-            // Ore blocks: code contains "ore-" (e.g., "ore-lignite-chalk", "ore-copper-granite")
-            if (codeToCheck.Contains("ore-"))
-            {
-                return OreMultiplier;
-            }
-
-            // Meteoric iron blocks (treat same as ore - high value)
-            if (codeToCheck.StartsWith("meteorite", StringComparison.Ordinal) ||
-                codeToCheck.Contains("meteoriciron"))
-            {
-                return OreMultiplier;
-            }
-
-            // Stone/rock blocks that should count for mining XP
-            if (codeToCheck.StartsWith("rock-", StringComparison.Ordinal) ||           // Regular rock (rock-granite)
-                codeToCheck.StartsWith("crackedrock-", StringComparison.Ordinal))      // Cracked rock (crackedrock-granite)
-            {
-                return 1;
-            }
-
+            // Ore ("ore-", meteorite, meteoric iron) = OreMultiplier; rock-/crackedrock- = 1.
+            // The code checks run once per block type (KindOfBlock).
+            var kind = KindOfBlock(blockId);
+            if ((kind & BlockKind.Ore) != 0) return OreMultiplier;
+            if ((kind & BlockKind.Rock) != 0) return 1;
             return 0;
         }
 
@@ -6677,7 +6753,7 @@ namespace SeraphLeveling
                 var armorProgress = ArmorProgress.GetOrAdd(playerUid, _ => new ArmorProgressData());
 
                 // Get the player's currently equipped armor using character inventory
-                var characterInventory = player.InventoryManager?.GetOwnInventory(GlobalConstants.characterInvClassName);
+                var characterInventory = CharacterInventoryOf(player);
                 if (characterInventory == null) { playerEquippedArmor.TryRemove(playerUid, out _); continue; }
 
                 // Armour per slot last tick; compared by item type, written back in place
@@ -7715,7 +7791,7 @@ namespace SeraphLeveling
         /// </summary>
         private static void NotifyLevelUp(IServerPlayer player, string message)
         {
-            PushProgressReport(player);
+            if (ShouldPushUnasked(player)) PushProgressReport(player);
 
             if (EnableLevelUpMessages)
             {
@@ -9353,8 +9429,9 @@ namespace SeraphLeveling
             playerEquippedArmor.Clear();
             playerEquippedClothing.Clear();
             TrackedItemDurabilities.Clear();
-            GearInfoCache.Clear();   // holds the old world's item types
+            ClearTypeCaches();   // the old world's item, block and creature types
             onlinePlayers = new IServerPlayer[0];
+            foreach (var uid in playerInventories.Keys.ToList()) DropInventories(uid);
             SleepMountHours.Clear();
             classChangeListeners.Clear();
             pendingClassChangeReapply.Clear();
@@ -14192,8 +14269,11 @@ namespace SeraphLeveling
                 // Skip if already unlocked
                 if (clothierProgress.SewingKitUnlocked) continue;
 
+                // Worn clothes only change when a character slot changes
+                if (!GearScanDue(InventoriesOf(player), clothing: true)) continue;
+
                 // Get the player's currently equipped clothing using character inventory
-                var characterInventory = player.InventoryManager?.GetOwnInventory(GlobalConstants.characterInvClassName);
+                var characterInventory = CharacterInventoryOf(player);
                 if (characterInventory != null)
                 {
                     foreach (var slot in characterInventory)
@@ -14315,7 +14395,9 @@ namespace SeraphLeveling
                 // =============================================
                 // Track durability increases on worn items (grid repair backup)
                 // =============================================
-                var characterInventory = player.InventoryManager?.GetOwnInventory(GlobalConstants.characterInvClassName);
+                // Worn durability only changes when a character slot changes
+                if (!GearScanDue(InventoriesOf(player), clothing: false)) continue;
+                var characterInventory = CharacterInventoryOf(player);
                 if (characterInventory == null) continue;
                 var trackedForPlayer = TrackedItemDurabilities.GetOrAdd(playerUid, _ => new Dictionary<(int, CollectibleObject), TrackedDurability>());
 
@@ -14331,15 +14413,31 @@ namespace SeraphLeveling
                     // Only track clothing and armor
                     if (!gear.IsClothing && !gear.IsArmor) continue;
 
+                    // Nothing changed since last tick (same item, same raw "durability"
+                    // attribute): skip GetRemainingDurability/GetMaxDurability, which walk
+                    // the item behaviours with fresh closures on every call.
+                    var shortcutKey = (slotIndex, slot.Itemstack.Collectible);
+                    double rawAttr = slot.Itemstack.Attributes.GetDecimal("durability", double.NaN);
+                    long attrTrackId = slot.Itemstack.Attributes.GetLong(TRACK_ID_ATTR, 0);
+                    if (trackedForPlayer.TryGetValue(shortcutKey, out var seen) && seen.Seen && seen.Id == attrTrackId
+                        && (seen.RawAttr == rawAttr || (double.IsNaN(seen.RawAttr) && double.IsNaN(rawAttr))))
+                        continue;
+
                     // Get current durability
                     int currentDurability = slot.Itemstack.Collectible.GetRemainingDurability(slot.Itemstack);
                     int maxDurability = slot.Itemstack.Collectible.GetMaxDurability(slot.Itemstack);
 
-                    // Skip items without durability
-                    if (maxDurability <= 0) continue;
+                    // Skip items without durability (remembered, so the shortcut above skips them next tick)
+                    if (maxDurability <= 0)
+                    {
+                        if (seen == null) trackedForPlayer[shortcutKey] = seen = new TrackedDurability();
+                        seen.Id = attrTrackId; seen.RawAttr = rawAttr; seen.Seen = true;
+                        seen.Durability = int.MinValue;   // never compared: no durability
+                        continue;
+                    }
 
                     // This item type in this slot
-                    var trackingKey = (slotIndex, slot.Itemstack.Collectible);
+                    var trackingKey = shortcutKey;
 
                     // Identify THIS item. A fresh item of the same code swapped into the
                     // slot starts at full durability, which used to look like a repair.
@@ -14352,8 +14450,8 @@ namespace SeraphLeveling
                     }
 
                     // Check if durability increased (repair happened) on the same item
-                    trackedForPlayer.TryGetValue(trackingKey, out var tracked);
-                    if (tracked != null && tracked.Id == trackId)
+                    var tracked = seen;
+                    if (tracked != null && tracked.Seen && tracked.Durability != int.MinValue && tracked.Id == trackId)
                     {
                         int previousDurability = tracked.Durability;
                         if (currentDurability > previousDurability)
@@ -14377,6 +14475,8 @@ namespace SeraphLeveling
                     if (tracked == null) trackedForPlayer[trackingKey] = tracked = new TrackedDurability();
                     tracked.Id = trackId;
                     tracked.Durability = currentDurability;
+                    tracked.RawAttr = slot.Itemstack.Attributes.GetDecimal("durability", double.NaN);   // after any trackId write
+                    tracked.Seen = true;
                 }
             }
         }
@@ -14388,6 +14488,95 @@ namespace SeraphLeveling
             public string ArmorType;   // GetArmorType(Code), null if not armor
             public bool IsArmor;       // IsArmorItem(Code)
             public bool IsClothing;    // IsClothingItem(Code), honours the Clothier blacklist
+
+            // Filled on first use by the hit paths (pure functions of the code).
+            public bool WeaponKnown; public string WeaponType;                       // GetWeaponTypeFromCode
+            public bool COKnown; public (string proficiencyStat, string weaponCode) CO; // GetCOWeaponType
+            public bool ArmorHitKnown; public float ArmorProtection, ArmorHitProbability; // TrackArmorDamageBlocked
+        }
+
+        internal static string WeaponTypeOf(CollectibleObject collectible)
+        {
+            var g = GearInfoOf(collectible);
+            if (g == null) return null;
+            if (!g.WeaponKnown) { g.WeaponType = GetWeaponTypeFromCode(g.Code); g.WeaponKnown = true; }
+            return g.WeaponType;
+        }
+
+        internal static (string proficiencyStat, string weaponCode) COWeaponTypeOf(CollectibleObject collectible)
+        {
+            var g = GearInfoOf(collectible);
+            if (g == null) return (null, null);
+            if (!g.COKnown) { g.CO = GetCOWeaponType(g.Code); g.COKnown = true; }
+            return g.CO;
+        }
+
+        // ---- per block type: what OnBlockBroken needs, worked out once per block id ----
+        [Flags]
+        private enum BlockKind : ushort
+        {
+            Known = 1, Ore = 2, Rock = 4, Crop = 8, CropMarkedWild = 16, Mushroom = 32,
+            LootVessel = 64, Farmland = 128, NaturalGround = 256,
+        }
+        private static BlockKind[] blockKinds = new BlockKind[0];
+
+        private static BlockKind KindOfBlock(int blockId)
+        {
+            if (blockId < 0 || ServerApi == null) return 0;
+            var kinds = blockKinds;
+            if (blockId < kinds.Length && kinds[blockId] != 0) return kinds[blockId];
+            var block = ServerApi.World.GetBlock(blockId);
+            BlockKind k = BlockKind.Known;
+            if (block?.Code != null)
+            {
+                // Exactly the old per-call checks: points on the raw code, the
+                // forage/vessel/ground checks on the lower-cased code.
+                string raw = block.Code.ToString();
+                string codeToCheck = raw.StartsWith("game:", StringComparison.Ordinal) ? raw.Substring(5) : raw;
+                if (codeToCheck.Contains("ore-") || codeToCheck.StartsWith("meteorite", StringComparison.Ordinal) || codeToCheck.Contains("meteoriciron")) k |= BlockKind.Ore;
+                else if (codeToCheck.StartsWith("rock-", StringComparison.Ordinal) || codeToCheck.StartsWith("crackedrock-", StringComparison.Ordinal)) k |= BlockKind.Rock;
+                string lower = raw.ToLowerInvariant();
+                if (lower.Contains("crop-")) k |= BlockKind.Crop;
+                if (lower.Contains("wild")) k |= BlockKind.CropMarkedWild;
+                if (lower.Contains("mushroom-")) k |= BlockKind.Mushroom;
+                if (lower.Contains("lootvessel")) k |= BlockKind.LootVessel;
+                if (lower.Contains("farmland")) k |= BlockKind.Farmland;
+                if (lower.Contains("soil") || lower.Contains("dirt") || lower.Contains("grass") || lower.Contains("forest") ||
+                    lower.Contains("peat") || lower.Contains("sand") || lower.Contains("gravel") || lower.Contains("clay")) k |= BlockKind.NaturalGround;
+            }
+            if (blockId >= kinds.Length)
+            {
+                var grown = new BlockKind[Math.Max(blockId + 1, ServerApi.World.Blocks.Count)];
+                Array.Copy(kinds, grown, kinds.Length);
+                blockKinds = kinds = grown;
+            }
+            kinds[blockId] = k;
+            return k;
+        }
+
+        // ---- per creature type: Precise's mechanical check ----
+        private static readonly ConcurrentDictionary<EntityProperties, bool> mechanicalByType = new ConcurrentDictionary<EntityProperties, bool>();
+
+        // ---- per (projectile type, held item type): the ranged weapon combo ----
+        private static readonly ConcurrentDictionary<(AssetLocation, CollectibleObject), string> rangedComboCache = new ConcurrentDictionary<(AssetLocation, CollectibleObject), string>();
+
+        internal static string RangedWeaponComboOf(Entity projectile, EntityPlayer shooter)
+        {
+            if (projectile?.Code == null || shooter == null) return GetRangedWeaponCombo(projectile, shooter);
+            var held = (shooter.Player is IServerPlayer sp ? HeldSlotOf(sp) : shooter.RightHandItemSlot)?.Itemstack?.Collectible;
+            var key = (projectile.Code, held);
+            if (rangedComboCache.TryGetValue(key, out string combo)) return combo;
+            combo = GetRangedWeaponCombo(projectile, shooter);
+            rangedComboCache[key] = combo;
+            return combo;
+        }
+
+        private static void ClearTypeCaches()
+        {
+            GearInfoCache.Clear();
+            blockKinds = new BlockKind[0];
+            mechanicalByType.Clear();
+            rangedComboCache.Clear();
         }
 
         // The armour, clothing and mender ticks look at every worn slot of every
@@ -14612,7 +14801,16 @@ namespace SeraphLeveling
         public static bool IsMechanicalCreature(Entity entity)
         {
             if (entity == null) return false;
+            var props = entity.Properties;
+            if (props == null) return IsMechanicalCreatureUncached(entity);
+            if (mechanicalByType.TryGetValue(props, out bool known)) return known;
+            bool result = IsMechanicalCreatureUncached(entity);
+            mechanicalByType[props] = result;
+            return result;
+        }
 
+        private static bool IsMechanicalCreatureUncached(Entity entity)
+        {
             string entityCode = entity.Code?.ToString()?.ToLowerInvariant() ?? "";
 
             // Check for known mechanical creatures
@@ -16314,63 +16512,23 @@ namespace SeraphLeveling
         /// </summary>
         private static bool IsWildCropBlock(int blockId, BlockPos blockPos)
         {
+            // Crops count when they grow on natural ground (not farmland); with no
+            // position to check, only when the code says "wild". Mushrooms count.
+            // Tallgrass, flowers, berries and wild vines do not (replantable or too common).
+            // The code checks run once per block type (KindOfBlock).
             if (ServerApi == null) return false;
-
-            Block block = ServerApi.World.GetBlock(blockId);
-            if (block == null) return false;
-
-            string blockCode = block.Code?.ToString()?.ToLowerInvariant();
-            if (string.IsNullOrEmpty(blockCode)) return false;
-
-            // Check if it's a crop block (like crop-turnip-4, crop-flax-7, etc.)
-            if (blockCode.Contains("crop-"))
+            var kind = KindOfBlock(blockId);
+            if ((kind & BlockKind.Crop) != 0)
             {
-                // Skip if it's explicitly a "wild" block - those are already wild
-                // Regular crops on farmland should NOT count
-                // Wild crops spawn on dirt/soil naturally
-
-                // Check if the block below is farmland - if so, this is a planted crop, not wild
                 if (blockPos != null)
                 {
-                    BlockPos belowPos = blockPos.DownCopy();
-                    Block blockBelow = ServerApi.World.BlockAccessor.GetBlock(belowPos);
-                    string belowCode = blockBelow?.Code?.ToString()?.ToLowerInvariant() ?? "";
-
-                    // If on farmland, this is a cultivated crop - don't count it
-                    if (belowCode.Contains("farmland"))
-                    {
-                        return false;
-                    }
-
-                    // If on dirt, soil, grass, or other natural blocks - this is a wild crop
-                    if (belowCode.Contains("soil") || belowCode.Contains("dirt") ||
-                        belowCode.Contains("grass") || belowCode.Contains("forest") ||
-                        belowCode.Contains("peat") || belowCode.Contains("sand") ||
-                        belowCode.Contains("gravel") || belowCode.Contains("clay"))
-                    {
-                        return true;
-                    }
+                    var below = KindOfBlock(ServerApi.World.BlockAccessor.GetBlock(blockPos.DownCopy())?.Id ?? -1);
+                    if ((below & BlockKind.Farmland) != 0) return false;
+                    if ((below & BlockKind.NaturalGround) != 0) return true;
                 }
-
-                // If position is null or block below couldn't be checked,
-                // only count if explicitly marked as "wild"
-                if (blockCode.Contains("wild"))
-                {
-                    return true;
-                }
-
-                return false;
+                return (kind & BlockKind.CropMarkedWild) != 0;
             }
-
-            // Mushrooms count as wild forage
-            if (blockCode.Contains("mushroom-")) return true;
-
-            // NOT included:
-            // - tallgrass, flowers, ferns, cattails, reeds, waterlily, seaweed (too common/farmable)
-            // - berry- (berry bushes can be replanted)
-            // - wildvine (can be replanted/grown)
-
-            return false;
+            return (kind & BlockKind.Mushroom) != 0;
         }
 
         /// <summary>
@@ -16381,18 +16539,8 @@ namespace SeraphLeveling
         /// </summary>
         private static bool IsCrackedVesselBlock(int blockId)
         {
-            if (ServerApi == null) return false;
-
-            Block block = ServerApi.World.GetBlock(blockId);
-            if (block == null) return false;
-
-            string blockCode = block.Code?.ToString()?.ToLowerInvariant();
-            if (string.IsNullOrEmpty(blockCode)) return false;
-
             // Only loot vessels (cracked vessels) count - they don't drop themselves when broken
-            if (blockCode.Contains("lootvessel")) return true;
-
-            return false;
+            return (KindOfBlock(blockId) & BlockKind.LootVessel) != 0;
         }
 
         // =========================================================================
@@ -20658,7 +20806,37 @@ namespace SeraphLeveling
         public static void PollIfShowing()
         {
             var page = Instance;
-            if (page != null && page.DialogShowingThis() != null) RequestReport(false);
+            if (page == null || page.DialogShowingThis() == null) return;
+            // Paused single player: nothing can change, and the server would not answer until unpaused.
+            if (page.capi.IsSinglePlayer && page.capi.IsGamePaused) return;
+            RequestReport(false);
+        }
+
+        /// <summary>
+        /// Single player runs the server in this process with the same mod
+        /// statics, and opening the handbook pauses it, so a request sent now
+        /// would only be answered after the page closes. Build the report here
+        /// instead. Null when there is no in-process server or the build failed
+        /// (the server may still be finishing its last tick; the caller then
+        /// keeps the last report and asks over the network as usual).
+        /// </summary>
+        private string BuildInProcess()
+        {
+            if (!capi.IsSinglePlayer || capi.OpenedToLan) return null;
+            var sapi = SeraphLevelingModSystem.ServerApi;
+            string uid = capi.World?.Player?.PlayerUID;
+            if (sapi?.World == null || uid == null) return null;
+            try
+            {
+                if (!(sapi.World.PlayerByUid(uid) is IServerPlayer sp) || sp.Entity == null) return null;
+                string report = SeraphLevelingModSystem.BuildProgressReport(sp);
+                return string.IsNullOrEmpty(report) ? null : report;
+            }
+            catch (Exception ex)
+            {
+                capi.Logger.Debug("[SeraphLeveling] in-process progress report failed, asking the server: {0}", ex.Message);
+                return null;
+            }
         }
 
         /// <summary>The open handbook dialog with this page on screen, or null.</summary>
@@ -20758,6 +20936,8 @@ namespace SeraphLeveling
 
         public override void ComposePage(GuiComposer detailViewGui, ElementBounds textBounds, ItemStack[] allstacks, ActionConsumable<string> openDetailPageFor)
         {
+            string local = BuildInProcess();
+            if (local != null) LatestReport = local;
             shownReport = LatestReport;
             detailViewGui.AddInteractiveElement(new SeraphReportRichtext(capi, CurrentSections(), PageFont(), textBounds), "richtext");
             // Page just opened (or redrawn): make sure the numbers are current.
@@ -22870,7 +23050,7 @@ namespace SeraphLeveling
                 if (__instance == shooterEntity) return;
 
                 // Get the weapon combination (bow+arrow, sling+stone, etc.)
-                string weaponCombo = SeraphLevelingModSystem.GetRangedWeaponCombo(damageSource.SourceEntity, shooterEntity);
+                string weaponCombo = SeraphLevelingModSystem.RangedWeaponComboOf(damageSource.SourceEntity, shooterEntity);
 
                 if (weaponCombo != null)
                 {
@@ -22904,11 +23084,10 @@ namespace SeraphLeveling
                     }
 
                     // Also check held ranged weapon for bows/crossbows/slings/firearms
-                    var heldRangedItem = shooterPlayer.Entity?.RightHandItemSlot?.Itemstack?.Collectible;
+                    var heldRangedItem = SeraphLevelingModSystem.HeldSlotOf(shooterPlayer)?.Itemstack?.Collectible;
                     if (heldRangedItem != null)
                     {
-                        string rangedItemCode = heldRangedItem.Code?.ToString();
-                        var (proficiencyStat, coWeaponCode) = SeraphLevelingModSystem.GetCOWeaponType(rangedItemCode);
+                        var (proficiencyStat, coWeaponCode) = SeraphLevelingModSystem.COWeaponTypeOf(heldRangedItem);
                         if (proficiencyStat != null && SeraphLevelingModSystem.IsCORangedProficiency(proficiencyStat))
                         {
                             SeraphLevelingModSystem.ProcessCOProficiencyDamage(shooterPlayer, proficiencyStat, coWeaponCode, damage);
@@ -22929,16 +23108,16 @@ namespace SeraphLeveling
             if (__instance == damageSource.SourceEntity) return;
 
             // Get held weapon
-            var heldItem = attackerPlayer.Entity?.RightHandItemSlot?.Itemstack?.Collectible;
+            var heldItem = SeraphLevelingModSystem.HeldSlotOf(attackerPlayer)?.Itemstack?.Collectible;
             if (heldItem == null) return;
 
-            string itemCode = heldItem.Code?.ToString();
+            string itemCode = SeraphLevelingModSystem.GearInfoOf(heldItem)?.Code;
             if (SeraphLevelingModSystem.DebugLoggingEnabled)
             {
                 SeraphLevelingModSystem.ServerApi?.Logger?.Debug($"[SeraphLeveling] Melee hit with held item: '{itemCode}'");
             }
 
-            string weaponType = SeraphLevelingModSystem.GetWeaponTypeFromCode(itemCode);
+            string weaponType = SeraphLevelingModSystem.WeaponTypeOf(heldItem);
 
             if (weaponType != null)
             {
@@ -22954,7 +23133,7 @@ namespace SeraphLeveling
             // Combat Overhaul: Also track CO melee proficiency if enabled
             if (SeraphLevelingModSystem.IsCOCompatEnabled)
             {
-                var (proficiencyStat, coWeaponCode) = SeraphLevelingModSystem.GetCOWeaponType(itemCode);
+                var (proficiencyStat, coWeaponCode) = SeraphLevelingModSystem.COWeaponTypeOf(heldItem);
                 if (SeraphLevelingModSystem.DebugLoggingEnabled)
                 {
                     SeraphLevelingModSystem.ServerApi?.Logger?.Debug($"[SeraphLeveling] CO weapon check: itemCode='{itemCode}' -> proficiency='{proficiencyStat ?? "null"}', weaponCode='{coWeaponCode ?? "null"}'");
@@ -22999,7 +23178,7 @@ namespace SeraphLeveling
             if (player == null) return;
 
             // Get the player's armor using character inventory
-            var characterInventory = player.InventoryManager?.GetOwnInventory(GlobalConstants.characterInvClassName);
+            var characterInventory = SeraphLevelingModSystem.CharacterInventoryOf(player);
             if (characterInventory == null) return;
 
             // Find armor pieces and calculate damage blocked per piece
@@ -23014,35 +23193,33 @@ namespace SeraphLeveling
 
                 if (armorType == null) continue; // Not armor
 
-                // Get the armor's protection value from item attributes
-                // Vintage Story uses protectionModifiers.relativeProtection (0-1 scale, e.g., 0.2 = 20% reduction)
-                float relativeProtection = 0f;
-                var itemAttributes = slot.Itemstack.Collectible.Attributes;
-                if (itemAttributes != null)
+                // Protection and hit probability depend only on the item type: worked
+                // out on its first hit (reading the JSON attributes allocates), then cached.
+                if (!gear.ArmorHitKnown)
                 {
-                    var protectionModifiers = itemAttributes["protectionModifiers"];
-                    if (protectionModifiers != null && protectionModifiers.Exists)
+                    // Vintage Story uses protectionModifiers.relativeProtection (0-1 scale, e.g., 0.2 = 20% reduction)
+                    float rel = 0f;
+                    var itemAttributes = slot.Itemstack.Collectible.Attributes;
+                    if (itemAttributes != null)
                     {
-                        relativeProtection = protectionModifiers["relativeProtection"].AsFloat(0f);
+                        var protectionModifiers = itemAttributes["protectionModifiers"];
+                        if (protectionModifiers != null && protectionModifiers.Exists)
+                        {
+                            rel = protectionModifiers["relativeProtection"].AsFloat(0f);
+                        }
                     }
-                }
+                    // No protection found: a small minimum so armour that blocks anything still grants some XP
+                    if (rel <= 0) rel = 0.05f;
+                    gear.ArmorProtection = rel;
 
-                // If no protection found, give a minimum credit for wearing armor at all
-                // This ensures armor that blocks any damage still gives some XP
-                if (relativeProtection <= 0)
-                {
-                    // Default to a small protection value so armor still grants some XP
-                    relativeProtection = 0.05f; // 5% minimum
+                    // Hit probability by slot type (from the item code): head 20%, legs 30%, body 50%
+                    if (itemCode.Contains("-head-") || itemCode.Contains("-helmet-")) gear.ArmorHitProbability = 0.2f;
+                    else if (itemCode.Contains("-legs-") || itemCode.Contains("-leggings-")) gear.ArmorHitProbability = 0.3f;
+                    else gear.ArmorHitProbability = 0.5f;
+                    gear.ArmorHitKnown = true;
                 }
-
-                // Determine hit probability based on armor slot type (from item code)
-                float hitProbability = 0.5f; // Default to body
-                if (itemCode.Contains("-head-") || itemCode.Contains("-helmet-"))
-                    hitProbability = 0.2f;
-                else if (itemCode.Contains("-legs-") || itemCode.Contains("-leggings-"))
-                    hitProbability = 0.3f;
-                else // body
-                    hitProbability = 0.5f;
+                float relativeProtection = gear.ArmorProtection;
+                float hitProbability = gear.ArmorHitProbability;
 
                 // Calculate damage blocked by this armor piece
                 // For a hit that lands on this piece: originalDamage = finalDamage / (1 - protection)
@@ -23101,8 +23278,10 @@ namespace SeraphLeveling
             new System.Collections.Concurrent.ConcurrentDictionary<string, long>();
 
         // Track item durabilities to detect repairs
-        private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, int> ItemDurabilities =
-            new System.Collections.Concurrent.ConcurrentDictionary<string, int>();
+        // Last durability per (inventory, slot, item type); the old string key was
+        // "{InventoryID}_{slot}_{code}". An int value is written in place.
+        private static readonly System.Collections.Concurrent.ConcurrentDictionary<(string, int, CollectibleObject), int> ItemDurabilities =
+            new System.Collections.Concurrent.ConcurrentDictionary<(string, int, CollectibleObject), int>();
 
         // Minimum interval between repair credits (in ticks, 20 ticks = 1 second)
         private const long MIN_REPAIR_INTERVAL = 10;
@@ -23176,17 +23355,15 @@ namespace SeraphLeveling
                 string path = __instance.Code?.Path;
                 if (path == null) return;
                 if (!path.Contains("clothes-", StringComparison.Ordinal) && !path.Contains("armor-", StringComparison.Ordinal)) return;
-                string itemCode = __instance.Code.ToString();
 
                 // Get the current durability
                 var currentStack = slot?.Itemstack;
                 if (currentStack == null) return;
 
                 int currentDurability = currentStack.Collectible?.GetRemainingDurability(currentStack) ?? 0;
-                int maxDurability = currentStack.Collectible?.GetMaxDurability(currentStack) ?? 1;
 
-                // Create a unique key for this item instance
-                string itemKey = $"{slot.Inventory?.InventoryID}_{slot.Inventory?.GetSlotId(slot)}_{itemCode}";
+                // This item type in this slot of this inventory
+                var itemKey = (slot.Inventory?.InventoryID, slot.Inventory?.GetSlotId(slot) ?? -1, __instance);
 
                 // Check if durability increased (repair happened)
                 if (ItemDurabilities.TryGetValue(itemKey, out int previousDurability))
@@ -23199,14 +23376,14 @@ namespace SeraphLeveling
                         if (inventory != null)
                         {
                             // Find player by checking if this is a character or backpack inventory
-                            foreach (var player in world.AllOnlinePlayers)
+                            foreach (var serverPlayer in SeraphLevelingModSystem.OnlinePlayers)
                             {
-                                var serverPlayer = player as IServerPlayer;
                                 if (serverPlayer?.InventoryManager == null) continue;
 
                                 // Check if this inventory belongs to this player
-                                var characterInv = serverPlayer.InventoryManager.GetOwnInventory(GlobalConstants.characterInvClassName);
-                                var backpackInv = serverPlayer.InventoryManager.GetOwnInventory(GlobalConstants.backpackInvClassName);
+                                var owned = SeraphLevelingModSystem.InventoriesOf(serverPlayer);
+                                var characterInv = owned?.Character;
+                                var backpackInv = owned?.Backpack;
 
                                 if (characterInv == inventory || backpackInv == inventory)
                                 {

@@ -460,7 +460,6 @@ namespace SeraphLeveling
             int before = p.PermanentPercent;
             p.PermanentPercent = Math.Min(TemporalRechargeMaxPercent, p.PermanentPercent + TemporalRechargeGearTrickPercent);
             if (p.PermanentPercent <= before) return;
-            pendingTemporalRechargeSave = true;
             SyncTemporalTraitsToClient(player);
             double mult = 1.0 + p.PermanentPercent / 100.0;
             NotifyLevelUp(player, $"Temporal Recharge increased to {p.PermanentPercent}% from a temporal gear. Recovery is now {mult:F2}x as fast.");
@@ -744,7 +743,6 @@ namespace SeraphLeveling
 
             int v = Math.Clamp(lvl.Value, 0, TemporalResistanceMaxPercent);
             p.PermanentPercent = v;
-            pendingTemporalResistanceSave = true;
             SyncTemporalTraitsToClient(player);
             return TextCommandResult.Success($"Temporal Resistance set to {v}% (temporal drain {v}% slower).");
         }
@@ -762,7 +760,6 @@ namespace SeraphLeveling
 
             int v = Math.Clamp(lvl.Value, 0, TemporalRechargeMaxPercent);
             p.PermanentPercent = v;
-            pendingTemporalRechargeSave = true;
             SyncTemporalTraitsToClient(player);
             double mult = 1.0 + v / 100.0;
             return TextCommandResult.Success($"Temporal Recharge set to {v}% (recovery {mult:F2}x as fast).");

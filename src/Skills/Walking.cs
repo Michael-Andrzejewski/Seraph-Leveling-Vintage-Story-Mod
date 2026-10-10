@@ -182,7 +182,6 @@ namespace SeraphLeveling
             // Calculate what the increment size should be at this level
             progress.CurrentIncrementSize = BaseBlocksWalkedPerIncrement + (newCredits.Value * WalkingIncrementStep);
 
-            pendingWalkingProgressSave = true;
 
             // Apply the bonus
             int bonusPercent = ApplyWalkingBonusStatic(player, newCredits.Value);
@@ -369,7 +368,6 @@ namespace SeraphLeveling
                 // Mark for saving if any progress was made
                 if (playerProgress.BlocksInIncrement > 0 || playerProgress.TotalCredits > oldCredits)
                 {
-                    pendingWalkingProgressSave = true;
                     // Walking counts as activity for decay even between level-ups.
                     // Without this the decay timer only reset on admin commands.
                     UpdateSkillActivityDay(playerUid, "walking");

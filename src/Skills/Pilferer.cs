@@ -145,7 +145,6 @@ namespace SeraphLeveling
                 progress.CurrentIncrementSize += PilfererIncrementStep;
             }
 
-            pendingPilfererProgressSave = true;
 
             int bonusPercent = ApplyPilfererBonusStatic(player, progress.TotalCredits);
 
@@ -333,7 +332,6 @@ namespace SeraphLeveling
                 ServerApi.Logger.Debug($"[SeraphLeveling] Player {player.PlayerName} earned pilferer credit {progress.TotalCredits} from cracked vessel");
             }
 
-            pendingPilfererProgressSave = true;
 
             // Update last activity day for skill decay
             UpdateSkillActivityDay(playerUid, "pilferer");

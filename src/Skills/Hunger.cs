@@ -199,7 +199,6 @@ namespace SeraphLeveling
             // Calculate what the increment size should be at this level
             progress.CurrentIncrementSize = BaseSecondsPerIncrement + (newCredits.Value * HungerIncrementStep);
 
-            pendingHungerProgressSave = true;
 
             // Apply the bonus
             int bonusPercent = ApplyHungerBonusStatic(player, newCredits.Value);
@@ -415,7 +414,6 @@ namespace SeraphLeveling
                 // Mark for saving if any progress was made
                 if (playerProgress.SecondsInIncrement > 0 || playerProgress.TotalCredits > oldCredits)
                 {
-                    pendingHungerProgressSave = true;
                     // Time at full saturation is activity for decay purposes even
                     // between level-ups; increments get long at high levels.
                     UpdateSkillActivityDay(playerUid, "hunger");

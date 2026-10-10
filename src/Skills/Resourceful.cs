@@ -138,7 +138,6 @@ namespace SeraphLeveling
                 progress.CurrentIncrementSize += ResourcefulIncrementStep;
             }
 
-            pendingResourcefulProgressSave = true;
 
             ApplyResourcefulBonusStatic(player, progress.TotalCredits);
             int newLootBonus = CalculateResourcefulLootBonusPercent(progress.TotalCredits, player.Entity);
@@ -360,7 +359,6 @@ namespace SeraphLeveling
                 ServerApi.Logger.Debug($"[SeraphLeveling] Player {player.PlayerName} earned resourceful credit {progress.TotalCredits}");
             }
 
-            pendingResourcefulProgressSave = true;
 
             // Update last activity day for skill decay
             UpdateSkillActivityDay(playerUid, "resourceful");

@@ -520,7 +520,6 @@ namespace SeraphLeveling
                 ServerApi.Logger.Debug($"[SeraphLeveling] Player {attackerPlayer.PlayerName} earned CO {proficiencyStat} credit {proficiencyProgress.TotalCredits} with {weaponCode}");
             }
 
-            pendingCOProgressSave = true;
 
             // Update last activity day for skill decay
             UpdateSkillActivityDay(playerUid, "coproficiency");
@@ -1410,7 +1409,6 @@ namespace SeraphLeveling
             }
             sb.AppendLine($"  Steady Aim: {steadyAimMax} credits (net +{steadyAimBonus * 100:F0}%)");
 
-            pendingCOProgressSave = true;
 
             sb.AppendLine("\nAll CO proficiencies set to max!");
             return TextCommandResult.Success(sb.ToString());

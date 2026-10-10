@@ -418,7 +418,6 @@ namespace SeraphLeveling
                 ServerApi.Logger.Debug($"[SeraphLeveling] Player {attackerPlayer.PlayerName} earned ranged credit {playerProgress.TotalCredits} with {weaponCombo}, next requires {weaponProgress.CurrentIncrementSize} damage");
             }
 
-            pendingRangedProgressSave = true;
 
             // Update last activity day for skill decay
             UpdateSkillActivityDay(playerUid, "ranged");
@@ -476,7 +475,6 @@ namespace SeraphLeveling
             // Apply sleep buff multiplier if active
             float modifiedDamage = ApplyXPMultiplier(playerUid, damage);
             progress.TotalBowDamage += modifiedDamage;
-            pendingBowyerProgressSave = true;
 
             player.Entity.WatchedAttributes.SetFloat(WATCHED_BOWYER_BOW_DAMAGE, progress.TotalBowDamage);
 
@@ -500,7 +498,6 @@ namespace SeraphLeveling
             // Apply sleep buff multiplier if active
             float modifiedDamage = ApplyXPMultiplier(playerUid, damage);
             progress.TotalRockDamage += modifiedDamage;
-            pendingImproviserProgressSave = true;
 
             player.Entity.WatchedAttributes.SetFloat(WATCHED_IMPROVISER_ROCK_DAMAGE, progress.TotalRockDamage);
 

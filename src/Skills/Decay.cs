@@ -158,14 +158,12 @@ namespace SeraphLeveling
                                 else
                                     sb.AppendLine($"    {entry.Item1}: {(int)entry.Item2}/{entry.Item3} \u2192 removed (-{oldToolCr} cr)");
                             }
-                            pendingMiningProgressSave = true;
                         }
                         else
                         {
                             int lost = Math.Min(decayCredits, oldCredits);
                             mProg.TotalCredits -= lost;
                             if (lost > 0) { totalDecayApplied += lost; sb.AppendLine($"  Mining: {oldCredits} \u2192 {mProg.TotalCredits} (-{lost} credits)"); }
-                            pendingMiningProgressSave = true;
                         }
                     }
                 }
@@ -208,14 +206,12 @@ namespace SeraphLeveling
                                 else
                                     sb.AppendLine($"    {entry.Item1}: {entry.Item2:F0}/{entry.Item3} \u2192 removed (-{oldToolCr} cr)");
                             }
-                            pendingMeleeProgressSave = true;
                         }
                         else
                         {
                             int lost = Math.Min(decayCredits, oldCredits);
                             mProg.TotalCredits -= lost;
                             if (lost > 0) { totalDecayApplied += lost; sb.AppendLine($"  Melee: {oldCredits} \u2192 {mProg.TotalCredits} (-{lost} credits)"); }
-                            pendingMeleeProgressSave = true;
                         }
                     }
                 }
@@ -258,14 +254,12 @@ namespace SeraphLeveling
                                 else
                                     sb.AppendLine($"    {entry.Item1}: {entry.Item2:F0}/{entry.Item3} \u2192 removed (-{oldToolCr} cr)");
                             }
-                            pendingRangedProgressSave = true;
                         }
                         else
                         {
                             int lost = Math.Min(decayCredits, oldCredits);
                             rProg.TotalCredits -= lost;
                             if (lost > 0) { totalDecayApplied += lost; sb.AppendLine($"  Ranged: {oldCredits} \u2192 {rProg.TotalCredits} (-{lost} credits)"); }
-                            pendingRangedProgressSave = true;
                         }
                     }
                 }
@@ -308,14 +302,12 @@ namespace SeraphLeveling
                                 else
                                     sb.AppendLine($"    {entry.Item1}: {entry.Item2:F0}/{entry.Item3} \u2192 removed (-{oldToolCr} cr)");
                             }
-                            pendingPreciseProgressSave = true;
                         }
                         else
                         {
                             int lost = Math.Min(decayCredits, oldCredits);
                             pProg.TotalCredits -= lost;
                             if (lost > 0) { totalDecayApplied += lost; sb.AppendLine($"  Precise: {oldCredits} \u2192 {pProg.TotalCredits} (-{lost} credits)"); }
-                            pendingPreciseProgressSave = true;
                         }
                     }
                 }
@@ -341,7 +333,6 @@ namespace SeraphLeveling
                         wProg.TotalCredits = newCr; wProg.BlocksInIncrement = (float)newAcc; wProg.CurrentIncrementSize = newInc;
                         if (lost > 0) totalDecayApplied += lost;
                         sb.AppendLine($"  Walking: {oldCredits} \u2192 {newCr} (-{lost} credits, {rawPenalty:F0} pts), {oldAcc:F0}/{oldInc} \u2192 {(int)newAcc}/{newInc}");
-                        pendingWalkingProgressSave = true;
                     }
                 }
             }
@@ -364,7 +355,6 @@ namespace SeraphLeveling
                         hProg.TotalCredits = newCr; hProg.SecondsInIncrement = (float)newAcc; hProg.CurrentIncrementSize = newInc;
                         if (lost > 0) totalDecayApplied += lost;
                         sb.AppendLine($"  Hunger: {oldCredits} \u2192 {newCr} (-{lost} credits, {rawPenalty:F0} pts), {oldAcc:F0}/{oldInc} \u2192 {(int)newAcc}/{newInc}");
-                        pendingHungerProgressSave = true;
                     }
                 }
             }
@@ -389,7 +379,6 @@ namespace SeraphLeveling
                         meProg.TotalCredits = newCr; meProg.RepairsInIncrement = (int)Math.Floor(newAcc); meProg.CurrentIncrementSize = newInc;
                         if (lost > 0) totalDecayApplied += lost;
                         sb.AppendLine($"  Mender: {oldCredits} \u2192 {newCr} (-{lost} credits, {rawPenalty:F0} pts), {oldAcc}/{oldInc} \u2192 {(int)Math.Floor(newAcc)}/{newInc}");
-                        pendingMenderProgressSave = true;
                     }
                 }
             }
@@ -412,7 +401,6 @@ namespace SeraphLeveling
                         piProg.TotalCredits = newCr; piProg.PointsInIncrement = (int)Math.Floor(newAcc); piProg.CurrentIncrementSize = newInc;
                         if (lost > 0) totalDecayApplied += lost;
                         sb.AppendLine($"  Pilferer: {oldCredits} \u2192 {newCr} (-{lost} credits, {rawPenalty:F0} pts), {oldAcc}/{oldInc} \u2192 {(int)Math.Floor(newAcc)}/{newInc}");
-                        pendingPilfererProgressSave = true;
                     }
                 }
             }
@@ -435,7 +423,6 @@ namespace SeraphLeveling
                         reProg.TotalCredits = newCr; reProg.AnimalsInIncrement = (int)Math.Floor(newAcc); reProg.CurrentIncrementSize = newInc;
                         if (lost > 0) totalDecayApplied += lost;
                         sb.AppendLine($"  Resourceful: {oldCredits} \u2192 {newCr} (-{lost} credits, {rawPenalty:F0} pts), {oldAcc}/{oldInc} \u2192 {(int)Math.Floor(newAcc)}/{newInc}");
-                        pendingResourcefulProgressSave = true;
                     }
                 }
             }
@@ -458,7 +445,6 @@ namespace SeraphLeveling
                         fProg.TotalCredits = newCr; fProg.CropsInIncrement = (int)Math.Floor(newAcc); fProg.CurrentIncrementSize = newInc;
                         if (lost > 0) totalDecayApplied += lost;
                         sb.AppendLine($"  Forager: {oldCredits} \u2192 {newCr} (-{lost} credits, {rawPenalty:F0} pts), {oldAcc}/{oldInc} \u2192 {(int)Math.Floor(newAcc)}/{newInc}");
-                        pendingForagerProgressSave = true;
                     }
                 }
             }
@@ -481,7 +467,6 @@ namespace SeraphLeveling
                         fuProg.TotalCredits = newCr; fuProg.BlocksInIncrement = (float)newAcc; fuProg.CurrentIncrementSize = newInc;
                         if (lost > 0) totalDecayApplied += lost;
                         sb.AppendLine($"  Furtive: {oldCredits} \u2192 {newCr} (-{lost} credits, {rawPenalty:F0} pts), {oldAcc:F0}/{oldInc} \u2192 {(int)newAcc}/{newInc}");
-                        pendingFurtiveProgressSave = true;
                     }
                 }
             }
@@ -538,7 +523,6 @@ namespace SeraphLeveling
                         if (coDecayTotal > 0) totalDecayApplied += coDecayTotal;
                         if (coSb.Length > 0)
                         {
-                            pendingCOProgressSave = true;
                             sb.AppendLine($"  CO Proficiency: -{coDecayTotal} credits");
                             sb.Append(coSb);
                         }

@@ -148,7 +148,6 @@ namespace SeraphLeveling
 
             // Both thresholds met - unlock Hardy health!
             progress.IsUnlocked = true;
-            pendingHardyHealthProgressSave = true;
 
             // Apply the health bonus
             ApplyHardyHealthBonusStatic(player, true);
@@ -205,7 +204,6 @@ namespace SeraphLeveling
 
             // Both conditions met - unlock Tinkerer!
             progress.IsUnlocked = true;
-            pendingTinkererProgressSave = true;
 
             // Apply the trait
             ApplyTinkererBonusStatic(player, true);
@@ -256,7 +254,6 @@ namespace SeraphLeveling
 
             // Both thresholds met - unlock Merciless!
             progress.IsUnlocked = true;
-            pendingMercilessProgressSave = true;
 
             // Apply the trait
             ApplyMercilessBonusStatic(player, true);
@@ -303,7 +300,6 @@ namespace SeraphLeveling
 
             // Both thresholds met - unlock Bowyer!
             progress.IsUnlocked = true;
-            pendingBowyerProgressSave = true;
 
             // Apply the trait
             ApplyBowyerBonusStatic(player, true);
@@ -349,7 +345,6 @@ namespace SeraphLeveling
 
             // Threshold met - unlock Improviser!
             progress.IsUnlocked = true;
-            pendingImproviserProgressSave = true;
 
             // Apply the trait
             ApplyImproviserBonusStatic(player, true);
@@ -402,7 +397,6 @@ namespace SeraphLeveling
 
             // Threshold met - remove Claustrophobic!
             progress.IsRemoved = true;
-            pendingClaustrophobicRemovalProgressSave = true;
 
             // Apply the removal (negate the Claustrophobic penalties)
             ApplyClaustrophobicRemovalStatic(player, true);
@@ -584,7 +578,6 @@ namespace SeraphLeveling
             var progress = HardyHealthProgress.GetOrAdd(playerUid, _ => new HardyHealthProgressData());
             progress.IsUnlocked = unlock;
 
-            pendingHardyHealthProgressSave = true;
             ApplyHardyHealthBonusStatic(player, unlock);
 
             return TextCommandResult.Success($"Hardy Health trait {(unlock ? "unlocked" : "locked")}.");
@@ -604,7 +597,6 @@ namespace SeraphLeveling
             var progress = BowyerProgress.GetOrAdd(playerUid, _ => new BowyerProgressData());
             progress.IsUnlocked = unlock;
 
-            pendingBowyerProgressSave = true;
             ApplyBowyerBonusStatic(player, unlock);
 
             return TextCommandResult.Success($"Bowyer trait {(unlock ? "unlocked" : "locked")}.");
@@ -624,7 +616,6 @@ namespace SeraphLeveling
             var progress = ImproviserProgress.GetOrAdd(playerUid, _ => new ImproviserProgressData());
             progress.IsUnlocked = unlock;
 
-            pendingImproviserProgressSave = true;
             ApplyImproviserBonusStatic(player, unlock);
 
             return TextCommandResult.Success($"Improviser trait {(unlock ? "unlocked" : "locked")}.");
@@ -644,7 +635,6 @@ namespace SeraphLeveling
             var progress = TinkererProgress.GetOrAdd(playerUid, _ => new TinkererProgressData());
             progress.IsUnlocked = unlock;
 
-            pendingTinkererProgressSave = true;
             ApplyTinkererBonusStatic(player, unlock);
 
             return TextCommandResult.Success($"Tinkerer trait {(unlock ? "unlocked" : "locked")}.");
@@ -664,7 +654,6 @@ namespace SeraphLeveling
             var progress = MercilessProgress.GetOrAdd(playerUid, _ => new MercilessProgressData());
             progress.IsUnlocked = unlock;
 
-            pendingMercilessProgressSave = true;
             ApplyMercilessBonusStatic(player, unlock);
 
             return TextCommandResult.Success($"Merciless trait {(unlock ? "unlocked" : "locked")}.");
@@ -684,7 +673,6 @@ namespace SeraphLeveling
             var progress = ClaustrophobicRemovalProgress.GetOrAdd(playerUid, _ => new ClaustrophobicRemovalProgressData());
             progress.IsRemoved = removed;
 
-            pendingClaustrophobicRemovalProgressSave = true;
             ApplyClaustrophobicRemovalStatic(player, removed);
 
             return TextCommandResult.Success($"Claustrophobic trait {(removed ? "removed" : "restored")}.");

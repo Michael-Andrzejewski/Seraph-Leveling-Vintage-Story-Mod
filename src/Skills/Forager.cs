@@ -158,7 +158,6 @@ namespace SeraphLeveling
                 progress.CurrentIncrementSize += ForagerIncrementStep;
             }
 
-            pendingForagerProgressSave = true;
 
             ApplyForagerBonusStatic(player, progress.TotalCredits);
             // Use net bonuses from WatchedAttributes which accounts for Civil/Heavyhanded penalties
@@ -396,7 +395,6 @@ namespace SeraphLeveling
                 ServerApi.Logger.Debug($"[SeraphLeveling] Player {player.PlayerName} earned forager credit {progress.TotalCredits}");
             }
 
-            pendingForagerProgressSave = true;
 
             // Update last activity day for skill decay
             UpdateSkillActivityDay(playerUid, "forager");

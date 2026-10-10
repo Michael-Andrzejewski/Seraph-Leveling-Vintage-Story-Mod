@@ -129,7 +129,6 @@ namespace SeraphLeveling
             // Mark for saving if any progress was made
             if (damage > 0)
             {
-                pendingPreciseProgressSave = true;
             }
 
             // Update last activity day for skill decay

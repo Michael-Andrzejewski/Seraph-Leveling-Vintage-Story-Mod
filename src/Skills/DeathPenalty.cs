@@ -227,7 +227,6 @@ namespace SeraphLeveling
                             sb.AppendLine($"  Mining: {oldCredits} \u2192 {miningProg.TotalCredits} (-{actualLost} credits)");
                         }
                     }
-                    pendingMiningProgressSave = true;
                 }
             }
 
@@ -278,7 +277,6 @@ namespace SeraphLeveling
                             sb.AppendLine($"  Melee: {oldCredits} \u2192 {meleeProg.TotalCredits} (-{actualLost} credits)");
                         }
                     }
-                    pendingMeleeProgressSave = true;
                 }
             }
 
@@ -329,7 +327,6 @@ namespace SeraphLeveling
                             sb.AppendLine($"  Ranged: {oldCredits} \u2192 {rangedProg.TotalCredits} (-{actualLost} credits)");
                         }
                     }
-                    pendingRangedProgressSave = true;
                 }
             }
 
@@ -380,7 +377,6 @@ namespace SeraphLeveling
                             sb.AppendLine($"  Precise: {oldCredits} \u2192 {preciseProg.TotalCredits} (-{actualLost} credits)");
                         }
                     }
-                    pendingPreciseProgressSave = true;
                 }
             }
 
@@ -398,7 +394,6 @@ namespace SeraphLeveling
                         oldAcc, oldInc, oldCredits, rawPenalty, BaseBlocksWalkedPerIncrement, WalkingIncrementStep, null, "Walking");
                     walkingProg.TotalCredits = newCr; walkingProg.BlocksInIncrement = (float)newAcc; walkingProg.CurrentIncrementSize = newInc;
                     if (lost > 0) totalCreditsLost += lost;
-                    pendingWalkingProgressSave = true;
                     sb.AppendLine($"  Walking: {oldCredits} \u2192 {newCr} (-{lost} credits, {rawPenalty:F0} pts), {oldAcc:F0}/{oldInc} \u2192 {(int)newAcc}/{newInc}");
                 }
             }
@@ -415,7 +410,6 @@ namespace SeraphLeveling
                         oldAcc, oldInc, oldCredits, rawPenalty, BaseSecondsPerIncrement, HungerIncrementStep, null, "Hunger");
                     hungerProg.TotalCredits = newCr; hungerProg.SecondsInIncrement = (float)newAcc; hungerProg.CurrentIncrementSize = newInc;
                     if (lost > 0) totalCreditsLost += lost;
-                    pendingHungerProgressSave = true;
                     sb.AppendLine($"  Hunger: {oldCredits} \u2192 {newCr} (-{lost} credits, {rawPenalty:F0} pts), {oldAcc:F0}/{oldInc} \u2192 {(int)newAcc}/{newInc}");
                 }
             }
@@ -432,7 +426,6 @@ namespace SeraphLeveling
                         oldAcc, oldInc, oldCredits, rawPenalty, BaseMenderRepairsPerIncrement, MenderIncrementStep, null, "Mender");
                     menderProg.TotalCredits = newCr; menderProg.RepairsInIncrement = (int)Math.Floor(newAcc); menderProg.CurrentIncrementSize = newInc;
                     if (lost > 0) totalCreditsLost += lost;
-                    pendingMenderProgressSave = true;
                     sb.AppendLine($"  Mender: {oldCredits} \u2192 {newCr} (-{lost} credits, {rawPenalty:F0} pts), {oldAcc}/{oldInc} \u2192 {(int)Math.Floor(newAcc)}/{newInc}");
                 }
             }
@@ -449,7 +442,6 @@ namespace SeraphLeveling
                         oldAcc, oldInc, oldCredits, rawPenalty, BasePilfererPointsPerIncrement, PilfererIncrementStep, null, "Pilferer");
                     pilfererProg.TotalCredits = newCr; pilfererProg.PointsInIncrement = (int)Math.Floor(newAcc); pilfererProg.CurrentIncrementSize = newInc;
                     if (lost > 0) totalCreditsLost += lost;
-                    pendingPilfererProgressSave = true;
                     sb.AppendLine($"  Pilferer: {oldCredits} \u2192 {newCr} (-{lost} credits, {rawPenalty:F0} pts), {oldAcc}/{oldInc} \u2192 {(int)Math.Floor(newAcc)}/{newInc}");
                 }
             }
@@ -466,7 +458,6 @@ namespace SeraphLeveling
                         oldAcc, oldInc, oldCredits, rawPenalty, BaseResourcefulAnimalsPerIncrement, ResourcefulIncrementStep, null, "Resourceful");
                     resourcefulProg.TotalCredits = newCr; resourcefulProg.AnimalsInIncrement = (int)Math.Floor(newAcc); resourcefulProg.CurrentIncrementSize = newInc;
                     if (lost > 0) totalCreditsLost += lost;
-                    pendingResourcefulProgressSave = true;
                     sb.AppendLine($"  Resourceful: {oldCredits} \u2192 {newCr} (-{lost} credits, {rawPenalty:F0} pts), {oldAcc}/{oldInc} \u2192 {(int)Math.Floor(newAcc)}/{newInc}");
                 }
             }
@@ -483,7 +474,6 @@ namespace SeraphLeveling
                         oldAcc, oldInc, oldCredits, rawPenalty, BaseForagerCropsPerIncrement, ForagerIncrementStep, null, "Forager");
                     foragerProg.TotalCredits = newCr; foragerProg.CropsInIncrement = (int)Math.Floor(newAcc); foragerProg.CurrentIncrementSize = newInc;
                     if (lost > 0) totalCreditsLost += lost;
-                    pendingForagerProgressSave = true;
                     sb.AppendLine($"  Forager: {oldCredits} \u2192 {newCr} (-{lost} credits, {rawPenalty:F0} pts), {oldAcc}/{oldInc} \u2192 {(int)Math.Floor(newAcc)}/{newInc}");
                 }
             }
@@ -500,7 +490,6 @@ namespace SeraphLeveling
                         oldAcc, oldInc, oldCredits, rawPenalty, BaseFurtiveSneakBlocksPerIncrement, FurtiveIncrementStep, null, "Furtive");
                     furtiveProg.TotalCredits = newCr; furtiveProg.BlocksInIncrement = (float)newAcc; furtiveProg.CurrentIncrementSize = newInc;
                     if (lost > 0) totalCreditsLost += lost;
-                    pendingFurtiveProgressSave = true;
                     sb.AppendLine($"  Furtive: {oldCredits} \u2192 {newCr} (-{lost} credits, {rawPenalty:F0} pts), {oldAcc:F0}/{oldInc} \u2192 {(int)newAcc}/{newInc}");
                 }
             }
@@ -564,7 +553,6 @@ namespace SeraphLeveling
                     if (coCreditsLost > 0)
                     {
                         totalCreditsLost += coCreditsLost;
-                        pendingCOProgressSave = true;
                         sb.AppendLine($"  CO Proficiency: -{coCreditsLost} credits");
                         sb.Append(coSb);
                     }

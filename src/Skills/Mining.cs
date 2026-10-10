@@ -329,7 +329,6 @@ namespace SeraphLeveling
                 ServerApi.Logger.Debug($"[SeraphLeveling] Player {byPlayer.PlayerName} earned credit {playerProgress.TotalCredits} with {pickaxeCode}, next requires {pickaxeProgress.CurrentIncrementSize} points");
             }
 
-            pendingMiningProgressSave = true;
             MarkProgressChanged(byPlayer);   // handbook page: push the new numbers within 100 ms
 
             // Update last activity day for skill decay

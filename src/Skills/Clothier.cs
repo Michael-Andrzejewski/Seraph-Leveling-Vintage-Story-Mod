@@ -148,7 +148,6 @@ namespace SeraphLeveling
             // Set unlock status based on whether we've reached the required amount
             progress.SewingKitUnlocked = newLevel.Value >= ClothierRequiredUniqueClothes;
 
-            pendingClothierProgressSave = true;
 
             // Apply the bonus (this updates WatchedAttributes and extraTraits)
             ApplyClothierBonusStatic(player, progress);
@@ -196,7 +195,6 @@ namespace SeraphLeveling
                                 if (clothierProgress.UniqueClothesWorn.Add(itemCode))
                                 {
                                     // New unique clothing worn
-                                    pendingClothierProgressSave = true;
                                     ServerApi.Logger.Debug($"[SeraphLeveling] Player {player.PlayerName} wore new clothing: {itemCode} ({clothierProgress.UniqueClothesWorn.Count}/{ClothierRequiredUniqueClothes})");
 
                                     // Check if unlocked

@@ -266,7 +266,6 @@ namespace SeraphLeveling
                 progress.CurrentIncrementSize += MenderIncrementStep;
             }
 
-            pendingMenderProgressSave = true;
 
             int bonusPercent = ApplyMenderBonusStatic(player, progress.TotalCredits);
 
@@ -376,7 +375,6 @@ namespace SeraphLeveling
                 ServerApi.Logger.Debug($"[SeraphLeveling] Player {player.PlayerName} earned mender credit {progress.TotalCredits}");
             }
 
-            pendingMenderProgressSave = true;
 
             // Update last activity day for skill decay
             UpdateSkillActivityDay(playerUid, "mender");

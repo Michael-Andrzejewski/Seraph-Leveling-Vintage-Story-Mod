@@ -129,7 +129,6 @@ namespace SeraphLeveling
                 // Mark for saving if any progress was made
                 if (playerProgress.BlocksInIncrement > 0 || playerProgress.TotalCredits > oldCredits)
                 {
-                    pendingFurtiveProgressSave = true;
                     // Sneaking is activity for decay purposes even between
                     // level-ups; increments get long at high levels.
                     UpdateSkillActivityDay(playerUid, "furtive");
@@ -269,7 +268,6 @@ namespace SeraphLeveling
             progress.BlocksInIncrement = 0;
             progress.CurrentIncrementSize = BaseFurtiveSneakBlocksPerIncrement + (newLevel.Value * FurtiveIncrementStep);
 
-            pendingFurtiveProgressSave = true;
             int bonusPercent = ApplyFurtiveBonusStatic(player, newLevel.Value);
 
             UpdateSkillActivityDay(player.PlayerUID, "furtive");

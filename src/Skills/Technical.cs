@@ -93,7 +93,6 @@ namespace SeraphLeveling
             var progress = TechnicalProgress.GetOrAdd(playerUid, _ => new TechnicalProgressData());
             progress.IsUnlocked = unlock;
 
-            pendingTechnicalProgressSave = true;
             ApplyTechnicalBonusStatic(player, unlock);
 
             // Check if Tinkerer should be unlocked
@@ -131,7 +130,6 @@ namespace SeraphLeveling
             // Increment translocator repairs (apply sleep buff multiplier if active)
             int modifiedRepairs = ApplyXPMultiplier(playerUid, 1);
             progress.TranslocatorsRepaired += modifiedRepairs;
-            pendingTechnicalProgressSave = true;
 
             ServerApi.Logger.Debug($"[SeraphLeveling] Player {player.PlayerName} repaired translocator ({progress.TranslocatorsRepaired} / {TechnicalRequiredTranslocatorRepairs})");
 

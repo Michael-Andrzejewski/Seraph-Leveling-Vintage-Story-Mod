@@ -214,7 +214,6 @@ namespace SeraphLeveling
             }
 
             progress.TotalWalkSpeedCredits = newCredits.Value;
-            pendingArmorProgressSave = true;
 
             ApplyArmorBonusesStatic(player, progress.TotalDurabilityCredits, progress.TotalWalkSpeedCredits);
 
@@ -615,7 +614,6 @@ namespace SeraphLeveling
                                 armorProgress.TotalDurabilityCredits = Math.Min(armorProgress.TotalDurabilityCredits + firstEquipBonus, MaxArmorDurabilityPercent);
                                 int walkSpeedEquipBonus = GetFirstEquipWalkSpeedBonus(armorType);
                                 armorProgress.TotalWalkSpeedCredits = Math.Min(armorProgress.TotalWalkSpeedCredits + walkSpeedEquipBonus, MaxArmorWalkSpeedPercent);
-                                pendingArmorProgressSave = true;
                                 UpdateSkillActivityDay(playerUid, "armor");
 
                                 ServerApi.Logger.Debug($"[SeraphLeveling] Player {player.PlayerName} first-time equipped {itemCode}, +{firstEquipBonus}% durability bonus");
@@ -693,7 +691,6 @@ namespace SeraphLeveling
                             armorProgress.TotalWalkSpeedCredits = Math.Min(armorProgress.TotalWalkSpeedCredits + walkSpeedEquipBonus, MaxArmorWalkSpeedPercent);
                             int actualWalkSpeedBonus = armorProgress.TotalWalkSpeedCredits - oldWalkSpeed;
 
-                            pendingArmorProgressSave = true;
                             UpdateSkillActivityDay(playerUid, "armor");
 
                             ApplyArmorBonusesStatic(player, armorProgress.TotalDurabilityCredits, armorProgress.TotalWalkSpeedCredits);
@@ -768,7 +765,6 @@ namespace SeraphLeveling
 
                         if (creditsChanged)
                         {
-                            pendingArmorProgressSave = true;
                             UpdateSkillActivityDay(playerUid, "armor");
                             ApplyArmorBonusesStatic(player, armorProgress.TotalDurabilityCredits, armorProgress.TotalWalkSpeedCredits);
 
@@ -823,7 +819,6 @@ namespace SeraphLeveling
                 ServerApi.Logger.Debug($"[SeraphLeveling] Player {player.PlayerName} earned damage credit {pieceProgress.DamageCredits} with {armorCode}");
             }
 
-            pendingArmorProgressSave = true;
 
             if (armorProgress.TotalDurabilityCredits > oldDurabilityCredits)
             {
@@ -876,7 +871,6 @@ namespace SeraphLeveling
                 ServerApi.Logger.Debug($"[SeraphLeveling] Player {player.PlayerName} earned repair credit {pieceProgress.RepairCredits} with {armorCode}");
             }
 
-            pendingArmorProgressSave = true;
 
             if (armorProgress.TotalDurabilityCredits > oldDurabilityCredits)
             {

@@ -262,7 +262,6 @@ namespace SeraphLeveling
                     progress.TotalCredits = level;
                     progress.BlocksInIncrement = 0;
                     progress.CurrentIncrementSize = BaseBlocksWalkedPerIncrement + (level * WalkingIncrementStep);
-                    pendingWalkingProgressSave = true;
                     ApplyWalkingBonusStatic(targetPlayer, level);
                     UpdateSkillActivityDay(targetUid, "walking");
                     result = $"Walking level set to {level} (+{level}% speed) for {targetName}.";
@@ -274,7 +273,6 @@ namespace SeraphLeveling
                     if (level > TemporalResistanceMaxPercent) return TextCommandResult.Error($"Level cannot exceed max ({TemporalResistanceMaxPercent}).");
                     var progress = TemporalResistanceProgress.GetOrAdd(targetUid, _ => new TemporalProgressData());
                     progress.PermanentPercent = level;
-                    pendingTemporalResistanceSave = true;
                     result = $"Temporal Resistance set to {level}% (drain {level}% slower) for {targetName}.";
                     break;
                 }
@@ -284,7 +282,6 @@ namespace SeraphLeveling
                     if (level > TemporalRechargeMaxPercent) return TextCommandResult.Error($"Level cannot exceed max ({TemporalRechargeMaxPercent}).");
                     var progress = TemporalRechargeProgress.GetOrAdd(targetUid, _ => new TemporalProgressData());
                     progress.PermanentPercent = level;
-                    pendingTemporalRechargeSave = true;
                     result = $"Temporal Recharge set to {level}% (recovery {(1.0 + level / 100.0):F2}x) for {targetName}.";
                     break;
                 }
@@ -298,7 +295,6 @@ namespace SeraphLeveling
                     progress.TotalCredits = level;
                     progress.SecondsInIncrement = 0;
                     progress.CurrentIncrementSize = BaseSecondsPerIncrement + (level * HungerIncrementStep);
-                    pendingHungerProgressSave = true;
                     ApplyHungerBonusStatic(targetPlayer, level);
                     UpdateSkillActivityDay(targetUid, "hunger");
                     result = $"Hunger level set to {level} (-{level}% hunger rate) for {targetName}.";
@@ -311,7 +307,6 @@ namespace SeraphLeveling
                     progress.TotalCredits = level;
                     progress.RepairsInIncrement = 0;
                     progress.CurrentIncrementSize = BaseMenderRepairsPerIncrement + (level * MenderIncrementStep);
-                    pendingMenderProgressSave = true;
                     ApplyMenderBonusStatic(targetPlayer, level);
                     UpdateSkillActivityDay(targetUid, "mender");
                     result = $"Mender level set to {level} (+{level}% repair) for {targetName}.";
@@ -324,7 +319,6 @@ namespace SeraphLeveling
                     progress.TotalCredits = level;
                     progress.PointsInIncrement = 0;
                     progress.CurrentIncrementSize = BasePilfererPointsPerIncrement + (level * PilfererIncrementStep);
-                    pendingPilfererProgressSave = true;
                     ApplyPilfererBonusStatic(targetPlayer, level);
                     UpdateSkillActivityDay(targetUid, "pilferer");
                     result = $"Pilferer level set to {level} for {targetName}.";
@@ -337,7 +331,6 @@ namespace SeraphLeveling
                     progress.TotalCredits = level;
                     progress.AnimalsInIncrement = 0;
                     progress.CurrentIncrementSize = BaseResourcefulAnimalsPerIncrement + (level * ResourcefulIncrementStep);
-                    pendingResourcefulProgressSave = true;
                     ApplyResourcefulBonusStatic(targetPlayer, level);
                     UpdateSkillActivityDay(targetUid, "resourceful");
                     result = $"Resourceful level set to {level} for {targetName}.";
@@ -350,7 +343,6 @@ namespace SeraphLeveling
                     progress.TotalCredits = level;
                     progress.CropsInIncrement = 0;
                     progress.CurrentIncrementSize = BaseForagerCropsPerIncrement + (level * ForagerIncrementStep);
-                    pendingForagerProgressSave = true;
                     ApplyForagerBonusStatic(targetPlayer, level);
                     UpdateSkillActivityDay(targetUid, "forager");
                     result = $"Forager level set to {level} for {targetName}.";
@@ -363,7 +355,6 @@ namespace SeraphLeveling
                     progress.TotalCredits = level;
                     progress.BlocksInIncrement = 0;
                     progress.CurrentIncrementSize = BaseFurtiveSneakBlocksPerIncrement + (level * FurtiveIncrementStep);
-                    pendingFurtiveProgressSave = true;
                     ApplyFurtiveBonusStatic(targetPlayer, level);
                     UpdateSkillActivityDay(targetUid, "furtive");
                     result = $"Furtive level set to {level} (-{level}% detection) for {targetName}.";
@@ -447,7 +438,6 @@ namespace SeraphLeveling
                     progress.PickaxeProgress, p => p.CurrentIncrementSize,
                     BaseBlocksPerIncrement, IncrementStep);
 
-                pendingMiningProgressSave = true;
                 UpdateSkillActivityDay(playerUid, "mining");
                 if (player == null)
                     return TextCommandResult.Success($"Set {level} credits on {toolName}. Total: {progress.TotalCredits}/{maxCredits}. Offline player; applies on next join.");
@@ -467,7 +457,6 @@ namespace SeraphLeveling
                 progress.TotalCredits = level;
                 progress.PickaxeProgress.Clear();
 
-                pendingMiningProgressSave = true;
                 UpdateSkillActivityDay(playerUid, "mining");
                 if (player == null)
                     return TextCommandResult.Success($"Mining credits set to {level}. Per-pickaxe progress reset. Offline player; applies on next join.");
@@ -516,7 +505,6 @@ namespace SeraphLeveling
                     progress.WeaponProgress, w => w.CurrentIncrementSize,
                     BaseDamagePerIncrement, MeleeIncrementStep);
 
-                pendingMeleeProgressSave = true;
                 UpdateSkillActivityDay(playerUid, "melee");
                 if (player == null)
                     return TextCommandResult.Success($"Set {level} credits on {toolName}. Total: {progress.TotalCredits}/{maxCredits}. Offline player; applies on next join.");
@@ -534,7 +522,6 @@ namespace SeraphLeveling
                 progress.TotalCredits = level;
                 progress.WeaponProgress.Clear();
 
-                pendingMeleeProgressSave = true;
                 UpdateSkillActivityDay(playerUid, "melee");
                 if (player == null)
                     return TextCommandResult.Success($"Melee credits set to {level}. Per-weapon progress reset. Offline player; applies on next join.");
@@ -582,7 +569,6 @@ namespace SeraphLeveling
                     progress.WeaponProgress, w => w.CurrentIncrementSize,
                     BaseRangedDamagePerIncrement, RangedIncrementStep);
 
-                pendingRangedProgressSave = true;
                 UpdateSkillActivityDay(playerUid, "ranged");
                 if (player == null)
                     return TextCommandResult.Success($"Set {level} credits on {toolName}. Total: {progress.TotalCredits}/{maxCredits}. Offline player; applies on next join.");
@@ -601,7 +587,6 @@ namespace SeraphLeveling
                 progress.TotalCredits = level;
                 progress.WeaponProgress.Clear();
 
-                pendingRangedProgressSave = true;
                 UpdateSkillActivityDay(playerUid, "ranged");
                 if (player == null)
                     return TextCommandResult.Success($"Ranged credits set to {level}. Per-weapon progress reset. Offline player; applies on next join.");
@@ -649,7 +634,6 @@ namespace SeraphLeveling
                     progress.WeaponProgress, w => w.CurrentIncrementSize,
                     BasePreciseDamagePerIncrement, PreciseIncrementStep);
 
-                pendingPreciseProgressSave = true;
                 UpdateSkillActivityDay(playerUid, "precise");
                 if (player == null)
                     return TextCommandResult.Success($"Set {level} credits on {toolName}. Total: {progress.TotalCredits}/{MaxPrecisePercent}. Offline player; applies on next join.");
@@ -664,7 +648,6 @@ namespace SeraphLeveling
                 progress.TotalCredits = level;
                 progress.WeaponProgress.Clear();
 
-                pendingPreciseProgressSave = true;
                 UpdateSkillActivityDay(playerUid, "precise");
                 if (player == null)
                     return TextCommandResult.Success($"Precise level set to {level}. Offline player; applies on next join.");
@@ -832,7 +815,6 @@ namespace SeraphLeveling
                 }
             }
 
-            pendingCOProgressSave = true;
             UpdateSkillActivityDay(playerUid, "coproficiency");
 
             int finalCredits = proficiencyStat == CO_STEADY_AIM

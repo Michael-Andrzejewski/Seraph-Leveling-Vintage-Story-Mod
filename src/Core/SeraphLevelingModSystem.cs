@@ -1573,9 +1573,7 @@ namespace SeraphLeveling
             playerEquippedArmor.Clear();
             playerEquippedClothing.Clear();
             TrackedItemDurabilities.Clear();
-            ClearTypeCaches();   // the old world's item, block and creature types
-            onlinePlayers = new IServerPlayer[0];
-            foreach (var uid in playerInventories.Keys.ToList()) DropInventories(uid);
+            ResetPerformanceCaches();   // Core/Caches.cs: the old world's players, items, blocks and creatures
             SleepMountHours.Clear();
             classChangeListeners.Clear();
             pendingClassChangeReapply.Clear();

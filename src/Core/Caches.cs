@@ -18,6 +18,25 @@ using Vintagestory.API.Util;
 
 namespace SeraphLeveling
 {
+    // Performance caches. Each one holds an answer that is expensive to work out
+    // and does not change until the event named here, so the hot paths (timers,
+    // block breaks, hits, inventory changes) look it up instead.
+    //
+    //   onlinePlayers       online IServerPlayer[]         rebuilt on join, now-playing, leave
+    //   playerInventories   per player: character, hotbar,  dropped on join and leave (unsubscribes
+    //                       backpack inventories, and the   the SlotModified listener)
+    //                       gear-changed flags
+    //   GearInfoCache       per item type: code, armour     rebuilt when the Clothier blacklist
+    //                       type, armour/clothing flags,     array is replaced (config load)
+    //                       weapon types, armour-hit values
+    //   blockKinds          per block id: points class,     never (block ids are fixed per world)
+    //                       crop/vessel/ground flags
+    //   mechanicalByType    per creature type: Precise      never (fixed per world)
+    //   rangedComboCache    per (projectile, held item)     never (fixed per world)
+    //
+    // ResetPerformanceCaches empties all of them when the mod system is disposed:
+    // single player keeps these statics across worlds, and the next world has
+    // different item, block and creature objects.
     public partial class SeraphLevelingModSystem
     {
 
@@ -220,12 +239,15 @@ namespace SeraphLeveling
             return combo;
         }
 
-        private static void ClearTypeCaches()
+        /// <summary>Empty every cache in this file (see the table at the top). Called by Dispose.</summary>
+        private static void ResetPerformanceCaches()
         {
             GearInfoCache.Clear();
             blockKinds = new BlockKind[0];
             mechanicalByType.Clear();
             rangedComboCache.Clear();
+            onlinePlayers = new IServerPlayer[0];
+            foreach (var uid in playerInventories.Keys.ToList()) DropInventories(uid);
         }
 
         // The armour, clothing and mender ticks look at every worn slot of every

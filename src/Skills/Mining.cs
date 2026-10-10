@@ -104,53 +104,19 @@ namespace SeraphLeveling
         /// Handler for /trait miningbase command.
         /// Sets the base points needed for the first 1% increment.
         /// </summary>
-        private TextCommandResult OnTraitMiningBaseCommand(TextCommandCallingArgs args)
-        {
-            int? newValue = OptInt(args, 0);
-
-            if (newValue.HasValue)
-            {
-                if (newValue.Value < 1)
-                {
-                    return TextCommandResult.Error("Base blocks per increment must be at least 1");
-                }
-
-                BaseBlocksPerIncrement = newValue.Value;
-                pendingConfigSave = true;
-
-                return TextCommandResult.Success($"Base blocks per increment set to {BaseBlocksPerIncrement}. New pickaxes will require this many points for first 1%.");
-            }
-            else
-            {
-                return TextCommandResult.Success($"Current base blocks per increment: {BaseBlocksPerIncrement}\nIncrement step: +{IncrementStep} per credit");
-            }
-        }
+        private TextCommandResult OnTraitMiningBaseCommand(TextCommandCallingArgs args) => ShowOrSetConfig(args, 1, "Base blocks per increment must be at least 1",
+            v => BaseBlocksPerIncrement = v,
+            () => $"Base blocks per increment set to {BaseBlocksPerIncrement}. New pickaxes will require this many points for first 1%.",
+            () => $"Current base blocks per increment: {BaseBlocksPerIncrement}\nIncrement step: +{IncrementStep} per credit");
 
         /// <summary>
         /// Handler for /trait miningincrement command.
         /// Sets how many additional points are required for each subsequent credit.
         /// </summary>
-        private TextCommandResult OnTraitMiningIncrementCommand(TextCommandCallingArgs args)
-        {
-            int? newValue = OptInt(args, 0);
-
-            if (newValue.HasValue)
-            {
-                if (newValue.Value < 0)
-                {
-                    return TextCommandResult.Error("Increment step cannot be negative");
-                }
-
-                IncrementStep = newValue.Value;
-                pendingConfigSave = true;
-
-                return TextCommandResult.Success($"Increment step set to +{IncrementStep} per credit.\nProgression: {BaseBlocksPerIncrement}, {BaseBlocksPerIncrement + IncrementStep}, {BaseBlocksPerIncrement + IncrementStep * 2}...");
-            }
-            else
-            {
-                return TextCommandResult.Success($"Current increment step: +{IncrementStep} per credit\nProgression: {BaseBlocksPerIncrement}, {BaseBlocksPerIncrement + IncrementStep}, {BaseBlocksPerIncrement + IncrementStep * 2}...");
-            }
-        }
+        private TextCommandResult OnTraitMiningIncrementCommand(TextCommandCallingArgs args) => ShowOrSetConfig(args, 0, "Increment step cannot be negative",
+            v => IncrementStep = v,
+            () => $"Increment step set to +{IncrementStep} per credit.\nProgression: {BaseBlocksPerIncrement}, {BaseBlocksPerIncrement + IncrementStep}, {BaseBlocksPerIncrement + IncrementStep * 2}...",
+            () => $"Current increment step: +{IncrementStep} per credit\nProgression: {BaseBlocksPerIncrement}, {BaseBlocksPerIncrement + IncrementStep}, {BaseBlocksPerIncrement + IncrementStep * 2}...");
 
         /// <summary>
         /// Handler for /trait mininglevel command.
@@ -222,20 +188,12 @@ namespace SeraphLeveling
         /// Handler for /trait miningmax command.
         /// Gets or sets the maximum mining speed bonus percent.
         /// </summary>
-        private TextCommandResult OnTraitMiningMaxCommand(TextCommandCallingArgs args)
-        {
-            int? newValue = OptInt(args, 0);
-
-            if (newValue.HasValue)
+        private TextCommandResult OnTraitMiningMaxCommand(TextCommandCallingArgs args) => ShowOrSetConfig(args, 1, "Max mining speed percent must be at least 1",
+            v => MaxMiningSpeedPercent = v,
+            () => $"Max mining speed bonus set to +{MaxMiningSpeedPercent}%. All player bonuses recalculated.",
+            () => $"Current max mining speed bonus: +{MaxMiningSpeedPercent}%",
+            afterSet: () =>
             {
-                if (newValue.Value < 1)
-                {
-                    return TextCommandResult.Error("Max mining speed percent must be at least 1");
-                }
-
-                MaxMiningSpeedPercent = newValue.Value;
-                pendingConfigSave = true;
-
                 // Recalculate and reapply bonuses for all online players
                 foreach (IServerPlayer player in ServerApi.World.AllOnlinePlayers)
                 {
@@ -244,14 +202,7 @@ namespace SeraphLeveling
                     var progress = MiningProgress.GetOrAdd(playerUid, _ => new MiningProgressData());
                     ApplyMiningBonus(player, progress.TotalCredits);
                 }
-
-                return TextCommandResult.Success($"Max mining speed bonus set to +{MaxMiningSpeedPercent}%. All player bonuses recalculated.");
-            }
-            else
-            {
-                return TextCommandResult.Success($"Current max mining speed bonus: +{MaxMiningSpeedPercent}%");
-            }
-        }
+            });
 
         /// <summary>
         /// Called when a player breaks a block. Updates mining progress based on new mechanics:

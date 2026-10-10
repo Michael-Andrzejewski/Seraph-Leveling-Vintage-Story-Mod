@@ -88,20 +88,10 @@ namespace SeraphLeveling
         /// <summary>
         /// Handler for /trait resourcefulbase command.
         /// </summary>
-        private TextCommandResult OnTraitResourcefulBaseCommand(TextCommandCallingArgs args)
-        {
-            int? newValue = OptInt(args, 0);
-
-            if (newValue.HasValue)
-            {
-                if (newValue.Value < 1) return TextCommandResult.Error("Base animals must be at least 1.");
-                BaseResourcefulAnimalsPerIncrement = newValue.Value;
-                pendingConfigSave = true;
-                return TextCommandResult.Success($"Resourceful base animals set to {BaseResourcefulAnimalsPerIncrement}.");
-            }
-
-            return TextCommandResult.Success($"Current resourceful base animals: {BaseResourcefulAnimalsPerIncrement}.");
-        }
+        private TextCommandResult OnTraitResourcefulBaseCommand(TextCommandCallingArgs args) => ShowOrSetConfig(args, 1, "Base animals must be at least 1.",
+            v => BaseResourcefulAnimalsPerIncrement = v,
+            () => $"Resourceful base animals set to {BaseResourcefulAnimalsPerIncrement}.",
+            () => $"Current resourceful base animals: {BaseResourcefulAnimalsPerIncrement}.");
 
         /// <summary>
         /// Handler for /trait resourcefullevel command.
@@ -150,20 +140,10 @@ namespace SeraphLeveling
         /// <summary>
         /// Handler for /trait resourcefulmax command.
         /// </summary>
-        private TextCommandResult OnTraitResourcefulMaxCommand(TextCommandCallingArgs args)
-        {
-            int? newValue = OptInt(args, 0);
-
-            if (newValue.HasValue)
-            {
-                if (newValue.Value < 1) return TextCommandResult.Error("Max percent must be at least 1.");
-                MaxResourcefulLootPercent = newValue.Value;
-                pendingConfigSave = true;
-                return TextCommandResult.Success($"Resourceful max loot bonus set to {MaxResourcefulLootPercent}%.");
-            }
-
-            return TextCommandResult.Success($"Current resourceful max loot bonus: {MaxResourcefulLootPercent}%.");
-        }
+        private TextCommandResult OnTraitResourcefulMaxCommand(TextCommandCallingArgs args) => ShowOrSetConfig(args, 1, "Max percent must be at least 1.",
+            v => MaxResourcefulLootPercent = v,
+            () => $"Resourceful max loot bonus set to {MaxResourcefulLootPercent}%.",
+            () => $"Current resourceful max loot bonus: {MaxResourcefulLootPercent}%.");
 
         /// <summary>
         /// Calculate the resourceful loot bonus as an integer percentage.

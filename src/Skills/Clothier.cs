@@ -97,20 +97,10 @@ namespace SeraphLeveling
         /// <summary>
         /// Handler for /trait clothierrequired command.
         /// </summary>
-        private TextCommandResult OnTraitClothierRequiredCommand(TextCommandCallingArgs args)
-        {
-            int? newValue = OptInt(args, 0);
-
-            if (newValue.HasValue)
-            {
-                if (newValue.Value < 1) return TextCommandResult.Error("Required clothes must be at least 1.");
-                ClothierRequiredUniqueClothes = newValue.Value;
-                pendingConfigSave = true;
-                return TextCommandResult.Success($"Clothier required unique clothes set to {ClothierRequiredUniqueClothes}.");
-            }
-
-            return TextCommandResult.Success($"Current clothier required: {ClothierRequiredUniqueClothes} unique clothes.");
-        }
+        private TextCommandResult OnTraitClothierRequiredCommand(TextCommandCallingArgs args) => ShowOrSetConfig(args, 1, "Required clothes must be at least 1.",
+            v => ClothierRequiredUniqueClothes = v,
+            () => $"Clothier required unique clothes set to {ClothierRequiredUniqueClothes}.",
+            () => $"Current clothier required: {ClothierRequiredUniqueClothes} unique clothes.");
 
         /// <summary>
         /// Handler for /trait clothierlevel command.

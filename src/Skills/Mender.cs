@@ -218,20 +218,10 @@ namespace SeraphLeveling
         /// <summary>
         /// Handler for /trait menderbase command.
         /// </summary>
-        private TextCommandResult OnTraitMenderBaseCommand(TextCommandCallingArgs args)
-        {
-            int? newValue = OptInt(args, 0);
-
-            if (newValue.HasValue)
-            {
-                if (newValue.Value < 1) return TextCommandResult.Error("Base repairs must be at least 1.");
-                BaseMenderRepairsPerIncrement = newValue.Value;
-                pendingConfigSave = true;
-                return TextCommandResult.Success($"Mender base repairs set to {BaseMenderRepairsPerIncrement}.");
-            }
-
-            return TextCommandResult.Success($"Current mender base repairs: {BaseMenderRepairsPerIncrement}.");
-        }
+        private TextCommandResult OnTraitMenderBaseCommand(TextCommandCallingArgs args) => ShowOrSetConfig(args, 1, "Base repairs must be at least 1.",
+            v => BaseMenderRepairsPerIncrement = v,
+            () => $"Mender base repairs set to {BaseMenderRepairsPerIncrement}.",
+            () => $"Current mender base repairs: {BaseMenderRepairsPerIncrement}.");
 
         /// <summary>
         /// Handler for /trait menderlevel command.
@@ -277,20 +267,10 @@ namespace SeraphLeveling
         /// <summary>
         /// Handler for /trait mendermax command.
         /// </summary>
-        private TextCommandResult OnTraitMenderMaxCommand(TextCommandCallingArgs args)
-        {
-            int? newValue = OptInt(args, 0);
-
-            if (newValue.HasValue)
-            {
-                if (newValue.Value < 1) return TextCommandResult.Error("Max percent must be at least 1.");
-                MaxMenderPercent = newValue.Value;
-                pendingConfigSave = true;
-                return TextCommandResult.Success($"Mender max bonus set to {MaxMenderPercent}%.");
-            }
-
-            return TextCommandResult.Success($"Current mender max bonus: {MaxMenderPercent}%.");
-        }
+        private TextCommandResult OnTraitMenderMaxCommand(TextCommandCallingArgs args) => ShowOrSetConfig(args, 1, "Max percent must be at least 1.",
+            v => MaxMenderPercent = v,
+            () => $"Mender max bonus set to {MaxMenderPercent}%.",
+            () => $"Current mender max bonus: {MaxMenderPercent}%.");
 
         /// <summary>
         /// Calculate the mender durability bonus as an integer percentage.

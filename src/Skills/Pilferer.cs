@@ -95,20 +95,10 @@ namespace SeraphLeveling
         /// <summary>
         /// Handler for /trait pilfererbase command.
         /// </summary>
-        private TextCommandResult OnTraitPilfererBaseCommand(TextCommandCallingArgs args)
-        {
-            int? newValue = OptInt(args, 0);
-
-            if (newValue.HasValue)
-            {
-                if (newValue.Value < 1) return TextCommandResult.Error("Base points must be at least 1.");
-                BasePilfererPointsPerIncrement = newValue.Value;
-                pendingConfigSave = true;
-                return TextCommandResult.Success($"Pilferer base points set to {BasePilfererPointsPerIncrement}.");
-            }
-
-            return TextCommandResult.Success($"Current pilferer base points: {BasePilfererPointsPerIncrement}.");
-        }
+        private TextCommandResult OnTraitPilfererBaseCommand(TextCommandCallingArgs args) => ShowOrSetConfig(args, 1, "Base points must be at least 1.",
+            v => BasePilfererPointsPerIncrement = v,
+            () => $"Pilferer base points set to {BasePilfererPointsPerIncrement}.",
+            () => $"Current pilferer base points: {BasePilfererPointsPerIncrement}.");
 
         /// <summary>
         /// Handler for /trait pilfererlevel command.
@@ -156,20 +146,10 @@ namespace SeraphLeveling
         /// <summary>
         /// Handler for /trait pilferermax command.
         /// </summary>
-        private TextCommandResult OnTraitPilfererMaxCommand(TextCommandCallingArgs args)
-        {
-            int? newValue = OptInt(args, 0);
-
-            if (newValue.HasValue)
-            {
-                if (newValue.Value < 1) return TextCommandResult.Error("Max percent must be at least 1.");
-                MaxPilfererPercent = newValue.Value;
-                pendingConfigSave = true;
-                return TextCommandResult.Success($"Pilferer max bonus set to {MaxPilfererPercent}%.");
-            }
-
-            return TextCommandResult.Success($"Current pilferer max bonus: {MaxPilfererPercent}%.");
-        }
+        private TextCommandResult OnTraitPilfererMaxCommand(TextCommandCallingArgs args) => ShowOrSetConfig(args, 1, "Max percent must be at least 1.",
+            v => MaxPilfererPercent = v,
+            () => $"Pilferer max bonus set to {MaxPilfererPercent}%.",
+            () => $"Current pilferer max bonus: {MaxPilfererPercent}%.");
 
         /// <summary>
         /// Calculate the pilferer bonus as an integer percentage.

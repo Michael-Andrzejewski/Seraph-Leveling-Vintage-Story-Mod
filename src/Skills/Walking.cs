@@ -91,53 +91,19 @@ namespace SeraphLeveling
         /// Handler for /trait walkingbase command.
         /// Sets the base blocks needed for the first 1% increment.
         /// </summary>
-        private TextCommandResult OnTraitWalkingBaseCommand(TextCommandCallingArgs args)
-        {
-            int? newValue = OptInt(args, 0);
-
-            if (newValue.HasValue)
-            {
-                if (newValue.Value < 1)
-                {
-                    return TextCommandResult.Error("Base blocks per increment must be at least 1");
-                }
-
-                BaseBlocksWalkedPerIncrement = newValue.Value;
-                pendingConfigSave = true;
-
-                return TextCommandResult.Success($"Base blocks per increment set to {BaseBlocksWalkedPerIncrement}. New progress will require this many blocks for first 1%.");
-            }
-            else
-            {
-                return TextCommandResult.Success($"Current base blocks per increment: {BaseBlocksWalkedPerIncrement}\nIncrement step: +{WalkingIncrementStep} per credit");
-            }
-        }
+        private TextCommandResult OnTraitWalkingBaseCommand(TextCommandCallingArgs args) => ShowOrSetConfig(args, 1, "Base blocks per increment must be at least 1",
+            v => BaseBlocksWalkedPerIncrement = v,
+            () => $"Base blocks per increment set to {BaseBlocksWalkedPerIncrement}. New progress will require this many blocks for first 1%.",
+            () => $"Current base blocks per increment: {BaseBlocksWalkedPerIncrement}\nIncrement step: +{WalkingIncrementStep} per credit");
 
         /// <summary>
         /// Handler for /trait walkingincrement command.
         /// Sets how many additional blocks are required for each subsequent credit.
         /// </summary>
-        private TextCommandResult OnTraitWalkingIncrementCommand(TextCommandCallingArgs args)
-        {
-            int? newValue = OptInt(args, 0);
-
-            if (newValue.HasValue)
-            {
-                if (newValue.Value < 0)
-                {
-                    return TextCommandResult.Error("Increment step cannot be negative");
-                }
-
-                WalkingIncrementStep = newValue.Value;
-                pendingConfigSave = true;
-
-                return TextCommandResult.Success($"Walking increment step set to +{WalkingIncrementStep} per credit.\nProgression: {BaseBlocksWalkedPerIncrement}, {BaseBlocksWalkedPerIncrement + WalkingIncrementStep}, {BaseBlocksWalkedPerIncrement + WalkingIncrementStep * 2}...");
-            }
-            else
-            {
-                return TextCommandResult.Success($"Current walking increment step: +{WalkingIncrementStep} per credit\nProgression: {BaseBlocksWalkedPerIncrement}, {BaseBlocksWalkedPerIncrement + WalkingIncrementStep}, {BaseBlocksWalkedPerIncrement + WalkingIncrementStep * 2}...");
-            }
-        }
+        private TextCommandResult OnTraitWalkingIncrementCommand(TextCommandCallingArgs args) => ShowOrSetConfig(args, 0, "Increment step cannot be negative",
+            v => WalkingIncrementStep = v,
+            () => $"Walking increment step set to +{WalkingIncrementStep} per credit.\nProgression: {BaseBlocksWalkedPerIncrement}, {BaseBlocksWalkedPerIncrement + WalkingIncrementStep}, {BaseBlocksWalkedPerIncrement + WalkingIncrementStep * 2}...",
+            () => $"Current walking increment step: +{WalkingIncrementStep} per credit\nProgression: {BaseBlocksWalkedPerIncrement}, {BaseBlocksWalkedPerIncrement + WalkingIncrementStep}, {BaseBlocksWalkedPerIncrement + WalkingIncrementStep * 2}...");
 
         /// <summary>
         /// Handler for /trait walkinglevel command.
@@ -195,20 +161,12 @@ namespace SeraphLeveling
         /// Handler for /trait walkingmax command.
         /// Gets or sets the maximum walking speed bonus percent.
         /// </summary>
-        private TextCommandResult OnTraitWalkingMaxCommand(TextCommandCallingArgs args)
-        {
-            int? newValue = OptInt(args, 0);
-
-            if (newValue.HasValue)
+        private TextCommandResult OnTraitWalkingMaxCommand(TextCommandCallingArgs args) => ShowOrSetConfig(args, 1, "Max walking speed percent must be at least 1",
+            v => MaxWalkingSpeedPercent = v,
+            () => $"Max walking speed bonus set to +{MaxWalkingSpeedPercent}%. All player bonuses recalculated.",
+            () => $"Current max walking speed bonus: +{MaxWalkingSpeedPercent}%",
+            afterSet: () =>
             {
-                if (newValue.Value < 1)
-                {
-                    return TextCommandResult.Error("Max walking speed percent must be at least 1");
-                }
-
-                MaxWalkingSpeedPercent = newValue.Value;
-                pendingConfigSave = true;
-
                 // Recalculate and reapply bonuses for all online players
                 foreach (IServerPlayer player in ServerApi.World.AllOnlinePlayers)
                 {
@@ -220,14 +178,7 @@ namespace SeraphLeveling
                     });
                     ApplyWalkingBonusStatic(player, progress.TotalCredits);
                 }
-
-                return TextCommandResult.Success($"Max walking speed bonus set to +{MaxWalkingSpeedPercent}%. All player bonuses recalculated.");
-            }
-            else
-            {
-                return TextCommandResult.Success($"Current max walking speed bonus: +{MaxWalkingSpeedPercent}%");
-            }
-        }
+            });
 
         /// <summary>
         /// Calculate the walking speed bonus as an integer percentage.

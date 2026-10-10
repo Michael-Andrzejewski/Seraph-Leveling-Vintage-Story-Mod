@@ -227,20 +227,12 @@ namespace SeraphLeveling
         /// <summary>
         /// Handler for /trait armordurabilitymax command.
         /// </summary>
-        private TextCommandResult OnTraitArmorDurabilityMaxCommand(TextCommandCallingArgs args)
-        {
-            int? newValue = OptInt(args, 0);
-
-            if (newValue.HasValue)
+        private TextCommandResult OnTraitArmorDurabilityMaxCommand(TextCommandCallingArgs args) => ShowOrSetConfig(args, 1, "Max armor durability percent must be at least 1",
+            v => MaxArmorDurabilityPercent = v,
+            () => $"Max armor durability bonus set to +{MaxArmorDurabilityPercent}%. All player bonuses recalculated.",
+            () => $"Current max armor durability bonus: +{MaxArmorDurabilityPercent}%",
+            afterSet: () =>
             {
-                if (newValue.Value < 1)
-                {
-                    return TextCommandResult.Error("Max armor durability percent must be at least 1");
-                }
-
-                MaxArmorDurabilityPercent = newValue.Value;
-                pendingConfigSave = true;
-
                 foreach (IServerPlayer player in ServerApi.World.AllOnlinePlayers)
                 {
                     if (player?.Entity == null) continue;
@@ -248,32 +240,17 @@ namespace SeraphLeveling
                     var progress = ArmorProgress.GetOrAdd(playerUid, _ => new ArmorProgressData());
                     ApplyArmorBonusesStatic(player, progress.TotalDurabilityCredits, progress.TotalWalkSpeedCredits);
                 }
-
-                return TextCommandResult.Success($"Max armor durability bonus set to +{MaxArmorDurabilityPercent}%. All player bonuses recalculated.");
-            }
-            else
-            {
-                return TextCommandResult.Success($"Current max armor durability bonus: +{MaxArmorDurabilityPercent}%");
-            }
-        }
+            });
 
         /// <summary>
         /// Handler for /trait armorwalkspeedmax command.
         /// </summary>
-        private TextCommandResult OnTraitArmorWalkSpeedMaxCommand(TextCommandCallingArgs args)
-        {
-            int? newValue = OptInt(args, 0);
-
-            if (newValue.HasValue)
+        private TextCommandResult OnTraitArmorWalkSpeedMaxCommand(TextCommandCallingArgs args) => ShowOrSetConfig(args, 1, "Max armor walk speed penalty reduction percent must be at least 1",
+            v => MaxArmorWalkSpeedPercent = v,
+            () => $"Max armor walk speed penalty reduction set to -{MaxArmorWalkSpeedPercent}%. All player bonuses recalculated.",
+            () => $"Current max armor walk speed penalty reduction: -{MaxArmorWalkSpeedPercent}%",
+            afterSet: () =>
             {
-                if (newValue.Value < 1)
-                {
-                    return TextCommandResult.Error("Max armor walk speed penalty reduction percent must be at least 1");
-                }
-
-                MaxArmorWalkSpeedPercent = newValue.Value;
-                pendingConfigSave = true;
-
                 foreach (IServerPlayer player in ServerApi.World.AllOnlinePlayers)
                 {
                     if (player?.Entity == null) continue;
@@ -281,89 +258,31 @@ namespace SeraphLeveling
                     var progress = ArmorProgress.GetOrAdd(playerUid, _ => new ArmorProgressData());
                     ApplyArmorBonusesStatic(player, progress.TotalDurabilityCredits, progress.TotalWalkSpeedCredits);
                 }
-
-                return TextCommandResult.Success($"Max armor walk speed penalty reduction set to -{MaxArmorWalkSpeedPercent}%. All player bonuses recalculated.");
-            }
-            else
-            {
-                return TextCommandResult.Success($"Current max armor walk speed penalty reduction: -{MaxArmorWalkSpeedPercent}%");
-            }
-        }
+            });
 
         /// <summary>
         /// Handler for /trait armortimebase command.
         /// </summary>
-        private TextCommandResult OnTraitArmorTimeBaseCommand(TextCommandCallingArgs args)
-        {
-            int? newValue = OptInt(args, 0);
-
-            if (newValue.HasValue)
-            {
-                if (newValue.Value < 1)
-                {
-                    return TextCommandResult.Error("Base seconds must be at least 1");
-                }
-
-                BaseSecondsInArmorPerIncrement = newValue.Value;
-                pendingConfigSave = true;
-
-                return TextCommandResult.Success($"Base seconds in armor per increment set to {BaseSecondsInArmorPerIncrement} ({BaseSecondsInArmorPerIncrement / 3600f:F1} hours).");
-            }
-            else
-            {
-                return TextCommandResult.Success($"Current base seconds in armor: {BaseSecondsInArmorPerIncrement} ({BaseSecondsInArmorPerIncrement / 3600f:F1} hours)\nIncrement step: +{ArmorTimeIncrementStep} ({ArmorTimeIncrementStep / 3600f:F1} hours)");
-            }
-        }
+        private TextCommandResult OnTraitArmorTimeBaseCommand(TextCommandCallingArgs args) => ShowOrSetConfig(args, 1, "Base seconds must be at least 1",
+            v => BaseSecondsInArmorPerIncrement = v,
+            () => $"Base seconds in armor per increment set to {BaseSecondsInArmorPerIncrement} ({BaseSecondsInArmorPerIncrement / 3600f:F1} hours).",
+            () => $"Current base seconds in armor: {BaseSecondsInArmorPerIncrement} ({BaseSecondsInArmorPerIncrement / 3600f:F1} hours)\nIncrement step: +{ArmorTimeIncrementStep} ({ArmorTimeIncrementStep / 3600f:F1} hours)");
 
         /// <summary>
         /// Handler for /trait armordamagebase command.
         /// </summary>
-        private TextCommandResult OnTraitArmorDamageBaseCommand(TextCommandCallingArgs args)
-        {
-            int? newValue = OptInt(args, 0);
-
-            if (newValue.HasValue)
-            {
-                if (newValue.Value < 1)
-                {
-                    return TextCommandResult.Error("Base damage must be at least 1");
-                }
-
-                BaseDamageBlockedPerIncrement = newValue.Value;
-                pendingConfigSave = true;
-
-                return TextCommandResult.Success($"Base damage blocked per increment set to {BaseDamageBlockedPerIncrement}.");
-            }
-            else
-            {
-                return TextCommandResult.Success($"Current base damage blocked: {BaseDamageBlockedPerIncrement}\nIncrement step: +{ArmorDamageIncrementStep}");
-            }
-        }
+        private TextCommandResult OnTraitArmorDamageBaseCommand(TextCommandCallingArgs args) => ShowOrSetConfig(args, 1, "Base damage must be at least 1",
+            v => BaseDamageBlockedPerIncrement = v,
+            () => $"Base damage blocked per increment set to {BaseDamageBlockedPerIncrement}.",
+            () => $"Current base damage blocked: {BaseDamageBlockedPerIncrement}\nIncrement step: +{ArmorDamageIncrementStep}");
 
         /// <summary>
         /// Handler for /trait armorrepairbase command.
         /// </summary>
-        private TextCommandResult OnTraitArmorRepairBaseCommand(TextCommandCallingArgs args)
-        {
-            int? newValue = OptInt(args, 0);
-
-            if (newValue.HasValue)
-            {
-                if (newValue.Value < 1)
-                {
-                    return TextCommandResult.Error("Base repairs must be at least 1");
-                }
-
-                BaseRepairsPerIncrement = newValue.Value;
-                pendingConfigSave = true;
-
-                return TextCommandResult.Success($"Base repairs per increment set to {BaseRepairsPerIncrement}.");
-            }
-            else
-            {
-                return TextCommandResult.Success($"Current base repairs: {BaseRepairsPerIncrement}\nIncrement step: +{ArmorRepairIncrementStep}");
-            }
-        }
+        private TextCommandResult OnTraitArmorRepairBaseCommand(TextCommandCallingArgs args) => ShowOrSetConfig(args, 1, "Base repairs must be at least 1",
+            v => BaseRepairsPerIncrement = v,
+            () => $"Base repairs per increment set to {BaseRepairsPerIncrement}.",
+            () => $"Current base repairs: {BaseRepairsPerIncrement}\nIncrement step: +{ArmorRepairIncrementStep}");
 
         /// <summary>
         /// Checks if the player's class has the vanilla Soldier trait.

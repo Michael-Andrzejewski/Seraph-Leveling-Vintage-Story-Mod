@@ -38,6 +38,25 @@ namespace SeraphLeveling
             return (int?)args[index];
         }
 
+        /// <summary>
+        /// The /trait config commands that show or set one number: "/trait x"
+        /// replies with showReply, "/trait x N" checks N against minimum (error
+        /// belowMinimumError), stores it, marks the config for saving, runs
+        /// afterSet (for example to reapply everyone's bonuses) and replies with
+        /// setReply. Replies are built after the value is stored, so they show it.
+        /// </summary>
+        private TextCommandResult ShowOrSetConfig(TextCommandCallingArgs args, int minimum, string belowMinimumError,
+            Action<int> set, Func<string> setReply, Func<string> showReply, Action afterSet = null)
+        {
+            int? newValue = OptInt(args, 0);
+            if (!newValue.HasValue) return TextCommandResult.Success(showReply());
+            if (newValue.Value < minimum) return TextCommandResult.Error(belowMinimumError);
+            set(newValue.Value);
+            pendingConfigSave = true;
+            afterSet?.Invoke();
+            return TextCommandResult.Success(setReply());
+        }
+
         private TextCommandResult OnTraitHelpCommand(TextCommandCallingArgs args)
         {
             // Built from the registered subcommands so the list can never fall

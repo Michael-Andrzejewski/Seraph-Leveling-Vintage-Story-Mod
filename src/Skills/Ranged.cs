@@ -110,53 +110,19 @@ namespace SeraphLeveling
         /// Handler for /trait rangedbase command.
         /// Sets the base damage needed for the first 1% increment.
         /// </summary>
-        private TextCommandResult OnTraitRangedBaseCommand(TextCommandCallingArgs args)
-        {
-            int? newValue = OptInt(args, 0);
-
-            if (newValue.HasValue)
-            {
-                if (newValue.Value < 1)
-                {
-                    return TextCommandResult.Error("Base damage per increment must be at least 1");
-                }
-
-                BaseRangedDamagePerIncrement = newValue.Value;
-                pendingConfigSave = true;
-
-                return TextCommandResult.Success($"Base ranged damage per increment set to {BaseRangedDamagePerIncrement}. New weapons will require this much damage for first 1%.");
-            }
-            else
-            {
-                return TextCommandResult.Success($"Current base ranged damage per increment: {BaseRangedDamagePerIncrement}\nIncrement step: +{RangedIncrementStep} per credit");
-            }
-        }
+        private TextCommandResult OnTraitRangedBaseCommand(TextCommandCallingArgs args) => ShowOrSetConfig(args, 1, "Base damage per increment must be at least 1",
+            v => BaseRangedDamagePerIncrement = v,
+            () => $"Base ranged damage per increment set to {BaseRangedDamagePerIncrement}. New weapons will require this much damage for first 1%.",
+            () => $"Current base ranged damage per increment: {BaseRangedDamagePerIncrement}\nIncrement step: +{RangedIncrementStep} per credit");
 
         /// <summary>
         /// Handler for /trait rangedincrement command.
         /// Sets how much additional damage is required for each subsequent credit.
         /// </summary>
-        private TextCommandResult OnTraitRangedIncrementCommand(TextCommandCallingArgs args)
-        {
-            int? newValue = OptInt(args, 0);
-
-            if (newValue.HasValue)
-            {
-                if (newValue.Value < 0)
-                {
-                    return TextCommandResult.Error("Increment step cannot be negative");
-                }
-
-                RangedIncrementStep = newValue.Value;
-                pendingConfigSave = true;
-
-                return TextCommandResult.Success($"Ranged increment step set to +{RangedIncrementStep} per credit.\nProgression: {BaseRangedDamagePerIncrement}, {BaseRangedDamagePerIncrement + RangedIncrementStep}, {BaseRangedDamagePerIncrement + RangedIncrementStep * 2}...");
-            }
-            else
-            {
-                return TextCommandResult.Success($"Current ranged increment step: +{RangedIncrementStep} per credit\nProgression: {BaseRangedDamagePerIncrement}, {BaseRangedDamagePerIncrement + RangedIncrementStep}, {BaseRangedDamagePerIncrement + RangedIncrementStep * 2}...");
-            }
-        }
+        private TextCommandResult OnTraitRangedIncrementCommand(TextCommandCallingArgs args) => ShowOrSetConfig(args, 0, "Increment step cannot be negative",
+            v => RangedIncrementStep = v,
+            () => $"Ranged increment step set to +{RangedIncrementStep} per credit.\nProgression: {BaseRangedDamagePerIncrement}, {BaseRangedDamagePerIncrement + RangedIncrementStep}, {BaseRangedDamagePerIncrement + RangedIncrementStep * 2}...",
+            () => $"Current ranged increment step: +{RangedIncrementStep} per credit\nProgression: {BaseRangedDamagePerIncrement}, {BaseRangedDamagePerIncrement + RangedIncrementStep}, {BaseRangedDamagePerIncrement + RangedIncrementStep * 2}...");
 
         /// <summary>
         /// Handler for /trait rangedlevel command.
@@ -190,20 +156,12 @@ namespace SeraphLeveling
         /// Handler for /trait rangedmax command.
         /// Gets or sets the maximum ranged damage bonus percent.
         /// </summary>
-        private TextCommandResult OnTraitRangedMaxCommand(TextCommandCallingArgs args)
-        {
-            int? newValue = OptInt(args, 0);
-
-            if (newValue.HasValue)
+        private TextCommandResult OnTraitRangedMaxCommand(TextCommandCallingArgs args) => ShowOrSetConfig(args, 1, "Max ranged damage percent must be at least 1",
+            v => MaxRangedDamagePercent = v,
+            () => $"Max ranged damage bonus set to +{MaxRangedDamagePercent}%. All player bonuses recalculated.",
+            () => $"Current max ranged damage bonus: +{MaxRangedDamagePercent}%\nMax accuracy: +{MaxRangedAccuracyPercent}%\nMax distance: +{MaxRangedDistancePercent}%",
+            afterSet: () =>
             {
-                if (newValue.Value < 1)
-                {
-                    return TextCommandResult.Error("Max ranged damage percent must be at least 1");
-                }
-
-                MaxRangedDamagePercent = newValue.Value;
-                pendingConfigSave = true;
-
                 // Recalculate and reapply bonuses for all online players
                 foreach (IServerPlayer player in ServerApi.World.AllOnlinePlayers)
                 {
@@ -212,33 +170,18 @@ namespace SeraphLeveling
                     var progress = RangedProgress.GetOrAdd(playerUid, _ => new RangedProgressData());
                     ApplyRangedBonusStatic(player, progress.TotalCredits);
                 }
-
-                return TextCommandResult.Success($"Max ranged damage bonus set to +{MaxRangedDamagePercent}%. All player bonuses recalculated.");
-            }
-            else
-            {
-                return TextCommandResult.Success($"Current max ranged damage bonus: +{MaxRangedDamagePercent}%\nMax accuracy: +{MaxRangedAccuracyPercent}%\nMax distance: +{MaxRangedDistancePercent}%");
-            }
-        }
+            });
 
         /// <summary>
         /// Handler for /trait rangedmaxacc command.
         /// Gets or sets the maximum ranged accuracy bonus percent.
         /// </summary>
-        private TextCommandResult OnTraitRangedMaxAccuracyCommand(TextCommandCallingArgs args)
-        {
-            int? newValue = OptInt(args, 0);
-
-            if (newValue.HasValue)
+        private TextCommandResult OnTraitRangedMaxAccuracyCommand(TextCommandCallingArgs args) => ShowOrSetConfig(args, 1, "Max ranged accuracy percent must be at least 1",
+            v => MaxRangedAccuracyPercent = v,
+            () => $"Max ranged accuracy bonus set to +{MaxRangedAccuracyPercent}%. All player bonuses recalculated.",
+            () => $"Current max ranged accuracy bonus: +{MaxRangedAccuracyPercent}%\nMax damage: +{MaxRangedDamagePercent}%\nMax distance: +{MaxRangedDistancePercent}%",
+            afterSet: () =>
             {
-                if (newValue.Value < 1)
-                {
-                    return TextCommandResult.Error("Max ranged accuracy percent must be at least 1");
-                }
-
-                MaxRangedAccuracyPercent = newValue.Value;
-                pendingConfigSave = true;
-
                 // Recalculate and reapply bonuses for all online players
                 foreach (IServerPlayer player in ServerApi.World.AllOnlinePlayers)
                 {
@@ -247,33 +190,18 @@ namespace SeraphLeveling
                     var progress = RangedProgress.GetOrAdd(playerUid, _ => new RangedProgressData());
                     ApplyRangedBonusStatic(player, progress.TotalCredits);
                 }
-
-                return TextCommandResult.Success($"Max ranged accuracy bonus set to +{MaxRangedAccuracyPercent}%. All player bonuses recalculated.");
-            }
-            else
-            {
-                return TextCommandResult.Success($"Current max ranged accuracy bonus: +{MaxRangedAccuracyPercent}%\nMax damage: +{MaxRangedDamagePercent}%\nMax distance: +{MaxRangedDistancePercent}%");
-            }
-        }
+            });
 
         /// <summary>
         /// Handler for /trait rangedmaxdist command.
         /// Gets or sets the maximum ranged distance bonus percent.
         /// </summary>
-        private TextCommandResult OnTraitRangedMaxDistanceCommand(TextCommandCallingArgs args)
-        {
-            int? newValue = OptInt(args, 0);
-
-            if (newValue.HasValue)
+        private TextCommandResult OnTraitRangedMaxDistanceCommand(TextCommandCallingArgs args) => ShowOrSetConfig(args, 1, "Max ranged distance percent must be at least 1",
+            v => MaxRangedDistancePercent = v,
+            () => $"Max ranged distance bonus set to +{MaxRangedDistancePercent}%. All player bonuses recalculated.",
+            () => $"Current max ranged distance bonus: +{MaxRangedDistancePercent}%\nMax damage: +{MaxRangedDamagePercent}%\nMax accuracy: +{MaxRangedAccuracyPercent}%",
+            afterSet: () =>
             {
-                if (newValue.Value < 1)
-                {
-                    return TextCommandResult.Error("Max ranged distance percent must be at least 1");
-                }
-
-                MaxRangedDistancePercent = newValue.Value;
-                pendingConfigSave = true;
-
                 // Recalculate and reapply bonuses for all online players
                 foreach (IServerPlayer player in ServerApi.World.AllOnlinePlayers)
                 {
@@ -282,14 +210,7 @@ namespace SeraphLeveling
                     var progress = RangedProgress.GetOrAdd(playerUid, _ => new RangedProgressData());
                     ApplyRangedBonusStatic(player, progress.TotalCredits);
                 }
-
-                return TextCommandResult.Success($"Max ranged distance bonus set to +{MaxRangedDistancePercent}%. All player bonuses recalculated.");
-            }
-            else
-            {
-                return TextCommandResult.Success($"Current max ranged distance bonus: +{MaxRangedDistancePercent}%\nMax damage: +{MaxRangedDamagePercent}%\nMax accuracy: +{MaxRangedAccuracyPercent}%");
-            }
-        }
+            });
 
         /// <summary>
         /// Calculate ranged bonuses as percentages, accounting for vanilla Focused trait.

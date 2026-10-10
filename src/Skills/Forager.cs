@@ -107,20 +107,10 @@ namespace SeraphLeveling
         /// <summary>
         /// Handler for /trait foragerbase command.
         /// </summary>
-        private TextCommandResult OnTraitForagerBaseCommand(TextCommandCallingArgs args)
-        {
-            int? newValue = OptInt(args, 0);
-
-            if (newValue.HasValue)
-            {
-                if (newValue.Value < 1) return TextCommandResult.Error("Base crops must be at least 1.");
-                BaseForagerCropsPerIncrement = newValue.Value;
-                pendingConfigSave = true;
-                return TextCommandResult.Success($"Forager base crops set to {BaseForagerCropsPerIncrement}.");
-            }
-
-            return TextCommandResult.Success($"Current forager base crops: {BaseForagerCropsPerIncrement}.");
-        }
+        private TextCommandResult OnTraitForagerBaseCommand(TextCommandCallingArgs args) => ShowOrSetConfig(args, 1, "Base crops must be at least 1.",
+            v => BaseForagerCropsPerIncrement = v,
+            () => $"Forager base crops set to {BaseForagerCropsPerIncrement}.",
+            () => $"Current forager base crops: {BaseForagerCropsPerIncrement}.");
 
         /// <summary>
         /// Handler for /trait foragerlevel command.
@@ -172,20 +162,10 @@ namespace SeraphLeveling
         /// <summary>
         /// Handler for /trait foragermax command.
         /// </summary>
-        private TextCommandResult OnTraitForagerMaxCommand(TextCommandCallingArgs args)
-        {
-            int? newValue = OptInt(args, 0);
-
-            if (newValue.HasValue)
-            {
-                if (newValue.Value < 1) return TextCommandResult.Error("Max percent must be at least 1.");
-                MaxForagerLootPercent = newValue.Value;
-                pendingConfigSave = true;
-                return TextCommandResult.Success($"Forager max loot bonus set to {MaxForagerLootPercent}%.");
-            }
-
-            return TextCommandResult.Success($"Current forager max loot bonus: {MaxForagerLootPercent}%.");
-        }
+        private TextCommandResult OnTraitForagerMaxCommand(TextCommandCallingArgs args) => ShowOrSetConfig(args, 1, "Max percent must be at least 1.",
+            v => MaxForagerLootPercent = v,
+            () => $"Forager max loot bonus set to {MaxForagerLootPercent}%.",
+            () => $"Current forager max loot bonus: {MaxForagerLootPercent}%.");
 
         /// <summary>
         /// Calculate the forager loot bonus as an integer percentage.

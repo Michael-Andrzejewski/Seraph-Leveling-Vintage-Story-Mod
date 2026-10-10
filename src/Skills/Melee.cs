@@ -103,53 +103,19 @@ namespace SeraphLeveling
         /// Handler for /trait meleebase command.
         /// Sets the base damage needed for the first 1% increment.
         /// </summary>
-        private TextCommandResult OnTraitMeleeBaseCommand(TextCommandCallingArgs args)
-        {
-            int? newValue = OptInt(args, 0);
-
-            if (newValue.HasValue)
-            {
-                if (newValue.Value < 1)
-                {
-                    return TextCommandResult.Error("Base damage per increment must be at least 1");
-                }
-
-                BaseDamagePerIncrement = newValue.Value;
-                pendingConfigSave = true;
-
-                return TextCommandResult.Success($"Base damage per increment set to {BaseDamagePerIncrement}. New weapons will require this much damage for first 1%.");
-            }
-            else
-            {
-                return TextCommandResult.Success($"Current base damage per increment: {BaseDamagePerIncrement}\nIncrement step: +{MeleeIncrementStep} per credit");
-            }
-        }
+        private TextCommandResult OnTraitMeleeBaseCommand(TextCommandCallingArgs args) => ShowOrSetConfig(args, 1, "Base damage per increment must be at least 1",
+            v => BaseDamagePerIncrement = v,
+            () => $"Base damage per increment set to {BaseDamagePerIncrement}. New weapons will require this much damage for first 1%.",
+            () => $"Current base damage per increment: {BaseDamagePerIncrement}\nIncrement step: +{MeleeIncrementStep} per credit");
 
         /// <summary>
         /// Handler for /trait meleeincrement command.
         /// Sets how much additional damage is required for each subsequent credit.
         /// </summary>
-        private TextCommandResult OnTraitMeleeIncrementCommand(TextCommandCallingArgs args)
-        {
-            int? newValue = OptInt(args, 0);
-
-            if (newValue.HasValue)
-            {
-                if (newValue.Value < 0)
-                {
-                    return TextCommandResult.Error("Increment step cannot be negative");
-                }
-
-                MeleeIncrementStep = newValue.Value;
-                pendingConfigSave = true;
-
-                return TextCommandResult.Success($"Melee increment step set to +{MeleeIncrementStep} per credit.\nProgression: {BaseDamagePerIncrement}, {BaseDamagePerIncrement + MeleeIncrementStep}, {BaseDamagePerIncrement + MeleeIncrementStep * 2}...");
-            }
-            else
-            {
-                return TextCommandResult.Success($"Current melee increment step: +{MeleeIncrementStep} per credit\nProgression: {BaseDamagePerIncrement}, {BaseDamagePerIncrement + MeleeIncrementStep}, {BaseDamagePerIncrement + MeleeIncrementStep * 2}...");
-            }
-        }
+        private TextCommandResult OnTraitMeleeIncrementCommand(TextCommandCallingArgs args) => ShowOrSetConfig(args, 0, "Increment step cannot be negative",
+            v => MeleeIncrementStep = v,
+            () => $"Melee increment step set to +{MeleeIncrementStep} per credit.\nProgression: {BaseDamagePerIncrement}, {BaseDamagePerIncrement + MeleeIncrementStep}, {BaseDamagePerIncrement + MeleeIncrementStep * 2}...",
+            () => $"Current melee increment step: +{MeleeIncrementStep} per credit\nProgression: {BaseDamagePerIncrement}, {BaseDamagePerIncrement + MeleeIncrementStep}, {BaseDamagePerIncrement + MeleeIncrementStep * 2}...");
 
         /// <summary>
         /// Handler for /trait meleelevel command.
@@ -183,20 +149,12 @@ namespace SeraphLeveling
         /// Handler for /trait meleemax command.
         /// Gets or sets the maximum melee damage bonus percent.
         /// </summary>
-        private TextCommandResult OnTraitMeleeMaxCommand(TextCommandCallingArgs args)
-        {
-            int? newValue = OptInt(args, 0);
-
-            if (newValue.HasValue)
+        private TextCommandResult OnTraitMeleeMaxCommand(TextCommandCallingArgs args) => ShowOrSetConfig(args, 1, "Max melee damage percent must be at least 1",
+            v => MaxMeleeDamagePercent = v,
+            () => $"Max melee damage bonus set to +{MaxMeleeDamagePercent}%. All player bonuses recalculated.",
+            () => $"Current max melee damage bonus: +{MaxMeleeDamagePercent}%",
+            afterSet: () =>
             {
-                if (newValue.Value < 1)
-                {
-                    return TextCommandResult.Error("Max melee damage percent must be at least 1");
-                }
-
-                MaxMeleeDamagePercent = newValue.Value;
-                pendingConfigSave = true;
-
                 // Recalculate and reapply bonuses for all online players
                 foreach (IServerPlayer player in ServerApi.World.AllOnlinePlayers)
                 {
@@ -205,14 +163,7 @@ namespace SeraphLeveling
                     var progress = MeleeProgress.GetOrAdd(playerUid, _ => new MeleeProgressData());
                     ApplyMeleeBonusStatic(player, progress.TotalCredits);
                 }
-
-                return TextCommandResult.Success($"Max melee damage bonus set to +{MaxMeleeDamagePercent}%. All player bonuses recalculated.");
-            }
-            else
-            {
-                return TextCommandResult.Success($"Current max melee damage bonus: +{MaxMeleeDamagePercent}%");
-            }
-        }
+            });
 
         /// <summary>
         /// Calculate the melee damage bonus as an integer percentage (0 to 150).

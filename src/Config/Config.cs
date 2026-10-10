@@ -71,7 +71,7 @@ namespace SeraphLeveling
         {
             if (autoSaveTimerId != 0)
             {
-                try { api.Event.UnregisterGameTickListener(autoSaveTimerId); } catch { }
+                try { api.Event.UnregisterGameTickListener(autoSaveTimerId); } catch (Exception ex) { SeraphLevelingModSystem.LogFailureOnce("removing an old auto-save timer", ex); }
                 autoSaveTimerId = 0;
             }
         }

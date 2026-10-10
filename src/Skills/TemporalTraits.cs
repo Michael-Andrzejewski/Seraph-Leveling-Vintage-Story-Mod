@@ -130,7 +130,7 @@ namespace SeraphLeveling
             {
                 if (onlinePlayer is IServerPlayer sp)
                 {
-                    try { serverSoundChannel?.SendPacket(msg, sp); } catch { }
+                    try { serverSoundChannel?.SendPacket(msg, sp); } catch (Exception ex) { SeraphLevelingModSystem.LogFailureOnce("sending the feature settings to a player", ex); }
                 }
             }
         }
@@ -953,7 +953,7 @@ namespace SeraphLeveling
                     byEntity.Attributes.SetFloat("aimingAccuracy", floor);
                 }
             }
-            catch { }
+            catch (Exception ex) { SeraphLevelingModSystem.LogFailureOnce("the ranged aim-assist accuracy floor", ex); }
         }
 
         private static void LogDraw(EntityAgent byEntity, string phase, float before, float after)
@@ -972,7 +972,7 @@ namespace SeraphLeveling
                     $"maxRed%={SeraphLevelingModSystem.RangedDrawSpeedMaxReductionPercent} aimAssist={SeraphLevelingModSystem.RangedAimAssistEnabled} " +
                     $"aimingAccuracy={acc:F3} secs {before:F3}->{after:F3}");
             }
-            catch { }
+            catch (Exception ex) { SeraphLevelingModSystem.LogFailureOnce("the bow draw debug log", ex); }
         }
 
         /// <summary>Mirror the server-side bow patch on the client so draw prediction matches.</summary>
@@ -1031,7 +1031,7 @@ namespace SeraphLeveling
                 float current = plr.Attributes.GetFloat("aimingAccuracy", 0f);
                 if (floor > current) plr.Attributes.SetFloat("aimingAccuracy", floor);
             }
-            catch { }
+            catch (Exception ex) { SeraphLevelingModSystem.LogFailureOnce("the client aim reticle accuracy floor", ex); }
         }
 
         public static void Apply(Harmony harmony, ICoreClientAPI api)
@@ -1107,7 +1107,7 @@ namespace SeraphLeveling
                 clone.AnimationSpeed *= mult;
                 animdata = clone;
             }
-            catch { }
+            catch (Exception ex) { SeraphLevelingModSystem.LogFailureOnce("the melee attack speed animation scaling", ex); }
         }
 
         private static float GetMeleeSpeedMultiplier(EntityAgent byEntity)
@@ -1174,7 +1174,7 @@ namespace SeraphLeveling
             {
                 byEntity?.Attributes?.SetBool(CreditedFlag, false);
             }
-            catch { }
+            catch (Exception ex) { SeraphLevelingModSystem.LogFailureOnce("resetting the gear-trick credit flag", ex); }
         }
 
         public static void OnHeldInteractStep_Postfix(float secondsUsed, EntityAgent byEntity)
@@ -1198,7 +1198,7 @@ namespace SeraphLeveling
 
                 SeraphLevelingModSystem.GrantRechargeFromGearTrick(player);
             }
-            catch { }
+            catch (Exception ex) { SeraphLevelingModSystem.LogFailureOnce("the temporal recharge gear trick", ex); }
         }
     }
 }

@@ -415,7 +415,7 @@ namespace SeraphLeveling
                         charDlg.RenderTabHandlers.RemoveAt(idx);
                     }
                 }
-                catch { }
+                catch (Exception ex) { SeraphLevelingModSystem.LogFailureOnce("removing the traits tab from the character dialog", ex); }
             }
 
             if (clientApi != null)
@@ -423,7 +423,7 @@ namespace SeraphLeveling
                 clientApi.Event.PlayerJoin -= OnPlayerJoin;
                 if (progressPollListenerId != 0)
                 {
-                    try { clientApi.Event.UnregisterGameTickListener(progressPollListenerId); } catch { }
+                    try { clientApi.Event.UnregisterGameTickListener(progressPollListenerId); } catch (Exception ex) { SeraphLevelingModSystem.LogFailureOnce("unregistering the progress page poll", ex); }
                     progressPollListenerId = 0;
                 }
             }

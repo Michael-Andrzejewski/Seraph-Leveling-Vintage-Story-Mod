@@ -23,6 +23,19 @@ namespace SeraphLeveling
         public static ICoreServerAPI ServerApi { get; private set; }
         public static SeraphLevelingModSystem Instance { get; private set; }
 
+        // Places that must not throw (cleanup, network sends to players who may have
+        // just left, Harmony patches that run every frame) catch everything. The
+        // first failure at each place is logged, later ones are not, so a broken
+        // path shows up in the log once instead of failing silently or flooding it.
+        private static readonly ConcurrentDictionary<string, bool> failuresLogged = new ConcurrentDictionary<string, bool>();
+
+        internal static void LogFailureOnce(string where, Exception ex)
+        {
+            if (!failuresLogged.TryAdd(where, true)) return;
+            var logger = ServerApi?.Logger ?? CharacterSystemPatches.ClientApi?.Logger;
+            logger?.Warning($"[SeraphLeveling] Error in {where} (later errors here are not logged): {ex.GetType().Name}: {ex.Message}");
+        }
+
         // Disabled skills set for quick lookup (lowercase)
         public static HashSet<string> DisabledSkills = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
@@ -993,7 +1006,7 @@ namespace SeraphLeveling
 
             if (classChangeListeners.TryRemove(uid, out var oldListener))
             {
-                try { player.Entity.WatchedAttributes.UnregisterListener(oldListener); } catch { }
+                try { player.Entity.WatchedAttributes.UnregisterListener(oldListener); } catch (Exception ex) { SeraphLevelingModSystem.LogFailureOnce("replacing a class-change listener", ex); }
             }
 
             Action listener = () => OnCharacterClassChanged(player);
@@ -1052,7 +1065,7 @@ namespace SeraphLeveling
             TrackedItemDurabilities.TryRemove(playerUid, out _);
             if (classChangeListeners.TryRemove(playerUid, out var classListener))
             {
-                try { byPlayer.Entity?.WatchedAttributes.UnregisterListener(classListener); } catch { }
+                try { byPlayer.Entity?.WatchedAttributes.UnregisterListener(classListener); } catch (Exception ex) { SeraphLevelingModSystem.LogFailureOnce("removing a class-change listener on disconnect", ex); }
             }
 
             // No save here. SaveGame.StoreData only updates the game's in-memory
@@ -1087,7 +1100,7 @@ namespace SeraphLeveling
             // Sync the experimental feature settings to this client. Their bow/melee
             // patches also run client-side for prediction, and a dedicated server's
             // clients never see the server's config file.
-            try { serverSoundChannel?.SendPacket(BuildFeatureConfigMessage(), byPlayer); } catch { }
+            try { serverSoundChannel?.SendPacket(BuildFeatureConfigMessage(), byPlayer); } catch (Exception ex) { SeraphLevelingModSystem.LogFailureOnce("sending the feature settings to a joining player", ex); }
 
             // Initialize decay check day for this player (online-only decay)
             if (EnableSkillDecay)

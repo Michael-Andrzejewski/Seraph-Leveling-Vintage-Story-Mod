@@ -28,113 +28,26 @@ namespace SeraphLeveling
         /// <summary>
         /// Persist technical progress to world save data.
         /// </summary>
-        public static void PersistTechnicalProgress()
-        {
-            if (ServerApi == null) return;
-
-            lock (persistLock)
+        public static void PersistTechnicalProgress() => PersistTable(TechnicalProgress, TECHNICAL_PROGRESS_SAVE_KEY, "technical", 0x54, 0x45, 0x43, 1,
+            (writer, progress) =>
             {
-                // An empty dict is persisted too. Skipping it would leave the old
-                // blob in the save and resurrect wiped progress on the next load.
-                try
-                {
-                    var snapshot = TechnicalProgress.ToArray();
-                    byte[] data;
-                    using (var ms = new MemoryStream())
-                    {
-                        using (var writer = new BinaryWriter(ms))
-                        {
-                            writer.Write((byte)0x54); // 'T'
-                            writer.Write((byte)0x45); // 'E'
-                            writer.Write((byte)0x43); // 'C'
-                            writer.Write((byte)1);    // Version 1
-
-                            writer.Write(snapshot.Length);
-                            foreach (var playerKvp in snapshot)
-                            {
-                                writer.Write(playerKvp.Key);
-                                var progress = playerKvp.Value;
-                                writer.Write(progress.TranslocatorsRepaired);
-                                writer.Write(progress.IsUnlocked);
-                            }
-                        }
-                        data = ms.ToArray();
-                    }
-
-                    ServerApi.WorldManager.SaveGame.StoreData(TECHNICAL_PROGRESS_SAVE_KEY, data);
-                }
-                catch (Exception ex)
-                {
-                    ServerApi.Logger.Error($"[SeraphLeveling] Failed to persist technical progress: {ex.Message}");
-                }
-            }
-        }
+                writer.Write(progress.TranslocatorsRepaired);
+                writer.Write(progress.IsUnlocked);
+            });
 
         /// <summary>
         /// Load technical progress from world save data.
         /// </summary>
-        private void LoadTechnicalProgress()
-        {
-            TechnicalProgress.Clear();
-            try
+        private void LoadTechnicalProgress() => LoadTableRangeChecked(TechnicalProgress, TECHNICAL_PROGRESS_SAVE_KEY, "technical", 0x54, 0x45, 0x43, maxVersion: 1,
+            (reader, version) =>
             {
-                byte[] data = ServerApi.WorldManager.SaveGame.GetData(TECHNICAL_PROGRESS_SAVE_KEY);
-                if (data == null || data.Length == 0)
+                var progress = new TechnicalProgressData
                 {
-                    ServerApi.Logger.Debug("[SeraphLeveling] No technical progress data found");
-                    return;
-                }
-
-                using (var ms = new MemoryStream(data))
-                {
-                    using (var reader = new BinaryReader(ms))
-                    {
-                        byte magic1 = reader.ReadByte();
-                        byte magic2 = reader.ReadByte();
-                        byte magic3 = reader.ReadByte();
-                        byte version = reader.ReadByte();
-
-                        if (magic1 != 0x54 || magic2 != 0x45 || magic3 != 0x43)
-                        {
-                            ServerApi.Logger.Warning("[SeraphLeveling] Invalid technical progress magic bytes");
-                            return;
-                        }
-
-                        if (version < 1 || version > 1)
-                        {
-                            ServerApi.Logger.Warning($"[SeraphLeveling] Unknown technical save format version {version}; not loading");
-                            return;
-                        }
-
-                        int playerCount = reader.ReadInt32();
-                        for (int i = 0; i < playerCount; i++)
-                        {
-                            try
-                            {
-                                string playerUid = reader.ReadString();
-                                var progress = new TechnicalProgressData
-                                {
-                                    TranslocatorsRepaired = reader.ReadInt32(),
-                                    IsUnlocked = reader.ReadBoolean()
-                                };
-                                TechnicalProgress[playerUid] = progress;
-                            }
-                            catch (Exception innerEx)
-                            {
-                                ServerApi.Logger.Warning($"[SeraphLeveling] Skipping corrupt player entry {i+1}/{playerCount} in technical data: {innerEx.Message}");
-                                break;
-                            }
-                        }
-                    }
-                }
-
-                ServerApi.Logger.Notification($"[SeraphLeveling] Loaded technical progress for {TechnicalProgress.Count} players");
-            }
-            catch (Exception ex)
-            {
-                ServerApi.Logger.Error($"[SeraphLeveling] Failed to load technical progress: {ex.Message}");
-            }
-        }
+                    TranslocatorsRepaired = reader.ReadInt32(),
+                    IsUnlocked = reader.ReadBoolean()
+                };
+                return progress;
+            });
 
         // =========================================================================
         // HARDY HEALTH TRAIT PERSISTENCE
@@ -143,111 +56,24 @@ namespace SeraphLeveling
         /// <summary>
         /// Persist hardy health progress to world save data.
         /// </summary>
-        public static void PersistHardyHealthProgress()
-        {
-            if (ServerApi == null) return;
-
-            lock (persistLock)
+        public static void PersistHardyHealthProgress() => PersistTable(HardyHealthProgress, HARDY_HEALTH_PROGRESS_SAVE_KEY, "hardy health", 0x48, 0x44, 0x48, 1,
+            (writer, progress) =>
             {
-                // An empty dict is persisted too. Skipping it would leave the old
-                // blob in the save and resurrect wiped progress on the next load.
-                try
-                {
-                    var snapshot = HardyHealthProgress.ToArray();
-                    byte[] data;
-                    using (var ms = new MemoryStream())
-                    {
-                        using (var writer = new BinaryWriter(ms))
-                        {
-                            writer.Write((byte)0x48); // 'H'
-                            writer.Write((byte)0x44); // 'D'
-                            writer.Write((byte)0x48); // 'H'
-                            writer.Write((byte)1);    // Version 1
-
-                            writer.Write(snapshot.Length);
-                            foreach (var playerKvp in snapshot)
-                            {
-                                writer.Write(playerKvp.Key);
-                                var progress = playerKvp.Value;
-                                writer.Write(progress.IsUnlocked);
-                            }
-                        }
-                        data = ms.ToArray();
-                    }
-
-                    ServerApi.WorldManager.SaveGame.StoreData(HARDY_HEALTH_PROGRESS_SAVE_KEY, data);
-                }
-                catch (Exception ex)
-                {
-                    ServerApi.Logger.Error($"[SeraphLeveling] Failed to persist hardy health progress: {ex.Message}");
-                }
-            }
-        }
+                writer.Write(progress.IsUnlocked);
+            });
 
         /// <summary>
         /// Load hardy health progress from world save data.
         /// </summary>
-        private void LoadHardyHealthProgress()
-        {
-            HardyHealthProgress.Clear();
-            try
+        private void LoadHardyHealthProgress() => LoadTableRangeChecked(HardyHealthProgress, HARDY_HEALTH_PROGRESS_SAVE_KEY, "hardy health", 0x48, 0x44, 0x48, maxVersion: 1,
+            (reader, version) =>
             {
-                byte[] data = ServerApi.WorldManager.SaveGame.GetData(HARDY_HEALTH_PROGRESS_SAVE_KEY);
-                if (data == null || data.Length == 0)
+                var progress = new HardyHealthProgressData
                 {
-                    ServerApi.Logger.Debug("[SeraphLeveling] No hardy health progress data found");
-                    return;
-                }
-
-                using (var ms = new MemoryStream(data))
-                {
-                    using (var reader = new BinaryReader(ms))
-                    {
-                        byte magic1 = reader.ReadByte();
-                        byte magic2 = reader.ReadByte();
-                        byte magic3 = reader.ReadByte();
-                        byte version = reader.ReadByte();
-
-                        if (magic1 != 0x48 || magic2 != 0x44 || magic3 != 0x48)
-                        {
-                            ServerApi.Logger.Warning("[SeraphLeveling] Invalid hardy health progress magic bytes");
-                            return;
-                        }
-
-                        if (version < 1 || version > 1)
-                        {
-                            ServerApi.Logger.Warning($"[SeraphLeveling] Unknown hardy health save format version {version}; not loading");
-                            return;
-                        }
-
-                        int playerCount = reader.ReadInt32();
-                        for (int i = 0; i < playerCount; i++)
-                        {
-                            try
-                            {
-                                string playerUid = reader.ReadString();
-                                var progress = new HardyHealthProgressData
-                                {
-                                    IsUnlocked = reader.ReadBoolean()
-                                };
-                                HardyHealthProgress[playerUid] = progress;
-                            }
-                            catch (Exception innerEx)
-                            {
-                                ServerApi.Logger.Warning($"[SeraphLeveling] Skipping corrupt player entry {i+1}/{playerCount} in hardy health data: {innerEx.Message}");
-                                break;
-                            }
-                        }
-                    }
-                }
-
-                ServerApi.Logger.Notification($"[SeraphLeveling] Loaded hardy health progress for {HardyHealthProgress.Count} players");
-            }
-            catch (Exception ex)
-            {
-                ServerApi.Logger.Error($"[SeraphLeveling] Failed to load hardy health progress: {ex.Message}");
-            }
-        }
+                    IsUnlocked = reader.ReadBoolean()
+                };
+                return progress;
+            });
 
         // =========================================================================
         // BOWYER TRAIT PERSISTENCE
@@ -256,114 +82,26 @@ namespace SeraphLeveling
         /// <summary>
         /// Persist bowyer progress to world save data.
         /// </summary>
-        public static void PersistBowyerProgress()
-        {
-            if (ServerApi == null) return;
-
-            lock (persistLock)
+        public static void PersistBowyerProgress() => PersistTable(BowyerProgress, BOWYER_PROGRESS_SAVE_KEY, "bowyer", 0x42, 0x57, 0x59, 1,
+            (writer, progress) =>
             {
-                // An empty dict is persisted too. Skipping it would leave the old
-                // blob in the save and resurrect wiped progress on the next load.
-                try
-                {
-                    var snapshot = BowyerProgress.ToArray();
-                    byte[] data;
-                    using (var ms = new MemoryStream())
-                    {
-                        using (var writer = new BinaryWriter(ms))
-                        {
-                            writer.Write((byte)0x42); // 'B'
-                            writer.Write((byte)0x57); // 'W'
-                            writer.Write((byte)0x59); // 'Y'
-                            writer.Write((byte)1);    // Version 1
-
-                            writer.Write(snapshot.Length);
-                            foreach (var playerKvp in snapshot)
-                            {
-                                writer.Write(playerKvp.Key);
-                                var progress = playerKvp.Value;
-                                writer.Write(progress.TotalBowDamage);
-                                writer.Write(progress.IsUnlocked);
-                            }
-                        }
-                        data = ms.ToArray();
-                    }
-
-                    ServerApi.WorldManager.SaveGame.StoreData(BOWYER_PROGRESS_SAVE_KEY, data);
-                }
-                catch (Exception ex)
-                {
-                    ServerApi.Logger.Error($"[SeraphLeveling] Failed to persist bowyer progress: {ex.Message}");
-                }
-            }
-        }
+                writer.Write(progress.TotalBowDamage);
+                writer.Write(progress.IsUnlocked);
+            });
 
         /// <summary>
         /// Load bowyer progress from world save data.
         /// </summary>
-        private void LoadBowyerProgress()
-        {
-            BowyerProgress.Clear();
-
-            try
+        private void LoadBowyerProgress() => LoadTableRangeChecked(BowyerProgress, BOWYER_PROGRESS_SAVE_KEY, "bowyer", 0x42, 0x57, 0x59, maxVersion: 1,
+            (reader, version) =>
             {
-                byte[] data = ServerApi.WorldManager.SaveGame.GetData(BOWYER_PROGRESS_SAVE_KEY);
-                if (data == null || data.Length == 0)
+                var progress = new BowyerProgressData
                 {
-                    ServerApi.Logger.Debug("[SeraphLeveling] No bowyer progress data found");
-                    return;
-                }
-
-                using (var ms = new MemoryStream(data))
-                {
-                    using (var reader = new BinaryReader(ms))
-                    {
-                        byte magic1 = reader.ReadByte();
-                        byte magic2 = reader.ReadByte();
-                        byte magic3 = reader.ReadByte();
-                        byte version = reader.ReadByte();
-
-                        if (magic1 != 0x42 || magic2 != 0x57 || magic3 != 0x59)
-                        {
-                            ServerApi.Logger.Warning("[SeraphLeveling] Invalid bowyer progress magic bytes");
-                            return;
-                        }
-
-                        if (version < 1 || version > 1)
-                        {
-                            ServerApi.Logger.Warning($"[SeraphLeveling] Unknown bowyer save format version {version}; not loading");
-                            return;
-                        }
-
-                        int playerCount = reader.ReadInt32();
-                        for (int i = 0; i < playerCount; i++)
-                        {
-                            try
-                            {
-                                string playerUid = reader.ReadString();
-                                var progress = new BowyerProgressData
-                                {
-                                    TotalBowDamage = reader.ReadSingle(),
-                                    IsUnlocked = reader.ReadBoolean()
-                                };
-                                BowyerProgress[playerUid] = progress;
-                            }
-                            catch (Exception innerEx)
-                            {
-                                ServerApi.Logger.Warning($"[SeraphLeveling] Skipping corrupt player entry {i+1}/{playerCount} in bowyer data: {innerEx.Message}");
-                                break;
-                            }
-                        }
-                    }
-                }
-
-                ServerApi.Logger.Notification($"[SeraphLeveling] Loaded bowyer progress for {BowyerProgress.Count} players");
-            }
-            catch (Exception ex)
-            {
-                ServerApi.Logger.Error($"[SeraphLeveling] Failed to load bowyer progress: {ex.Message}");
-            }
-        }
+                    TotalBowDamage = reader.ReadSingle(),
+                    IsUnlocked = reader.ReadBoolean()
+                };
+                return progress;
+            });
 
         // =========================================================================
         // IMPROVISER TRAIT PERSISTENCE
@@ -372,114 +110,26 @@ namespace SeraphLeveling
         /// <summary>
         /// Persist improviser progress to world save data.
         /// </summary>
-        public static void PersistImproviserProgress()
-        {
-            if (ServerApi == null) return;
-
-            lock (persistLock)
+        public static void PersistImproviserProgress() => PersistTable(ImproviserProgress, IMPROVISER_PROGRESS_SAVE_KEY, "improviser", 0x49, 0x4D, 0x50, 1,
+            (writer, progress) =>
             {
-                // An empty dict is persisted too. Skipping it would leave the old
-                // blob in the save and resurrect wiped progress on the next load.
-                try
-                {
-                    var snapshot = ImproviserProgress.ToArray();
-                    byte[] data;
-                    using (var ms = new MemoryStream())
-                    {
-                        using (var writer = new BinaryWriter(ms))
-                        {
-                            writer.Write((byte)0x49); // 'I'
-                            writer.Write((byte)0x4D); // 'M'
-                            writer.Write((byte)0x50); // 'P'
-                            writer.Write((byte)1);    // Version 1
-
-                            writer.Write(snapshot.Length);
-                            foreach (var playerKvp in snapshot)
-                            {
-                                writer.Write(playerKvp.Key);
-                                var progress = playerKvp.Value;
-                                writer.Write(progress.TotalRockDamage);
-                                writer.Write(progress.IsUnlocked);
-                            }
-                        }
-                        data = ms.ToArray();
-                    }
-
-                    ServerApi.WorldManager.SaveGame.StoreData(IMPROVISER_PROGRESS_SAVE_KEY, data);
-                }
-                catch (Exception ex)
-                {
-                    ServerApi.Logger.Error($"[SeraphLeveling] Failed to persist improviser progress: {ex.Message}");
-                }
-            }
-        }
+                writer.Write(progress.TotalRockDamage);
+                writer.Write(progress.IsUnlocked);
+            });
 
         /// <summary>
         /// Load improviser progress from world save data.
         /// </summary>
-        private void LoadImproviserProgress()
-        {
-            ImproviserProgress.Clear();
-
-            try
+        private void LoadImproviserProgress() => LoadTableRangeChecked(ImproviserProgress, IMPROVISER_PROGRESS_SAVE_KEY, "improviser", 0x49, 0x4D, 0x50, maxVersion: 1,
+            (reader, version) =>
             {
-                byte[] data = ServerApi.WorldManager.SaveGame.GetData(IMPROVISER_PROGRESS_SAVE_KEY);
-                if (data == null || data.Length == 0)
+                var progress = new ImproviserProgressData
                 {
-                    ServerApi.Logger.Debug("[SeraphLeveling] No improviser progress data found");
-                    return;
-                }
-
-                using (var ms = new MemoryStream(data))
-                {
-                    using (var reader = new BinaryReader(ms))
-                    {
-                        byte magic1 = reader.ReadByte();
-                        byte magic2 = reader.ReadByte();
-                        byte magic3 = reader.ReadByte();
-                        byte version = reader.ReadByte();
-
-                        if (magic1 != 0x49 || magic2 != 0x4D || magic3 != 0x50)
-                        {
-                            ServerApi.Logger.Warning("[SeraphLeveling] Invalid improviser progress magic bytes");
-                            return;
-                        }
-
-                        if (version < 1 || version > 1)
-                        {
-                            ServerApi.Logger.Warning($"[SeraphLeveling] Unknown improviser save format version {version}; not loading");
-                            return;
-                        }
-
-                        int playerCount = reader.ReadInt32();
-                        for (int i = 0; i < playerCount; i++)
-                        {
-                            try
-                            {
-                                string playerUid = reader.ReadString();
-                                var progress = new ImproviserProgressData
-                                {
-                                    TotalRockDamage = reader.ReadSingle(),
-                                    IsUnlocked = reader.ReadBoolean()
-                                };
-                                ImproviserProgress[playerUid] = progress;
-                            }
-                            catch (Exception innerEx)
-                            {
-                                ServerApi.Logger.Warning($"[SeraphLeveling] Skipping corrupt player entry {i+1}/{playerCount} in improviser data: {innerEx.Message}");
-                                break;
-                            }
-                        }
-                    }
-                }
-
-                ServerApi.Logger.Notification($"[SeraphLeveling] Loaded improviser progress for {ImproviserProgress.Count} players");
-            }
-            catch (Exception ex)
-            {
-                ServerApi.Logger.Error($"[SeraphLeveling] Failed to load improviser progress: {ex.Message}");
-            }
-        }
+                    TotalRockDamage = reader.ReadSingle(),
+                    IsUnlocked = reader.ReadBoolean()
+                };
+                return progress;
+            });
 
         // =========================================================================
         // TINKERER TRAIT PERSISTENCE
@@ -488,112 +138,24 @@ namespace SeraphLeveling
         /// <summary>
         /// Persist tinkerer progress to world save data.
         /// </summary>
-        public static void PersistTinkererProgress()
-        {
-            if (ServerApi == null) return;
-
-            lock (persistLock)
+        public static void PersistTinkererProgress() => PersistTable(TinkererProgress, TINKERER_PROGRESS_SAVE_KEY, "tinkerer", 0x54, 0x4E, 0x4B, 1,
+            (writer, progress) =>
             {
-                // An empty dict is persisted too. Skipping it would leave the old
-                // blob in the save and resurrect wiped progress on the next load.
-                try
-                {
-                    var snapshot = TinkererProgress.ToArray();
-                    byte[] data;
-                    using (var ms = new MemoryStream())
-                    {
-                        using (var writer = new BinaryWriter(ms))
-                        {
-                            writer.Write((byte)0x54); // 'T'
-                            writer.Write((byte)0x4E); // 'N'
-                            writer.Write((byte)0x4B); // 'K'
-                            writer.Write((byte)1);    // Version 1
-
-                            writer.Write(snapshot.Length);
-                            foreach (var playerKvp in snapshot)
-                            {
-                                writer.Write(playerKvp.Key);
-                                var progress = playerKvp.Value;
-                                writer.Write(progress.IsUnlocked);
-                            }
-                        }
-                        data = ms.ToArray();
-                    }
-
-                    ServerApi.WorldManager.SaveGame.StoreData(TINKERER_PROGRESS_SAVE_KEY, data);
-                }
-                catch (Exception ex)
-                {
-                    ServerApi.Logger.Error($"[SeraphLeveling] Failed to persist tinkerer progress: {ex.Message}");
-                }
-            }
-        }
+                writer.Write(progress.IsUnlocked);
+            });
 
         /// <summary>
         /// Load tinkerer progress from world save data.
         /// </summary>
-        private void LoadTinkererProgress()
-        {
-            TinkererProgress.Clear();
-
-            try
+        private void LoadTinkererProgress() => LoadTableRangeChecked(TinkererProgress, TINKERER_PROGRESS_SAVE_KEY, "tinkerer", 0x54, 0x4E, 0x4B, maxVersion: 1,
+            (reader, version) =>
             {
-                byte[] data = ServerApi.WorldManager.SaveGame.GetData(TINKERER_PROGRESS_SAVE_KEY);
-                if (data == null || data.Length == 0)
+                var progress = new TinkererProgressData
                 {
-                    ServerApi.Logger.Debug("[SeraphLeveling] No tinkerer progress data found");
-                    return;
-                }
-
-                using (var ms = new MemoryStream(data))
-                {
-                    using (var reader = new BinaryReader(ms))
-                    {
-                        byte magic1 = reader.ReadByte();
-                        byte magic2 = reader.ReadByte();
-                        byte magic3 = reader.ReadByte();
-                        byte version = reader.ReadByte();
-
-                        if (magic1 != 0x54 || magic2 != 0x4E || magic3 != 0x4B)
-                        {
-                            ServerApi.Logger.Warning("[SeraphLeveling] Invalid tinkerer progress magic bytes");
-                            return;
-                        }
-
-                        if (version < 1 || version > 1)
-                        {
-                            ServerApi.Logger.Warning($"[SeraphLeveling] Unknown tinkerer save format version {version}; not loading");
-                            return;
-                        }
-
-                        int playerCount = reader.ReadInt32();
-                        for (int i = 0; i < playerCount; i++)
-                        {
-                            try
-                            {
-                                string playerUid = reader.ReadString();
-                                var progress = new TinkererProgressData
-                                {
-                                    IsUnlocked = reader.ReadBoolean()
-                                };
-                                TinkererProgress[playerUid] = progress;
-                            }
-                            catch (Exception innerEx)
-                            {
-                                ServerApi.Logger.Warning($"[SeraphLeveling] Skipping corrupt player entry {i+1}/{playerCount} in tinkerer data: {innerEx.Message}");
-                                break;
-                            }
-                        }
-                    }
-                }
-
-                ServerApi.Logger.Notification($"[SeraphLeveling] Loaded tinkerer progress for {TinkererProgress.Count} players");
-            }
-            catch (Exception ex)
-            {
-                ServerApi.Logger.Error($"[SeraphLeveling] Failed to load tinkerer progress: {ex.Message}");
-            }
-        }
+                    IsUnlocked = reader.ReadBoolean()
+                };
+                return progress;
+            });
 
         // =========================================================================
         // MERCILESS TRAIT PERSISTENCE
@@ -602,112 +164,24 @@ namespace SeraphLeveling
         /// <summary>
         /// Persist merciless progress to world save data.
         /// </summary>
-        public static void PersistMercilessProgress()
-        {
-            if (ServerApi == null) return;
-
-            lock (persistLock)
+        public static void PersistMercilessProgress() => PersistTable(MercilessProgress, MERCILESS_PROGRESS_SAVE_KEY, "merciless", 0x4D, 0x52, 0x43, 1,
+            (writer, progress) =>
             {
-                // An empty dict is persisted too. Skipping it would leave the old
-                // blob in the save and resurrect wiped progress on the next load.
-                try
-                {
-                    var snapshot = MercilessProgress.ToArray();
-                    byte[] data;
-                    using (var ms = new MemoryStream())
-                    {
-                        using (var writer = new BinaryWriter(ms))
-                        {
-                            writer.Write((byte)0x4D); // 'M'
-                            writer.Write((byte)0x52); // 'R'
-                            writer.Write((byte)0x43); // 'C'
-                            writer.Write((byte)1);    // Version 1
-
-                            writer.Write(snapshot.Length);
-                            foreach (var playerKvp in snapshot)
-                            {
-                                writer.Write(playerKvp.Key);
-                                var progress = playerKvp.Value;
-                                writer.Write(progress.IsUnlocked);
-                            }
-                        }
-                        data = ms.ToArray();
-                    }
-
-                    ServerApi.WorldManager.SaveGame.StoreData(MERCILESS_PROGRESS_SAVE_KEY, data);
-                }
-                catch (Exception ex)
-                {
-                    ServerApi.Logger.Error($"[SeraphLeveling] Failed to persist merciless progress: {ex.Message}");
-                }
-            }
-        }
+                writer.Write(progress.IsUnlocked);
+            });
 
         /// <summary>
         /// Load merciless progress from world save data.
         /// </summary>
-        private void LoadMercilessProgress()
-        {
-            MercilessProgress.Clear();
-
-            try
+        private void LoadMercilessProgress() => LoadTableRangeChecked(MercilessProgress, MERCILESS_PROGRESS_SAVE_KEY, "merciless", 0x4D, 0x52, 0x43, maxVersion: 1,
+            (reader, version) =>
             {
-                byte[] data = ServerApi.WorldManager.SaveGame.GetData(MERCILESS_PROGRESS_SAVE_KEY);
-                if (data == null || data.Length == 0)
+                var progress = new MercilessProgressData
                 {
-                    ServerApi.Logger.Debug("[SeraphLeveling] No merciless progress data found");
-                    return;
-                }
-
-                using (var ms = new MemoryStream(data))
-                {
-                    using (var reader = new BinaryReader(ms))
-                    {
-                        byte magic1 = reader.ReadByte();
-                        byte magic2 = reader.ReadByte();
-                        byte magic3 = reader.ReadByte();
-                        byte version = reader.ReadByte();
-
-                        if (magic1 != 0x4D || magic2 != 0x52 || magic3 != 0x43)
-                        {
-                            ServerApi.Logger.Warning("[SeraphLeveling] Invalid merciless progress magic bytes");
-                            return;
-                        }
-
-                        if (version < 1 || version > 1)
-                        {
-                            ServerApi.Logger.Warning($"[SeraphLeveling] Unknown merciless save format version {version}; not loading");
-                            return;
-                        }
-
-                        int playerCount = reader.ReadInt32();
-                        for (int i = 0; i < playerCount; i++)
-                        {
-                            try
-                            {
-                                string playerUid = reader.ReadString();
-                                var progress = new MercilessProgressData
-                                {
-                                    IsUnlocked = reader.ReadBoolean()
-                                };
-                                MercilessProgress[playerUid] = progress;
-                            }
-                            catch (Exception innerEx)
-                            {
-                                ServerApi.Logger.Warning($"[SeraphLeveling] Skipping corrupt player entry {i+1}/{playerCount} in merciless data: {innerEx.Message}");
-                                break;
-                            }
-                        }
-                    }
-                }
-
-                ServerApi.Logger.Notification($"[SeraphLeveling] Loaded merciless progress for {MercilessProgress.Count} players");
-            }
-            catch (Exception ex)
-            {
-                ServerApi.Logger.Error($"[SeraphLeveling] Failed to load merciless progress: {ex.Message}");
-            }
-        }
+                    IsUnlocked = reader.ReadBoolean()
+                };
+                return progress;
+            });
 
         // =========================================================================
         // CLAUSTROPHOBIC REMOVAL TRAIT PERSISTENCE
@@ -716,111 +190,23 @@ namespace SeraphLeveling
         /// <summary>
         /// Persist claustrophobic removal progress to world save data.
         /// </summary>
-        public static void PersistClaustrophobicRemovalProgress()
-        {
-            if (ServerApi == null) return;
-
-            lock (persistLock)
+        public static void PersistClaustrophobicRemovalProgress() => PersistTable(ClaustrophobicRemovalProgress, CLAUSTROPHOBIC_REMOVAL_PROGRESS_SAVE_KEY, "claustrophobic removal", 0x43, 0x4C, 0x52, 1,
+            (writer, progress) =>
             {
-                // An empty dict is persisted too. Skipping it would leave the old
-                // blob in the save and resurrect wiped progress on the next load.
-                try
-                {
-                    var snapshot = ClaustrophobicRemovalProgress.ToArray();
-                    byte[] data;
-                    using (var ms = new MemoryStream())
-                    {
-                        using (var writer = new BinaryWriter(ms))
-                        {
-                            writer.Write((byte)0x43); // 'C'
-                            writer.Write((byte)0x4C); // 'L'
-                            writer.Write((byte)0x52); // 'R'
-                            writer.Write((byte)1);    // Version 1
-
-                            writer.Write(snapshot.Length);
-                            foreach (var playerKvp in snapshot)
-                            {
-                                writer.Write(playerKvp.Key);
-                                var progress = playerKvp.Value;
-                                writer.Write(progress.IsRemoved);
-                            }
-                        }
-                        data = ms.ToArray();
-                    }
-
-                    ServerApi.WorldManager.SaveGame.StoreData(CLAUSTROPHOBIC_REMOVAL_PROGRESS_SAVE_KEY, data);
-                }
-                catch (Exception ex)
-                {
-                    ServerApi.Logger.Error($"[SeraphLeveling] Failed to persist claustrophobic removal progress: {ex.Message}");
-                }
-            }
-        }
+                writer.Write(progress.IsRemoved);
+            });
 
         /// <summary>
         /// Load claustrophobic removal progress from world save data.
         /// </summary>
-        private void LoadClaustrophobicRemovalProgress()
-        {
-            ClaustrophobicRemovalProgress.Clear();
-
-            try
+        private void LoadClaustrophobicRemovalProgress() => LoadTableRangeChecked(ClaustrophobicRemovalProgress, CLAUSTROPHOBIC_REMOVAL_PROGRESS_SAVE_KEY, "claustrophobic removal", 0x43, 0x4C, 0x52, maxVersion: 1,
+            (reader, version) =>
             {
-                byte[] data = ServerApi.WorldManager.SaveGame.GetData(CLAUSTROPHOBIC_REMOVAL_PROGRESS_SAVE_KEY);
-                if (data == null || data.Length == 0)
+                var progress = new ClaustrophobicRemovalProgressData
                 {
-                    ServerApi.Logger.Debug("[SeraphLeveling] No claustrophobic removal progress data found");
-                    return;
-                }
-
-                using (var ms = new MemoryStream(data))
-                {
-                    using (var reader = new BinaryReader(ms))
-                    {
-                        byte magic1 = reader.ReadByte();
-                        byte magic2 = reader.ReadByte();
-                        byte magic3 = reader.ReadByte();
-                        byte version = reader.ReadByte();
-
-                        if (magic1 != 0x43 || magic2 != 0x4C || magic3 != 0x52)
-                        {
-                            ServerApi.Logger.Warning("[SeraphLeveling] Invalid claustrophobic removal progress magic bytes");
-                            return;
-                        }
-
-                        if (version < 1 || version > 1)
-                        {
-                            ServerApi.Logger.Warning($"[SeraphLeveling] Unknown claustrophobic removal save format version {version}; not loading");
-                            return;
-                        }
-
-                        int playerCount = reader.ReadInt32();
-                        for (int i = 0; i < playerCount; i++)
-                        {
-                            try
-                            {
-                                string playerUid = reader.ReadString();
-                                var progress = new ClaustrophobicRemovalProgressData
-                                {
-                                    IsRemoved = reader.ReadBoolean()
-                                };
-                                ClaustrophobicRemovalProgress[playerUid] = progress;
-                            }
-                            catch (Exception innerEx)
-                            {
-                                ServerApi.Logger.Warning($"[SeraphLeveling] Skipping corrupt player entry {i+1}/{playerCount} in claustrophobic removal data: {innerEx.Message}");
-                                break;
-                            }
-                        }
-                    }
-                }
-
-                ServerApi.Logger.Notification($"[SeraphLeveling] Loaded claustrophobic removal progress for {ClaustrophobicRemovalProgress.Count} players");
-            }
-            catch (Exception ex)
-            {
-                ServerApi.Logger.Error($"[SeraphLeveling] Failed to load claustrophobic removal progress: {ex.Message}");
-            }
-        }
+                    IsRemoved = reader.ReadBoolean()
+                };
+                return progress;
+            });
     }
 }

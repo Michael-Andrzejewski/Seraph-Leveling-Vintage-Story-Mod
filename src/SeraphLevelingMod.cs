@@ -2023,7 +2023,20 @@ namespace SeraphLeveling
         private static volatile bool pendingArmorProgressSave = false;
 
         // Tracking currently equipped armor for each player (for time tracking and equip detection)
-        private static ConcurrentDictionary<string, Dictionary<string, string>> playerEquippedArmor = new ConcurrentDictionary<string, Dictionary<string, string>>();
+        // Armour worn last armour tick, per player, indexed by character slot (null =
+        // no armour there). Updated in place so the tick allocates nothing.
+        private static ConcurrentDictionary<string, CollectibleObject[]> playerEquippedArmor = new ConcurrentDictionary<string, CollectibleObject[]>();
+
+        private static CollectibleObject[] EquippedArmorFor(string playerUid, int slots)
+        {
+            if (!playerEquippedArmor.TryGetValue(playerUid, out var arr) || arr.Length != slots)
+            {
+                var grown = new CollectibleObject[slots];
+                if (arr != null) Array.Copy(arr, grown, Math.Min(arr.Length, slots));
+                playerEquippedArmor[playerUid] = arr = grown;
+            }
+            return arr;
+        }
 
         // =========================================================================
         // CLOTHIER TRAIT - Tracks unique clothing worn to unlock sewing kit crafting
@@ -2095,7 +2108,12 @@ namespace SeraphLeveling
         // Durability tracking for repair detection - key is "playerUid_slotId", value is last known durability
         // Keyed by player, slot and item code; the value carries the item's own tracking id
         // so a fresh item of the same code swapped into the slot does not read as a repair.
-        private static ConcurrentDictionary<string, (long Id, int Durability)> TrackedItemDurabilities = new ConcurrentDictionary<string, (long, int)>();
+        // Mender grid-repair backup: per player, the durability last seen for each
+        // (character slot, item type), like the old "uid_slot_code" string keys but
+        // without building a string per slot per tick. Values are updated in place.
+        private sealed class TrackedDurability { public long Id; public int Durability; }
+        private static ConcurrentDictionary<string, Dictionary<(int, CollectibleObject), TrackedDurability>> TrackedItemDurabilities =
+            new ConcurrentDictionary<string, Dictionary<(int, CollectibleObject), TrackedDurability>>();
         private const string TRACK_ID_ATTR = "sitTrackId";
         private static long nextTrackId = 1;
 
@@ -6588,16 +6606,15 @@ namespace SeraphLeveling
 
             string playerUid = player.PlayerUID;
 
-            // Get the player's currently equipped armor
-            var equippedArmor = new Dictionary<string, string>();
-
             // Check armor slots (head, body, legs) using character inventory
             var characterInventory = player.InventoryManager?.GetOwnInventory(GlobalConstants.characterInvClassName);
+            var equippedArmor = new CollectibleObject[characterInventory?.Count ?? 0];
             if (characterInventory != null)
             {
                 // Armor slots are typically: 12 = head, 13 = body, 14 = legs (may vary)
-                foreach (var slot in characterInventory)
+                for (int slotIndex = 0; slotIndex < characterInventory.Count; slotIndex++)
                 {
+                    var slot = characterInventory[slotIndex];
                     if (slot?.Itemstack?.Collectible != null)
                     {
                         var gear = GearInfoOf(slot.Itemstack.Collectible);
@@ -6605,8 +6622,7 @@ namespace SeraphLeveling
                         string armorType = gear?.ArmorType;
                         if (armorType != null)
                         {
-                            string slotId = slot.Inventory?.InventoryID + "_" + slot.Inventory?.GetSlotId(slot);
-                            equippedArmor[slotId] = itemCode;
+                            equippedArmor[slotIndex] = slot.Itemstack.Collectible;
 
                             // Check for first-time equip bonus
                             var armorProgress = ArmorProgress.GetOrAdd(playerUid, _ => new ArmorProgressData());
@@ -6659,46 +6675,33 @@ namespace SeraphLeveling
 
                 string playerUid = player.PlayerUID;
                 var armorProgress = ArmorProgress.GetOrAdd(playerUid, _ => new ArmorProgressData());
-                var currentArmor = new Dictionary<string, string>();
 
                 // Get the player's currently equipped armor using character inventory
                 var characterInventory = player.InventoryManager?.GetOwnInventory(GlobalConstants.characterInvClassName);
-                if (characterInventory != null)
-                {
-                    foreach (var slot in characterInventory)
-                    {
-                        if (slot?.Itemstack?.Collectible != null)
-                        {
-                            var gear = GearInfoOf(slot.Itemstack.Collectible);
-                            string itemCode = gear?.Code;
-                            string armorType = gear?.ArmorType;
-                            if (armorType != null)
-                            {
-                                string slotId = slot.Inventory?.InventoryID + "_" + slot.Inventory?.GetSlotId(slot);
-                                currentArmor[slotId] = itemCode;
-                            }
-                        }
-                    }
-                }
+                if (characterInventory == null) { playerEquippedArmor.TryRemove(playerUid, out _); continue; }
 
-                // Get previous armor state
-                var previousArmor = playerEquippedArmor.GetOrAdd(playerUid, _ => new Dictionary<string, string>());
+                // Armour per slot last tick; compared by item type, written back in place
+                var previousArmor = EquippedArmorFor(playerUid, characterInventory.Count);
 
                 // Check for newly equipped armor (first-equip bonus) and track time worn
-                foreach (var kvp in currentArmor)
+                for (int slotIndex = 0; slotIndex < characterInventory.Count; slotIndex++)
                 {
-                    string slotId = kvp.Key;
-                    string itemCode = kvp.Value;
+                    var collectible = characterInventory[slotIndex]?.Itemstack?.Collectible;
+                    var gear = collectible != null ? GearInfoOf(collectible) : null;
+                    if (gear?.ArmorType == null) { previousArmor[slotIndex] = null; continue; }
+                    string itemCode = gear.Code;
                     var pieceProgress = armorProgress.GetArmorProgress(itemCode);
+                    bool newInSlot = !ReferenceEquals(previousArmor[slotIndex], collectible);
+                    previousArmor[slotIndex] = collectible;
 
                     // Check if this is new armor in this slot
-                    if (!previousArmor.TryGetValue(slotId, out string prevArmor) || prevArmor != itemCode)
+                    if (newInSlot)
                     {
                         // New armor equipped - check for first-time bonus
                         if (!pieceProgress.HasBeenEquipped)
                         {
                             pieceProgress.HasBeenEquipped = true;
-                            string armorType = GetArmorType(itemCode);
+                            string armorType = gear.ArmorType;
 
                             // Grant durability bonus
                             int firstEquipBonus = GetFirstEquipBonus(armorType);
@@ -6801,8 +6804,6 @@ namespace SeraphLeveling
                     }
                 }
 
-                // Update the equipped armor tracking
-                playerEquippedArmor[playerUid] = currentArmor;
             }
         }
 
@@ -7311,8 +7312,7 @@ namespace SeraphLeveling
             LastSentProgressReport.TryRemove(playerUid, out _);
             ProgressReportDirty.TryRemove(playerUid, out _);
             ProgressPageLastRequestMs.TryRemove(playerUid, out _);
-            foreach (var key in TrackedItemDurabilities.Keys.Where(k => k.StartsWith(playerUid + "_", StringComparison.Ordinal)).ToList())
-                TrackedItemDurabilities.TryRemove(key, out _);
+            TrackedItemDurabilities.TryRemove(playerUid, out _);
             if (classChangeListeners.TryRemove(playerUid, out var classListener))
             {
                 try { byPlayer.Entity?.WatchedAttributes.UnregisterListener(classListener); } catch { }
@@ -14317,11 +14317,11 @@ namespace SeraphLeveling
                 // =============================================
                 var characterInventory = player.InventoryManager?.GetOwnInventory(GlobalConstants.characterInvClassName);
                 if (characterInventory == null) continue;
+                var trackedForPlayer = TrackedItemDurabilities.GetOrAdd(playerUid, _ => new Dictionary<(int, CollectibleObject), TrackedDurability>());
 
-                int slotIndex = 0;
-                foreach (var slot in characterInventory)
+                for (int slotIndex = 0; slotIndex < characterInventory.Count; slotIndex++)
                 {
-                    slotIndex++;
+                    var slot = characterInventory[slotIndex];
                     if (slot?.Itemstack?.Collectible == null) continue;
 
                     var gear = GearInfoOf(slot.Itemstack.Collectible);
@@ -14338,8 +14338,8 @@ namespace SeraphLeveling
                     // Skip items without durability
                     if (maxDurability <= 0) continue;
 
-                    // Create a tracking key for this item in this slot
-                    string trackingKey = $"{playerUid}_{slotIndex}_{itemCode}";
+                    // This item type in this slot
+                    var trackingKey = (slotIndex, slot.Itemstack.Collectible);
 
                     // Identify THIS item. A fresh item of the same code swapped into the
                     // slot starts at full durability, which used to look like a repair.
@@ -14352,7 +14352,8 @@ namespace SeraphLeveling
                     }
 
                     // Check if durability increased (repair happened) on the same item
-                    if (TrackedItemDurabilities.TryGetValue(trackingKey, out var tracked) && tracked.Id == trackId)
+                    trackedForPlayer.TryGetValue(trackingKey, out var tracked);
+                    if (tracked != null && tracked.Id == trackId)
                     {
                         int previousDurability = tracked.Durability;
                         if (currentDurability > previousDurability)
@@ -14372,8 +14373,10 @@ namespace SeraphLeveling
                         }
                     }
 
-                    // Update tracked durability
-                    TrackedItemDurabilities[trackingKey] = (trackId, currentDurability);
+                    // Update tracked durability (in place after the first sighting)
+                    if (tracked == null) trackedForPlayer[trackingKey] = tracked = new TrackedDurability();
+                    tracked.Id = trackId;
+                    tracked.Durability = currentDurability;
                 }
             }
         }

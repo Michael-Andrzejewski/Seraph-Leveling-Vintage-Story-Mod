@@ -1717,10 +1717,11 @@ namespace SeraphLeveling
     }
 
     /// <summary>
-    /// Simple struct for tracking 2D positions without allocating Vec3d objects.
-    /// Used in walking/sneaking tick handlers to avoid GC pressure.
+    /// Last known horizontal position of a player for the walking and sneaking
+    /// ticks. A class, updated in place: a struct stored in a ConcurrentDictionary
+    /// allocates a new dictionary node on every write.
     /// </summary>
-    public struct Position2D
+    public sealed class Position2D
     {
         public double X;
         public double Z;
@@ -1896,6 +1897,22 @@ namespace SeraphLeveling
 
         // Flag to indicate pending walking progress save
         private static volatile bool pendingWalkingProgressSave = false;
+
+        // Online players for the timers. AllOnlinePlayers runs a LINQ query and
+        // allocates a new array on every call, and the timers ask several times a
+        // second; this list changes only on join and leave.
+        private static IServerPlayer[] onlinePlayers = new IServerPlayer[0];
+        internal static IServerPlayer[] OnlinePlayers => onlinePlayers;
+
+        internal static void RefreshOnlinePlayers(IServerPlayer leaving = null)
+        {
+            var all = ServerApi?.World?.AllOnlinePlayers;
+            if (all == null) { onlinePlayers = new IServerPlayer[0]; return; }
+            var list = new List<IServerPlayer>(all.Length);
+            foreach (var p in all)
+                if (p is IServerPlayer sp && !ReferenceEquals(sp, leaving)) list.Add(sp);
+            onlinePlayers = list.ToArray();
+        }
 
         // Tracking last known positions for walking distance calculation (using Position2D to avoid Vec3d allocations)
         private static ConcurrentDictionary<string, Position2D> lastPlayerPositions = new ConcurrentDictionary<string, Position2D>();
@@ -2707,8 +2724,8 @@ namespace SeraphLeveling
             // when opened and once a second while open (ProgressReportRequestMessage).
             api.Event.RegisterGameTickListener(dt =>
             {
-                foreach (var p in api.World.AllOnlinePlayers)
-                    if (p is IServerPlayer sp && sp.Entity != null && ShouldPushUnasked(sp)) PushProgressReport(sp);
+                foreach (var sp in OnlinePlayers)
+                    if (sp.Entity != null && ShouldPushUnasked(sp)) PushProgressReport(sp);
             }, 15000);
             api.Event.RegisterGameTickListener(_ => FlushProgressReports(), 100);
 
@@ -3495,6 +3512,9 @@ namespace SeraphLeveling
 
             // Hook into player join to apply saved bonuses
             api.Event.PlayerJoin += OnPlayerJoin;
+            api.Event.PlayerJoin += _ => RefreshOnlinePlayers();
+            api.Event.PlayerNowPlaying += _ => RefreshOnlinePlayers();
+            api.Event.PlayerDisconnect += leaving => RefreshOnlinePlayers(leaving);
 
             // Hook into world save event to persist progress
             api.Event.GameWorldSave += OnGameWorldSave;
@@ -6632,7 +6652,7 @@ namespace SeraphLeveling
             // Skip armor progression if disabled
             if (IsSkillDisabled("armor")) return;
 
-            foreach (IServerPlayer player in ServerApi.World.AllOnlinePlayers)
+            foreach (IServerPlayer player in OnlinePlayers)
             {
                 if (!IsPlaying(player)) continue;
                 if (!player.Entity.Alive) continue;
@@ -7051,7 +7071,7 @@ namespace SeraphLeveling
             // Skip walking progression if disabled
             if (IsSkillDisabled("walking")) return;
 
-            foreach (IServerPlayer player in ServerApi.World.AllOnlinePlayers)
+            foreach (IServerPlayer player in OnlinePlayers)
             {
                 if (!IsPlaying(player)) continue;
 
@@ -7072,7 +7092,8 @@ namespace SeraphLeveling
                 float distance = (float)Math.Sqrt(dx * dx + dz * dz);
 
                 // Update last position (no allocation - struct assignment)
-                lastPlayerPositions[playerUid] = new Position2D(currentX, currentZ);
+                lastPos.X = currentX;
+                lastPos.Z = currentZ;
 
                 // Skip if no movement or teleportation (too far)
                 if (distance < 0.01f || distance > MAX_DISTANCE_PER_TICK) continue;
@@ -7137,7 +7158,7 @@ namespace SeraphLeveling
             // Skip hunger progression if disabled
             if (IsSkillDisabled("hunger")) return;
 
-            foreach (IServerPlayer player in ServerApi.World.AllOnlinePlayers)
+            foreach (IServerPlayer player in OnlinePlayers)
             {
                 if (!IsPlaying(player)) continue;
 
@@ -9333,6 +9354,7 @@ namespace SeraphLeveling
             playerEquippedClothing.Clear();
             TrackedItemDurabilities.Clear();
             GearInfoCache.Clear();   // holds the old world's item types
+            onlinePlayers = new IServerPlayer[0];
             SleepMountHours.Clear();
             classChangeListeners.Clear();
             pendingClassChangeReapply.Clear();
@@ -11200,13 +11222,12 @@ namespace SeraphLeveling
         private void OnDecayTick(float dt)
         {
             if (!EnableSkillDecay) return;
-            if (ServerApi?.World?.AllOnlinePlayers == null) return;
+            if (ServerApi?.World == null) return;
 
             double currentDay = ServerApi.World.Calendar.TotalDays;
 
-            foreach (var onlinePlayer in ServerApi.World.AllOnlinePlayers)
+            foreach (var player in OnlinePlayers)
             {
-                var player = onlinePlayer as IServerPlayer;
                 if (!IsPlaying(player)) continue;
 
                 string playerUid = player.PlayerUID;
@@ -14160,7 +14181,7 @@ namespace SeraphLeveling
             // Skip clothier progression if disabled
             if (IsSkillDisabled("clothier")) return;
 
-            foreach (IServerPlayer player in ServerApi.World.AllOnlinePlayers)
+            foreach (IServerPlayer player in OnlinePlayers)
             {
                 if (!IsPlaying(player)) continue;
                 if (!player.Entity.Alive) continue;
@@ -14278,7 +14299,7 @@ namespace SeraphLeveling
         {
             if (ServerApi == null) return;
 
-            foreach (IServerPlayer player in ServerApi.World.AllOnlinePlayers)
+            foreach (IServerPlayer player in OnlinePlayers)
             {
                 if (!IsPlaying(player)) continue;
                 if (!player.Entity.Alive) continue;
@@ -14420,7 +14441,7 @@ namespace SeraphLeveling
             // Skip furtive progression if disabled
             if (IsSkillDisabled("furtive")) return;
 
-            foreach (IServerPlayer player in ServerApi.World.AllOnlinePlayers)
+            foreach (IServerPlayer player in OnlinePlayers)
             {
                 if (!IsPlaying(player)) continue;
 
@@ -14452,7 +14473,8 @@ namespace SeraphLeveling
                 float distance = (float)Math.Sqrt(dx * dx + dz * dz);
 
                 // Update last position (no allocation - struct assignment)
-                lastSneakingPositions[playerUid] = new Position2D(currentX, currentZ);
+                lastPos.X = currentX;
+                lastPos.Z = currentZ;
 
                 // Skip if no movement or teleportation (too far)
                 if (distance < 0.01f || distance > MAX_DISTANCE_PER_TICK) continue;

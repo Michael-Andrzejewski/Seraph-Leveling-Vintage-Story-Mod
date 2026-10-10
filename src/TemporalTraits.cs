@@ -301,7 +301,7 @@ namespace SeraphLeveling
 
             int currentDay = (int)ServerApi.World.Calendar.ElapsedDays;
 
-            foreach (IServerPlayer player in ServerApi.World.AllOnlinePlayers)
+            foreach (IServerPlayer player in OnlinePlayers)
             {
                 if (!IsPlaying(player) || !player.Entity.Alive) continue;
 

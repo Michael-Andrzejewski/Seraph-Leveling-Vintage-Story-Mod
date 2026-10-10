@@ -563,7 +563,7 @@ namespace SeraphLeveling
         }
 
         // =========================================================================
-        // DEATH PENALTY SYSTEM
+        // ACCUMULATOR DRAIN MATH (shared by decay and the death penalty)
         // =========================================================================
 
         /// <summary>

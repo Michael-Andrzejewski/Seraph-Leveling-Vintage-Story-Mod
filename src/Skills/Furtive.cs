@@ -206,10 +206,6 @@ namespace SeraphLeveling
             return PlayerHasVanillaTraitOrClassStatic(entity, "furtive", "malefactor");
         }
 
-        // =========================================================================
-        // NEW TRAIT COMMAND HANDLERS
-        // =========================================================================
-
         /// <summary>
         /// Handler for /trait furtive command.
         /// </summary>

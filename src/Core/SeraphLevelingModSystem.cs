@@ -1715,7 +1715,7 @@ namespace SeraphLeveling
         }
 
         // =========================================================================
-        // SLEEP BUFF SYSTEM
+        // XP MULTIPLIER (global rate, plus the sleep buff when active)
         // =========================================================================
 
         /// <summary>

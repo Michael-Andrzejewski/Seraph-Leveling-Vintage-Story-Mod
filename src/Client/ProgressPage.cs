@@ -121,7 +121,7 @@ namespace SeraphLeveling
                         return dlg;
                 }
             }
-            catch (Exception ex) { SeraphLevelingModSystem.LogFailureOnce("finding the open handbook progress page", ex); }
+            catch (Exception ex) { SeraphLevelingModSystem.LogFailureOnce("finding the open handbook progress page", ex, clientSide: true); }
             return null;
         }
 

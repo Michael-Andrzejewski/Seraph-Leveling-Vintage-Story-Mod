@@ -29,10 +29,10 @@ namespace SeraphLeveling
         // path shows up in the log once instead of failing silently or flooding it.
         private static readonly ConcurrentDictionary<string, bool> failuresLogged = new ConcurrentDictionary<string, bool>();
 
-        internal static void LogFailureOnce(string where, Exception ex)
+        internal static void LogFailureOnce(string where, Exception ex, bool clientSide = false)
         {
             if (!failuresLogged.TryAdd(where, true)) return;
-            var logger = ServerApi?.Logger ?? CharacterSystemPatches.ClientApi?.Logger;
+            var logger = clientSide ? CharacterSystemPatches.ClientApi?.Logger : ServerApi?.Logger;
             logger?.Warning($"[SeraphLeveling] Error in {where} (later errors here are not logged): {ex.GetType().Name}: {ex.Message}");
         }
 
@@ -1586,7 +1586,8 @@ namespace SeraphLeveling
             playerEquippedArmor.Clear();
             playerEquippedClothing.Clear();
             TrackedItemDurabilities.Clear();
-            ResetPerformanceCaches();   // Core/Caches.cs: the old world's players, items, blocks and creatures
+            ResetPerformanceCaches();
+            failuresLogged.Clear();   // "logged once" is per world   // Core/Caches.cs: the old world's players, items, blocks and creatures
             SleepMountHours.Clear();
             classChangeListeners.Clear();
             pendingClassChangeReapply.Clear();

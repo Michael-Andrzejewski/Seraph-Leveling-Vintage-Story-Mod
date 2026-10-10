@@ -1031,7 +1031,7 @@ namespace SeraphLeveling
                 float current = plr.Attributes.GetFloat("aimingAccuracy", 0f);
                 if (floor > current) plr.Attributes.SetFloat("aimingAccuracy", floor);
             }
-            catch (Exception ex) { SeraphLevelingModSystem.LogFailureOnce("the client aim reticle accuracy floor", ex); }
+            catch (Exception ex) { SeraphLevelingModSystem.LogFailureOnce("the client aim reticle accuracy floor", ex, clientSide: true); }
         }
 
         public static void Apply(Harmony harmony, ICoreClientAPI api)
@@ -1107,7 +1107,7 @@ namespace SeraphLeveling
                 clone.AnimationSpeed *= mult;
                 animdata = clone;
             }
-            catch (Exception ex) { SeraphLevelingModSystem.LogFailureOnce("the melee attack speed animation scaling", ex); }
+            catch (Exception ex) { SeraphLevelingModSystem.LogFailureOnce("the melee attack speed animation scaling", ex, clientSide: true); }
         }
 
         private static float GetMeleeSpeedMultiplier(EntityAgent byEntity)
